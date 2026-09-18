@@ -356,13 +356,12 @@ function StandaloneTracker:OpenQuestContextMenu(anchor, qInfo)
             text = "Show in Quest Log",
             notCheckable = true,
             func = function()
-                if qInfo.questLogIndex then
-                if qInfo.questLogIndex and QuestLogFrame then
+                if qInfo.questID and QuestMapFrame_OpenToQuestDetails then
+                    QuestMapFrame_OpenToQuestDetails(qInfo.questID)
+                elseif qInfo.questLogIndex and QuestLogFrame and SelectQuestLogEntry then
                     ShowUIPanel(QuestLogFrame)
                     SelectQuestLogEntry(qInfo.questLogIndex)
                     if QuestLog_Update then QuestLog_Update() end
-                elseif qInfo.questID and QuestMapFrame_OpenToQuestDetails then
-                    QuestMapFrame_OpenToQuestDetails(qInfo.questID)
                 end
             end,
         },
@@ -387,12 +386,12 @@ function StandaloneTracker:OpenQuestContextMenu(anchor, qInfo)
             text = "Untrack Quest",
             notCheckable = true,
             func = function()
-                if qInfo.questLogIndex and RemoveQuestWatch then
+                if qInfo.questID and C_QuestLog and C_QuestLog.RemoveQuestWatch then
+                    C_QuestLog.RemoveQuestWatch(qInfo.questID)
+                    StandaloneTracker:UpdateTracker()
+                elseif qInfo.questLogIndex and RemoveQuestWatch then
                     RemoveQuestWatch(qInfo.questLogIndex)
                     if QuestWatch_Update then QuestWatch_Update() end
-                    StandaloneTracker:UpdateTracker()
-                elseif qInfo.questID and C_QuestLog and C_QuestLog.RemoveQuestWatch then
-                    C_QuestLog.RemoveQuestWatch(qInfo.questID)
                     StandaloneTracker:UpdateTracker()
                 end
             end,
@@ -401,7 +400,10 @@ function StandaloneTracker:OpenQuestContextMenu(anchor, qInfo)
             text = "|cffff4444Abandon Quest|r",
             notCheckable = true,
             func = function()
-                if qInfo.questLogIndex and SelectQuestLogEntry and SetAbandonQuest then
+                if qInfo.questID and C_QuestLog and C_QuestLog.SetSelectedQuest and C_QuestLog.AbandonQuest then
+                    C_QuestLog.SetSelectedQuest(qInfo.questID)
+                    C_QuestLog.AbandonQuest()
+                elseif qInfo.questLogIndex and SelectQuestLogEntry and SetAbandonQuest then
                     SelectQuestLogEntry(qInfo.questLogIndex)
                     SetAbandonQuest()
                     local items = GetAbandonQuestItems and GetAbandonQuestItems()
@@ -477,15 +479,17 @@ local function AcquireQuestBlock(parent)
 
             if mouseButton == "LeftButton" then
                 if IsModifiedClick("CHATLINK") and qInfo.questID then
-                    local link = GetQuestLink and GetQuestLink(qInfo.questID)
+                    local link = (C_QuestLog and C_QuestLog.GetQuestLink and C_QuestLog.GetQuestLink(qInfo.questID)) or (GetQuestLink and GetQuestLink(qInfo.questID))
                     if link then
                         ChatEdit_InsertLink(link)
                     end
                 elseif IsControlKeyDown() then
-                    if qInfo.questLogIndex then
+                    if qInfo.questLogIndex and QuestLogFrame and SelectQuestLogEntry then
                         ShowUIPanel(QuestLogFrame)
                         SelectQuestLogEntry(qInfo.questLogIndex)
                         if QuestLog_Update then QuestLog_Update() end
+                    elseif qInfo.questID and QuestMapFrame_OpenToQuestDetails then
+                        QuestMapFrame_OpenToQuestDetails(qInfo.questID)
                     end
                 else
                     local questKey = qInfo.questID or qInfo.title
@@ -731,7 +735,20 @@ local function FindQuestItemInBags(targetQuestID, questTitle)
             end
 
             if itemID and hyperlink then
-                local _, _, _, _, _, _, _, _, _, _, _, itemClassID = GetItemInfo(hyperlink)
+                local itemClassID
+                if C_Item and C_Item.GetItemInfoInstant then
+                    local _, _, _, _, _, cid = C_Item.GetItemInfoInstant(itemID)
+                    itemClassID = cid
+                elseif C_Item and C_Item.GetItemInfo then
+                    local _, _, _, _, _, _, _, _, _, _, _, cid = C_Item.GetItemInfo(hyperlink)
+                    itemClassID = cid
+                elseif GetItemInfoInstant then
+                    local _, _, _, _, _, cid = GetItemInfoInstant(itemID)
+                    itemClassID = cid
+                elseif GetItemInfo then
+                    local _, _, _, _, _, _, _, _, _, _, _, cid = GetItemInfo(hyperlink)
+                    itemClassID = cid
+                end
                 if itemClassID == 12 or (Enum and Enum.ItemClass and itemClassID == Enum.ItemClass.Questitem) then
                     if questTitle and type(questTitle) == "string" and questTitle ~= "" then
                         local isMatch = false
@@ -760,42 +777,27 @@ end
 -- Collect Active & Watched Quests
 function StandaloneTracker:GetTrackedQuests()
     local quests = {}
-    local numEntries = (C_QuestLog and C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetNumQuestLogEntries()) 
-        or (GetNumQuestLogEntries and GetNumQuestLogEntries()) or 0
-
+    local numEntries = (C_QuestLog and C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetNumQuestLogEntries()) or 0
     local activeZoneHeader = "General"
-    local numWatches = (C_QuestLog and C_QuestLog.GetNumQuestWatches and C_QuestLog.GetNumQuestWatches()) 
-        or (GetNumQuestWatches and GetNumQuestWatches()) or 0
 
     for i = 1, numEntries do
-        local title, level, suggestedGroup, isHeader, isCollapsed, isComplete, frequency, questID
-        
-        if C_QuestLog and C_QuestLog.GetInfo then
-            local info = C_QuestLog.GetInfo(i)
-            if info then
-                title = info.title
-                level = info.level
-                suggestedGroup = info.suggestedGroup
-                isHeader = info.isHeader
-                isCollapsed = info.isCollapsed
-                isComplete = (info.isComplete and 1) or 0
-                frequency = info.frequency
-                questID = info.questID
-            end
-        end
-
-        if not title and GetQuestLogTitle then
-            title, level, suggestedGroup, isHeader, isCollapsed, isComplete, frequency, questID = GetQuestLogTitle(i)
-        end
+        local info = C_QuestLog and C_QuestLog.GetInfo and C_QuestLog.GetInfo(i)
+        local title = info and info.title
+        local level = info and info.level
+        local suggestedGroup = info and info.suggestedGroup
+        local isHeader = info and info.isHeader
+        local isComplete = (info and info.isComplete and 1) or 0
+        local frequency = info and info.frequency
+        local questID = info and info.questID
 
         if isHeader then
             activeZoneHeader = title or "General"
         elseif title and questID then
             local isWatched = false
-            if IsQuestWatched then
-                isWatched = IsQuestWatched(i)
-            elseif C_QuestLog and C_QuestLog.GetQuestWatchType then
+            if C_QuestLog and C_QuestLog.GetQuestWatchType then
                 isWatched = (C_QuestLog.GetQuestWatchType(questID) ~= nil)
+            elseif IsQuestWatched then
+                isWatched = IsQuestWatched(i)
             end
 
             -- Filter mode check (all, zone, watched)
@@ -817,40 +819,15 @@ function StandaloneTracker:GetTrackedQuests()
             end
 
             if shouldInclude then
-                -- Gather Objectives
-                local objectives = {}
-                local numLeaderBoards = GetNumQuestLeaderBoards and GetNumQuestLeaderBoards(i) or 0
-                
-                if numLeaderBoards > 0 then
-                    for j = 1, numLeaderBoards do
-                        local desc, objType, done = GetQuestLogLeaderBoard(j, i)
-                        if desc then
-                            table.insert(objectives, {
-                                text = desc,
-                                finished = done,
-                                type = objType
-                            })
-                        end
-                    end
-                elseif C_QuestLog and C_QuestLog.GetQuestObjectives then
-                    local cObjectives = C_QuestLog.GetQuestObjectives(questID)
-                    if cObjectives then
-                        for _, obj in ipairs(cObjectives) do
-                            table.insert(objectives, {
-                                text = obj.text,
-                                finished = obj.finished,
-                                type = obj.type
-                            })
-                        end
-                    end
-                end
+                -- Gather Objectives via C_QuestLog
+                local objectives = (C_QuestLog and C_QuestLog.GetQuestObjectives and C_QuestLog.GetQuestObjectives(questID)) or {}
 
-                -- Check Quest Item
+                -- Check Quest Item via C_QuestLog
                 local itemLink, itemTexture, numItems
-                if GetQuestLogSpecialItemInfo then
-                    itemLink, itemTexture, numItems = GetQuestLogSpecialItemInfo(i)
-                elseif C_QuestLog and C_QuestLog.GetQuestLogSpecialItemInfo then
+                if C_QuestLog and C_QuestLog.GetQuestLogSpecialItemInfo then
                     itemLink, itemTexture, numItems = C_QuestLog.GetQuestLogSpecialItemInfo(questID)
+                elseif GetQuestLogSpecialItemInfo then
+                    itemLink, itemTexture, numItems = GetQuestLogSpecialItemInfo(i)
                 end
 
                 -- Standalone Fallback: Scan bags for quest items
@@ -1011,7 +988,9 @@ local function RenderQuestBlock(content, qInfo, yOffset, lineSpacing)
         -- Update Cooldown Spiral
         if itemBtn.cooldown and qInfo.itemID then
             local start, duration, enable = 0, 0, 0
-            if C_Container and C_Container.GetItemCooldown then
+            if C_Item and C_Item.GetItemCooldown then
+                start, duration, enable = C_Item.GetItemCooldown(qInfo.itemID)
+            elseif C_Container and C_Container.GetItemCooldown then
                 start, duration, enable = C_Container.GetItemCooldown(qInfo.itemID)
             elseif GetItemCooldown then
                 start, duration, enable = GetItemCooldown(qInfo.itemID)
@@ -1261,7 +1240,7 @@ function StandaloneTracker:UpdateTracker()
     end
 
     -- Update tracker frame dimensions, header counter & filter buttons
-    local _, numQuests = GetNumQuestLogEntries()
+    local _, numQuests = ns.GetNumQuestLogEntries()
     local maxQuests = (C_QuestLog and C_QuestLog.GetMaxNumQuestsCanAccept and C_QuestLog.GetMaxNumQuestsCanAccept()) or MAX_QUESTLOG_QUESTS or 40
     ns.Tracker:UpdateHeight(yOffset)
     ns.Tracker:SetQuestCount(totalQuests, numQuests, maxQuests)

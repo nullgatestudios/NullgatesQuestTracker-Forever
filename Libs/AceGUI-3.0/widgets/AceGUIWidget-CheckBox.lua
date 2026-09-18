@@ -11,6 +11,11 @@ local select, pairs = select, pairs
 -- WoW APIs
 local PlaySound = PlaySound
 local CreateFrame, UIParent = CreateFrame, UIParent
+local SetDesaturation = SetDesaturation or function(texture, desaturation)
+	if texture and texture.SetDesaturated then
+		texture:SetDesaturated(desaturation and true or false)
+	end
+end
 
 --[[-----------------------------------------------------------------------------
 Support functions

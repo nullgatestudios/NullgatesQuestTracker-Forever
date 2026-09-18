@@ -82,11 +82,11 @@ end
 local function CheckForCompletions()
     local now = GetTime()
     local isSuppressed = (now < soundSuppressedUntil)
-    local numEntries = (GetNumQuestLogEntries and select(1, GetNumQuestLogEntries())) or 0
+    local numEntries = (ns.GetNumQuestLogEntries and select(1, ns.GetNumQuestLogEntries())) or (GetNumQuestLogEntries and select(1, GetNumQuestLogEntries())) or 0
     local shouldPlay = false
 
     for i = 1, numEntries do
-        local title, _, _, isHeader, _, isComplete, _, questID = GetQuestLogTitle(i)
+        local title, _, _, isHeader, _, isComplete, _, questID = (ns.GetQuestLogTitle and ns.GetQuestLogTitle(i)) or (GetQuestLogTitle and GetQuestLogTitle(i))
         if not isHeader and questID then
             local isFinished = (isComplete == 1 or isComplete == true)
 
@@ -103,9 +103,10 @@ local function CheckForCompletions()
             end
 
             -- 2. Individual Objective Completion (finished == true)
-            local numLeaderBoards = (GetNumQuestLeaderBoards and GetNumQuestLeaderBoards(i)) or 0
-            for j = 1, numLeaderBoards do
-                local text, objType, finished = GetQuestLogLeaderBoard(j, i)
+            local objectives = (ns.GetQuestObjectives and ns.GetQuestObjectives(questID, i)) or {}
+            for j, obj in ipairs(objectives) do
+                local text = obj.text
+                local finished = obj.finished
                 local key = questID .. "_" .. j
                 local wasObjFinished = completedObjectivesCache[key]
                 local cur, maxVal = 0, 1
@@ -211,18 +212,19 @@ function SocialModule:BroadcastMyQuests()
     if not (db and db.enablePartySync) then return end
     if not (IsInGroup() or (GetNumGroupMembers and GetNumGroupMembers() > 0)) then return end
 
-    local numEntries = (GetNumQuestLogEntries and select(1, GetNumQuestLogEntries())) or 0
+    local numEntries = (ns.GetNumQuestLogEntries and select(1, ns.GetNumQuestLogEntries())) or (GetNumQuestLogEntries and select(1, GetNumQuestLogEntries())) or 0
     local haveList = {}
     local progressList = {}
 
     for i = 1, numEntries do
-        local title, _, _, isHeader, _, isComplete, _, questID = GetQuestLogTitle(i)
+        local title, _, _, isHeader, _, isComplete, _, questID = (ns.GetQuestLogTitle and ns.GetQuestLogTitle(i)) or (GetQuestLogTitle and GetQuestLogTitle(i))
         if not isHeader and questID then
             table.insert(haveList, questID)
 
-            local numLeaderBoards = (GetNumQuestLeaderBoards and GetNumQuestLeaderBoards(i)) or 0
-            for j = 1, numLeaderBoards do
-                local text, objType, finished = GetQuestLogLeaderBoard(j, i)
+            local objectives = (ns.GetQuestObjectives and ns.GetQuestObjectives(questID, i)) or {}
+            for j, obj in ipairs(objectives) do
+                local text = obj.text
+                local finished = obj.finished
                 if text then
                     local cur, maxVal = text:match("(%d+)%s*/%s*(%d+)")
                     if not cur or not maxVal then
@@ -286,14 +288,19 @@ function SocialModule:ShareQuest(questID, questLogIndex)
     end
 
     if not questLogIndex or questLogIndex == 0 then
-        local numEntries = (GetNumQuestLogEntries and select(1, GetNumQuestLogEntries())) or 0
+        local numEntries = (ns.GetNumQuestLogEntries and select(1, ns.GetNumQuestLogEntries())) or (GetNumQuestLogEntries and select(1, GetNumQuestLogEntries())) or 0
         for i = 1, numEntries do
-            local _, _, _, isH, _, _, _, id = GetQuestLogTitle(i)
+            local _, _, _, isH, _, _, _, id = (ns.GetQuestLogTitle and ns.GetQuestLogTitle(i)) or (GetQuestLogTitle and GetQuestLogTitle(i))
             if not isH and id == questID then
                 questLogIndex = i
                 break
             end
         end
+    end
+
+    if ns.ShareQuest and ns.ShareQuest(questID, questLogIndex) then
+        ns.Print("Shared quest with party.")
+        return true
     end
 
     if questLogIndex and SelectQuestLogEntry and QuestLogPushQuest then
@@ -413,11 +420,14 @@ function SocialModule:GetMissingPartyInfo(questID, questLogIndex)
     if questID and C_QuestLog and C_QuestLog.IsPushableQuest then
         isPushable = C_QuestLog.IsPushableQuest(questID)
     end
+    if not isPushable and ns.IsQuestPushable then
+        isPushable = ns.IsQuestPushable(questID, questLogIndex)
+    end
     if not isPushable then
         if not questLogIndex or questLogIndex == 0 then
-            local numEntries = (GetNumQuestLogEntries and select(1, GetNumQuestLogEntries())) or 0
+            local numEntries = (ns.GetNumQuestLogEntries and select(1, ns.GetNumQuestLogEntries())) or (GetNumQuestLogEntries and select(1, GetNumQuestLogEntries())) or 0
             for i = 1, numEntries do
-                local _, _, _, isH, _, _, _, id = GetQuestLogTitle(i)
+                local _, _, _, isH, _, _, _, id = (ns.GetQuestLogTitle and ns.GetQuestLogTitle(i)) or (GetQuestLogTitle and GetQuestLogTitle(i))
                 if not isH and id == questID then
                     questLogIndex = i
                     break
