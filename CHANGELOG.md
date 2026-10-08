@@ -2,7 +2,105 @@
 
 All notable changes to **Bleakfiber's Quest Tracker - Forever** are documented below.
 
-## [1.0.14] - Account Onboarding, Modular Architecture, Automation, QoL & XP Overhaul
+## [1.0.18] - 2026-10-08: Native Slate & Gold Configuration GUI & Responsive Reflow
+
+### Configuration GUI Redesign & Suite Unification
+- **Signature Dark Slate & Gold GUI**: Replaced AceGUI embedded options with a bespoke, native 8-sub-tab configuration renderer (`General`, `Quests & Items`, `Colors & Fonts`, `Headers & Sort`, `Automation`, `Wayfinder/Audio`, `DataBars`, `Profiles`) matching the Bleakfiber suite design language.
+- **Dynamic Responsive Reflow**: Embedded settings dynamically calculate available canvas width on window resize and reposition controls between a balanced 2-column layout (`width >= 470`) and a clean single-column stacked layout (`width < 470`) to eliminate element overlaps.
+- **Label Wrapping & Text Containment**: Form labels, checkboxes, and sliders enforce strict word wrapping and maximum widths to eliminate clipping and collisions.
+- **Smart Auto-Hiding Scrollbars**: Integrated `SetupAutoScroll` helper across standalone and embedded frames that automatically hides scrollbars and disables mouse wheel scrolling whenever content fits within the visible height.
+- **Master Mover Mode Integration**: Registered `toggleMovers` and `isMoversUnlocked` callbacks with `BleakfibersAddonConfig-Forever` to support global master mover unlock/lock mode (`/bac mover`).
+
+---
+
+## [1.0.17] - Non-Destructive Profile Synchronization
+
+### Master Config Profile Synchronization
+- **Non-Destructive Profiles**: Added complete `profiles` contract (`GetCurrent`, `SetCurrent`, `Create`, `SaveCurrentAs`, `List`, `Delete`, `Copy`, `Reset`) to `RegisterWithMasterConfig` for AceDB-backed synchronization with `BleakfibersAddonConfigForever`.
+- **Settings Capture**: New profile creations capture active settings by copying the current profile rather than resetting to defaults.
+- **Overwrite Protection**: Switching to or synchronizing with an existing profile preserves the user's custom settings and never overwrites them.
+
+---
+
+## [1.0.16] - Master Config Integration & Sleek Theme Redesign
+
+### Master Config Addon Compatibility & Full Options Embedding
+- **Centralized Master Config Integration**:
+  - Embedded the complete, 10-tab configuration panel directly into `BleakfibersAddonConfigForever` when selecting Quest Tracker, providing full real-time configuration without popups or cut-down menus.
+  - Added support for the centralized configuration addon via `OptionalDeps`.
+  - Exposed a public module API (`BleakfibersQuestTrackerForever`) with real-time visual refresh (`ApplySettings()`).
+  - Added automatic registration into the master configuration registry while retaining standalone slash command support.
+
+### Standalone Configuration Window Redesign
+- **Aesthetic Excellence & The Bleakfiber Standard**:
+  - Re-themed the standalone configuration window (`/bfq` / `/bfq standalone`) to match the signature dark slate/iron background with beveled gold border accents and crisp typography.
+  - Interactive window controls include smooth dragging by the title bar, bottom-right resizing grip, and persistent coordinate and dimension saving.
+  - Integrated the full 10-tab settings panel seamlessly into the inset content pane.
+
+### Bug Fixes
+- **Combat Lockdown Secure Action Button Safety**:
+  - Resolved an `ADDON_ACTION_BLOCKED` issue caused by calling `SetFrameStrata` on secure quest item buttons when initiating combat.
+  - Implemented a lightweight, non-secure cooldown updater (`UpdateItemButtonCooldowns`) to handle action bar and inventory cooldown events during combat without modifying secure frame state.
+  - Hardened frame creation and visibility transitions to prevent protected Blizzard API calls while in combat lockdown.
+- **Configuration Frame Syntax Fix**:
+  - Resolved a missing block closure in `Config.lua` for the standalone configuration toggle.
+
+---
+
+## [1.0.15] - API Compliance, Namespace Sanitization & Architecture Optimization
+
+### Core Architecture & Namespace Safety
+- **Global Variable Scoping & Leak Fix**:
+  - Corrected an unscoped variable assignment (`questLogIndex`) in `Core.lua:GetQuestObjectives`, preventing inadvertent pollution of the global `_G` environment during quest log iterations.
+  - Modernized quest log index lookup to prioritize modern `C_QuestLog.GetInfo(i)` and `C_QuestLog.GetNumQuestLogEntries()`.
+
+### Modular Event De-duplication
+- **Elimination of Parallel Automation Handlers**:
+  - Removed duplicate event registrations (`LOOT_READY`, `LOOT_OPENED`, `QUEST_DETAIL`, `QUEST_PROGRESS`, `QUEST_COMPLETE`, `GOSSIP_SHOW`, `QUEST_GREETING`) from `SocialModule.lua`.
+  - Focused `SocialModule` strictly on Party Quest Sync, Chat Announcements, and Audio Alerts, delegating all automation logic cleanly to `QuestAutomationModule` and `QoLModule` to prevent duplicate API executions in the same frame.
+
+### Wayfinder Slash Command Scoping
+- **Safe Global Aliasing**:
+  - Re-scoped internal Wayfinder slash command registrations (`/way`, `/cway`, `/waypaste`) to use dedicated addon-prefixed globals (`_G["SLASH_BLEAKFIBER_WAY*"]`), preventing namespace conflicts with external navigation addons.
+
+### Performance & Update Loop Optimization
+- **Dynamic Timer Bar Ticker Management**:
+  - Optimized the Quest Timer DataBar `OnUpdate` ticker in `DataBarsModule.lua` to dynamically attach only when an active timed quest is displayed, and detach (`SetScript("OnUpdate", nil)`) when hidden or idle, eliminating background CPU overhead.
+
+### Wayfinder World Map Waypoint Pins
+- **Authentic Blizzard Waypoint Marker Styling**:
+  - Overhauled custom map pin visuals to use the default Blizzard diamond waypoint pins (`WaypoinMapPinUI`).
+  - Active/tracked waypoints now render with the vibrant golden diamond pin, and untracked waypoints display the classic bronze diamond pin.
+  - Added native mouseover highlight outline styling and eliminated background circular glows for a clean, pixel-perfect map presentation.
+
+---
+
+## [1.0.14] - Account Onboarding, Modular Architecture, Automation, QoL & Quest Timer Overhaul
+
+### Modern API Architecture & Countdown Timer Isolation
+- **Pure Modern Retail API Implementation**:
+  - Re-architected quest countdown timer retrieval to strictly target the modern retail engine API `C_QuestLog.GetTimeAllowed(questID)`.
+  - Removed all obsolete pre-8.0 legacy Classic timer fallbacks (`GetQuestTimers`, `GetQuestIndexForTimer`, `GetQuestTimer`, `GetQuestLogTimeLeft`, and legacy timer frame queries) that previously caused un-timed quests to falsely inherit countdown timers.
+  - Objective countdown timer lines (`- Time Remaining: [MM:SS]`) now render exclusively on quests confirmed by `C_QuestLog.GetTimeAllowed` to have an active timer duration.
+
+### Timer DataBar Dynamic Auto-Hiding & Selection Sync
+- **Strict Auto-Hide Behavior**:
+  - The Quest Timer DataBar now dynamically hides whenever an un-timed quest is selected or super-tracked.
+  - When switching between quests, the Timer DataBar instantly displays the selected quest if it is timed, and immediately hides if it is not.
+  - When no specific quest is selected, the bar only appears if a timed quest exists in the active quest log, automatically tracking the quest with the shortest time remaining.
+
+### Cache & SavedVariables Sanitization
+- **Authoritative Cache Scrubbing**:
+  - Enhanced cache validation during login, zone transitions, and quest log updates to eliminate ghost timer data from persisting across sessions.
+  - Purged invalid cached timer entries from memory and profile SavedVariables.
+
+### Wayfinder Navigation Engine & Live Rotation Overhaul
+- **Live Turning & Rotation Smoothness**:
+  - Re-architected `WayfinderModule:CalculateNavigation` to calculate relative angles and positions in real-time, eliminating a flawed stationary calculation bypass that froze character yaw changes.
+  - Increased arrow update frequency to 40 Hz (25ms throttle) and eliminated rotational dead-zones, enabling both the floating 3D HUD arrow and the inline tracker mini-arrow to rotate smoothly and instantaneously as the player turns.
+  - Resolved an initialization issue where `self.isEnabled` was not set upon addon load, which caused the HUD arrow to hide and stopped the main navigation `OnUpdate` loop.
+  - Corrected method calls in `WayfinderModule:Enable()` to properly restart navigation updates without throwing silent runtime errors.
+  - Ensured active quest navigation waypoints persist while working on objectives instead of prematurely auto-clearing and hiding the arrow upon entering proximity.
 
 ### Interactive Account Onboarding Walkthrough
 - **Guided Setup Walkthrough (/bfq onboard)**:
