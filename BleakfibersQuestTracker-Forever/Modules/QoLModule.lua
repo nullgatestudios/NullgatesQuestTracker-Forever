@@ -121,16 +121,8 @@ local function ProcessAutoRepair()
         if playerMoney >= cost then
             RepairAllItems(false)
         else
-            print("|cffff3333[Bleakfiber]|r Insufficient funds to repair gear.")
             return
         end
-    end
-
-    local costStr = FormatMoneyString(cost)
-    if usedGuildFunds then
-        print(string_format("|cff00c0ff[Bleakfiber]|r Repaired all items using |cff00ff00Guild Bank|r funds (%s).", costStr))
-    else
-        print(string_format("|cff00c0ff[Bleakfiber]|r Repaired all items for %s.", costStr))
     end
 end
 

@@ -150,6 +150,11 @@ function Config:OpenFilterMenu(anchor)
         return
     end
 
+    local mScale = (db.fonts and db.fonts.menuScale) or 1.0
+    if mScale and mScale > 0 then
+        menu:SetScale(mScale)
+    end
+
     if not menu.items then
         menu.items = {}
     end
@@ -189,6 +194,20 @@ function Config:OpenFilterMenu(anchor)
             db.sorting = db.sorting or {}
             db.sorting.activeOnTop = not (db.sorting.activeOnTop ~= false)
             ns:FireCallback("QUEST_DATA_CHANGED")
+        end,
+    })
+
+    table.insert(rows, {
+        type = "checkbox",
+        text = "Left-Click Sets Active",
+        checked = (db.sorting and db.sorting.leftClickSetsActive == true),
+        onClick = function()
+            db.sorting = db.sorting or {}
+            db.sorting.leftClickSetsActive = not (db.sorting.leftClickSetsActive == true)
+            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then
+                ns.StandaloneTracker:UpdateTracker()
+            end
         end,
     })
 
@@ -545,28 +564,68 @@ local barBorderStyles = {
     ["none"] = "None (Borderless)",
 }
 
-local function GetCustomSoundList()
-    local list = {
-        ["beep"] = "Bleakfiber Beep (beep.wav)",
-        ["click"] = "Bleakfiber Click (click.wav)",
-        ["custom1"] = "Custom Slot 1 (custom1.wav)",
-        ["custom2"] = "Custom Slot 2 (custom2.wav)",
-        ["custom3"] = "Custom Slot 3 (custom3.wav)",
-        ["custom4"] = "Custom Slot 4 (custom4.wav)",
-        ["custom5"] = "Custom Slot 5 (custom5.wav)",
-        ["manual"] = "Manual File Path (Advanced)",
+local function GetAceConfigCompleteSounds()
+    local t = {
+        peon = "Peon: \"Work complete!\"",
+        quest_complete = "Classic Quest Complete",
+        whisper_ping = "Whisper Ping (TellMessage)",
+        coins = "Gold Coin Ding",
+        loot_clink = "Loot Coin Clink",
+        level_up = "Level Up Fanfare",
+        raid_warning = "Raid Warning Chime",
+        ready_check = "Ready Check Chime",
+        pvp_horn = "PvP Queue Horn",
+        beep = "Bleakfiber Beep (beep.wav)",
+        click = "Bleakfiber Click (click.wav)",
     }
+    local customList = ns.GetCustomSoundList and ns.GetCustomSoundList()
+    if customList and #customList > 0 then
+        for _, item in ipairs(customList) do
+            t[item.key] = item.label
+        end
+    end
+    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
     if LSM and LSM.List then
         local lsmSounds = LSM:List("sound")
         if type(lsmSounds) == "table" then
             for _, soundName in ipairs(lsmSounds) do
-                if not list[soundName] then
-                    list[soundName] = soundName
+                if not t[soundName] then
+                    t[soundName] = soundName
                 end
             end
         end
     end
-    return list
+    return t
+end
+
+local function GetAceConfigObjectiveSounds()
+    local t = {
+        whisper_ping = "Whisper Ping (TellMessage)",
+        coins = "Gold Coin Ding",
+        loot_clink = "Loot Coin Clink",
+        map_ping = "Mini-Map Ping",
+        item_click = "Subtle Click",
+        beep = "Bleakfiber Beep (beep.wav)",
+        click = "Bleakfiber Click (click.wav)",
+    }
+    local customList = ns.GetCustomSoundList and ns.GetCustomSoundList()
+    if customList and #customList > 0 then
+        for _, item in ipairs(customList) do
+            t[item.key] = item.label
+        end
+    end
+    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+    if LSM and LSM.List then
+        local lsmSounds = LSM:List("sound")
+        if type(lsmSounds) == "table" then
+            for _, soundName in ipairs(lsmSounds) do
+                if not t[soundName] then
+                    t[soundName] = soundName
+                end
+            end
+        end
+    end
+    return t
 end
 
 local function GetStatusbarTextureList()
@@ -1810,6 +1869,41 @@ local function GetOptionsTable()
                                     ns:FireCallback("QUEST_DATA_CHANGED")
                                 end,
                             },
+                            zoneCollapseIcon = {
+                                name = "Collapse Indicator Shape",
+                                desc = "Select the icon or shape shown next to zone header names to indicate collapse/expand status.",
+                                type = "select",
+                                order = 5.5,
+                                disabled = function() return db.headers and db.headers.showZoneHeaders == false end,
+                                values = {
+                                    ["arrow"] = "Triangle / Arrow",
+                                    ["plusminus"] = "Plus / Minus ([-] / [+])",
+                                    ["none"] = "None (Hide Indicator)",
+                                },
+                                get = function() return (db.headers and db.headers.zoneCollapseIcon) or "arrow" end,
+                                set = function(_, val)
+                                    db.headers = db.headers or {}
+                                    db.headers.zoneCollapseIcon = val
+                                    ns:FireCallback("QUEST_DATA_CHANGED")
+                                end,
+                            },
+                            zoneCollapseIconColor = {
+                                name = "Indicator Shape Color",
+                                desc = "Custom color for the collapse indicator shape (defaults to zone header text color if unlinked).",
+                                type = "color",
+                                hasAlpha = true,
+                                order = 5.6,
+                                disabled = function() return db.headers and (db.headers.showZoneHeaders == false or db.headers.zoneCollapseIcon == "none") end,
+                                get = function()
+                                    local c = (db.headers and db.headers.zoneCollapseIconColor) or (db.headers and db.headers.zoneTextColor) or (db.headers and db.headers.zoneHeaderColor) or { r = 1.0, g = 0.82, b = 0.0, a = 1.0 }
+                                    return c.r, c.g, c.b, c.a or 1.0
+                                end,
+                                set = function(_, r, g, b, a)
+                                    db.headers = db.headers or {}
+                                    db.headers.zoneCollapseIconColor = { r = r, g = g, b = b, a = a or 1.0 }
+                                    ns:FireCallback("QUEST_DATA_CHANGED")
+                                end,
+                            },
                             sepActions = {
                                 name = "",
                                 type = "header",
@@ -1876,6 +1970,101 @@ local function GetOptionsTable()
                                     db.headers = db.headers or {}
                                     db.headers.showCompleteIcon = val
                                     ns:FireCallback("QUEST_DATA_CHANGED")
+                                end,
+                            },
+                            completedQuestBg = {
+                                name = "Completed Quest Background Tint",
+                                desc = "Display a subtle background tint behind quests that are ready for turn-in.",
+                                type = "toggle",
+                                width = "full",
+                                order = 2.1,
+                                get = function() return not (db.fonts and db.fonts.completedQuestBg == false) end,
+                                set = function(_, val)
+                                    db.fonts = db.fonts or {}
+                                    db.fonts.completedQuestBg = val
+                                    ns:FireCallback("QUEST_DATA_CHANGED")
+                                end,
+                            },
+                            completedQuestBgColor = {
+                                name = "Completed Background Tint Color",
+                                desc = "Color and opacity for the completed quest background tint.",
+                                type = "color",
+                                hasAlpha = true,
+                                order = 2.2,
+                                disabled = function() return db.fonts and db.fonts.completedQuestBg == false end,
+                                get = function()
+                                    local c = (db.fonts and db.fonts.completedQuestBgColor) or { r = 0.00, g = 0.80, b = 0.20, a = 0.14 }
+                                    return c.r, c.g, c.b, c.a or 0.14
+                                end,
+                                set = function(_, r, g, b, a)
+                                    db.fonts = db.fonts or {}
+                                    db.fonts.completedQuestBgColor = { r = r, g = g, b = b, a = a or 0.14 }
+                                    ns:FireCallback("QUEST_DATA_CHANGED")
+                                end,
+                            },
+                            completedTitleColorMode = {
+                                name = "Completed Quest Title Color",
+                                desc = "Choose how completed quest titles are colored (maintain level difficulty color, match turn-in green, or custom color).",
+                                type = "select",
+                                order = 2.3,
+                                values = {
+                                    ["difficulty"] = "Keep Level Difficulty Color",
+                                    ["turnin"] = "Turn-In Green",
+                                    ["custom"] = "Custom Color",
+                                },
+                                get = function() return (db.fonts and db.fonts.completedTitleColorMode) or "difficulty" end,
+                                set = function(_, val)
+                                    db.fonts = db.fonts or {}
+                                    db.fonts.completedTitleColorMode = val
+                                    ns:FireCallback("QUEST_DATA_CHANGED")
+                                end,
+                            },
+                            completedTitleCustomColor = {
+                                name = "Custom Completed Title Color",
+                                desc = "Custom title color for completed quests when 'Completed Quest Title Color' is set to Custom Color.",
+                                type = "color",
+                                order = 2.4,
+                                disabled = function() return not (db.fonts and db.fonts.completedTitleColorMode == "custom") end,
+                                get = function()
+                                    local c = (db.fonts and db.fonts.completedTitleCustomColor) or { r = 0.00, g = 1.00, b = 0.00 }
+                                    return c.r, c.g, c.b
+                                end,
+                                set = function(_, r, g, b)
+                                    db.fonts = db.fonts or {}
+                                    db.fonts.completedTitleCustomColor = { r = r, g = g, b = b }
+                                    ns:FireCallback("QUEST_DATA_CHANGED")
+                                end,
+                            },
+                            questHoverColor = {
+                                name = "Quest Hover Highlight Color",
+                                desc = "Mouseover highlight color and opacity when hovering over a quest row.",
+                                type = "color",
+                                hasAlpha = true,
+                                order = 2.5,
+                                get = function()
+                                    local c = (db.fonts and db.fonts.questHoverColor) or { r = 1.00, g = 1.00, b = 1.00, a = 0.08 }
+                                    return c.r, c.g, c.b, c.a or 0.08
+                                end,
+                                set = function(_, r, g, b, a)
+                                    db.fonts = db.fonts or {}
+                                    db.fonts.questHoverColor = { r = r, g = g, b = b, a = a or 0.08 }
+                                    if ns.StandaloneTracker and ns.StandaloneTracker.ApplyHighlightColors then ns.StandaloneTracker:ApplyHighlightColors() end
+                                end,
+                            },
+                            zoneHoverColor = {
+                                name = "Zone Hover Highlight Color",
+                                desc = "Mouseover highlight color and opacity when hovering over a zone header.",
+                                type = "color",
+                                hasAlpha = true,
+                                order = 2.6,
+                                get = function()
+                                    local c = (db.fonts and db.fonts.zoneHoverColor) or { r = 1.00, g = 0.82, b = 0.00, a = 0.12 }
+                                    return c.r, c.g, c.b, c.a or 0.12
+                                end,
+                                set = function(_, r, g, b, a)
+                                    db.fonts = db.fonts or {}
+                                    db.fonts.zoneHoverColor = { r = r, g = g, b = b, a = a or 0.12 }
+                                    if ns.StandaloneTracker and ns.StandaloneTracker.ApplyHighlightColors then ns.StandaloneTracker:ApplyHighlightColors() end
                                 end,
                             },
                             showQuestRewards = {
@@ -2074,6 +2263,27 @@ local function GetOptionsTable()
                             ns.Tracker:UpdateTypography()
                         end,
                     },
+                    menuScale = {
+                        name = "Menu & Dropdown Scale",
+                        desc = "Adjust the display scale of the right-click quest actions menu and header Tracker Options quick menu (80% - 160%).",
+                        type = "range",
+                        min = 0.8,
+                        max = 1.6,
+                        step = 0.05,
+                        order = 3.5,
+                        get = function() return (db.fonts and db.fonts.menuScale) or 1.0 end,
+                        set = function(_, val)
+                            db.fonts = db.fonts or {}
+                            db.fonts.menuScale = val
+                            if quickMenuPopup then
+                                quickMenuPopup:SetScale(val)
+                            end
+                            if DropDownList1 and DropDownList1:IsShown() then
+                                DropDownList1:SetScale(val)
+                            end
+                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+                        end,
+                    },
                     headerOutline = {
                         name = "Header & Title Outline",
                         desc = "Select the outline style applied to quest titles, zone headers, and the tracker header.",
@@ -2225,6 +2435,38 @@ local function GetOptionsTable()
                             db.sorting = db.sorting or {}
                             db.sorting.activeOnTop = val
                             ns:FireCallback("QUEST_DATA_CHANGED")
+                        end,
+                    },
+                    leftClickSetsActive = {
+                        name = "Left-Click Sets Active Quest (Move to Top)",
+                        desc = "When disabled (default), left-clicking any quest expands or collapses it in place without changing its position. When enabled, left-clicking an inactive quest promotes it to the active quest and moves it to the top.",
+                        type = "toggle",
+                        width = "full",
+                        order = 1.6,
+                        get = function() return db.sorting and db.sorting.leftClickSetsActive == true end,
+                        set = function(_, val)
+                            db.sorting = db.sorting or {}
+                            db.sorting.leftClickSetsActive = val
+                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+                            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then
+                                ns.StandaloneTracker:UpdateTracker()
+                            end
+                        end,
+                    },
+                    alignQuestTitles = {
+                        name = "Align Quest Titles (Uniform Column)",
+                        desc = "Align all quest titles into a neat, uniform column regardless of whether an active tracking arrow or completion icon is present. Prevents jagged row offsets.",
+                        type = "toggle",
+                        width = "full",
+                        order = 1.7,
+                        get = function() return not (db.sorting and db.sorting.alignQuestTitles == false) end,
+                        set = function(_, val)
+                            db.sorting = db.sorting or {}
+                            db.sorting.alignQuestTitles = val
+                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+                            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then
+                                ns.StandaloneTracker:UpdateTracker()
+                            end
                         end,
                     },
                     moveCompletedToBottom = {
@@ -2583,27 +2825,12 @@ local function GetOptionsTable()
                         desc = "Select which sound effect to play when a quest is ready for turn-in.",
                         type = "select",
                         order = 12,
-                        values = {
-                            peon = "Peon: \"Work complete!\"",
-                            quest_complete = "Classic Quest Complete",
-                            whisper_ping = "Whisper Ping (TellMessage)",
-                            coins = "Gold Coin Ding",
-                            loot_clink = "Loot Coin Clink",
-                            level_up = "Level Up Fanfare",
-                            raid_warning = "Raid Warning Chime",
-                            ready_check = "Ready Check Chime",
-                            pvp_horn = "PvP Queue Horn",
-                            custom = "Custom Sound File / Slot",
-                        },
+                        values = GetAceConfigCompleteSounds,
                         get = function() return (db.sound and db.sound.soundChoice) or "peon" end,
                         set = function(_, val)
                             db.sound = db.sound or {}
                             db.sound.soundChoice = val
-                            if val == "custom" then
-                                db.sound.useCustomCompleteSound = true
-                            else
-                                db.sound.useCustomCompleteSound = false
-                            end
+                            db.sound.useCustomCompleteSound = false
                             if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
                             if ns.SocialModule and ns.SocialModule.PlayPreviewSound then
                                 ns.SocialModule:PlayPreviewSound(val)
@@ -2645,69 +2872,11 @@ local function GetOptionsTable()
                             if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
                         end,
                     },
-                    useCustomCompleteSound = {
-                        name = "Use Custom Complete Sound",
-                        desc = "Select a custom sound slot or custom audio file instead of the built-in preset.",
-                        type = "toggle",
-                        order = 15,
-                        get = function()
-                            return (db.sound and db.sound.useCustomCompleteSound) or (db.sound and db.sound.soundChoice == "custom")
-                        end,
-                        set = function(_, val)
-                            db.sound = db.sound or {}
-                            db.sound.useCustomCompleteSound = val
-                            if val then
-                                db.sound.soundChoice = "custom"
-                            elseif db.sound.soundChoice == "custom" then
-                                db.sound.soundChoice = "peon"
-                            end
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                        end,
-                    },
-                    customCompleteSoundChoice = {
-                        name = "Custom Complete Sound Slot",
-                        desc = "Select a bundled sound slot (beep.wav, click.wav, custom1..custom5) or choose manual file path.",
-                        type = "select",
-                        order = 15.5,
-                        hidden = function()
-                            return not (db.sound and (db.sound.useCustomCompleteSound or db.sound.soundChoice == "custom"))
-                        end,
-                        values = GetCustomSoundList,
-                        get = function()
-                            return (db.sound and db.sound.customCompleteSoundChoice) or "beep"
-                        end,
-                        set = function(_, val)
-                            db.sound = db.sound or {}
-                            db.sound.customCompleteSoundChoice = val
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                            if ns.SocialModule and ns.SocialModule.PlayPreviewSound then
-                                ns.SocialModule:PlayPreviewSound("custom")
-                            end
-                        end,
-                    },
-                    customCompleteSoundPath = {
-                        name = "Custom Complete Sound Path (Manual)",
-                        desc = "File path or LibSharedMedia sound name (e.g. Interface\\AddOns\\BleakfibersQuestTracker-Forever\\Media\\Sounds\\beep.wav).",
-                        type = "input",
-                        width = "double",
-                        order = 16,
-                        hidden = function()
-                            return not (db.sound and (db.sound.useCustomCompleteSound or db.sound.soundChoice == "custom") and db.sound.customCompleteSoundChoice == "manual")
-                        end,
-                        get = function()
-                            return (db.sound and db.sound.customCompleteSoundPath) or "Interface\\AddOns\\BleakfibersQuestTracker-Forever\\Media\\Sounds\\beep.wav"
-                        end,
-                        set = function(_, val)
-                            db.sound = db.sound or {}
-                            db.sound.customCompleteSoundPath = val
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                        end,
-                    },
                     previewBtn = {
                         name = "Preview Complete Sound",
                         desc = "Play the currently selected quest completion sound effect at the configured volume.",
                         type = "execute",
-                        order = 17,
+                        order = 15,
                         func = function()
                             if ns.SocialModule and ns.SocialModule.PlayPreviewSound then
                                 local c = (db.sound and db.sound.soundChoice) or "peon"
@@ -2732,27 +2901,16 @@ local function GetOptionsTable()
                     },
                     objectiveSoundChoice = {
                         name = "Objective Progress Sound (Subtle)",
-                        desc = "Select which subtle sound effect to play when an objective progresses (Max 5 classic choices, or choose Custom Slot).",
+                        desc = "Select which subtle sound effect to play when an objective progresses.",
                         type = "select",
                         width = "full",
                         order = 21,
-                        values = {
-                            whisper_ping = "Whisper Ping (TellMessage)",
-                            coins = "Gold Coin Ding",
-                            loot_clink = "Loot Coin Clink",
-                            map_ping = "Mini-Map Ping",
-                            item_click = "Subtle Click",
-                            custom = "Custom Sound File / Slot",
-                        },
+                        values = GetAceConfigObjectiveSounds,
                         get = function() return (db.sound and db.sound.objectiveSoundChoice) or "whisper_ping" end,
                         set = function(_, val)
                             db.sound = db.sound or {}
                             db.sound.objectiveSoundChoice = val
-                            if val == "custom" then
-                                db.sound.useCustomObjectiveSound = true
-                            else
-                                db.sound.useCustomObjectiveSound = false
-                            end
+                            db.sound.useCustomObjectiveSound = false
                             if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
                             if ns.SocialModule and ns.SocialModule.PlayPreviewObjectiveSound then
                                 ns.SocialModule:PlayPreviewObjectiveSound(val)
@@ -2794,70 +2952,11 @@ local function GetOptionsTable()
                             if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
                         end,
                     },
-                    useCustomObjectiveSound = {
-                        name = "Use Custom Objective Sound",
-                        desc = "Select a custom sound slot or custom audio file instead of the subtle presets above.",
-                        type = "toggle",
-                        order = 24,
-                        get = function()
-                            return (db.sound and db.sound.useCustomObjectiveSound) or (db.sound and db.sound.objectiveSoundChoice == "custom")
-                        end,
-                        set = function(_, val)
-                            db.sound = db.sound or {}
-                            db.sound.useCustomObjectiveSound = val
-                            if val then
-                                db.sound.objectiveSoundChoice = "custom"
-                            elseif db.sound.objectiveSoundChoice == "custom" then
-                                db.sound.objectiveSoundChoice = "whisper_ping"
-                            end
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                        end,
-                    },
-                    customObjectiveSoundChoice = {
-                        name = "Custom Objective Sound Slot",
-                        desc = "Select a bundled sound slot (beep.wav, click.wav, custom1..custom5) or choose manual file path.",
-                        type = "select",
-                        width = "full",
-                        order = 24.5,
-                        hidden = function()
-                            return not (db.sound and (db.sound.useCustomObjectiveSound or db.sound.objectiveSoundChoice == "custom"))
-                        end,
-                        values = GetCustomSoundList,
-                        get = function()
-                            return (db.sound and db.sound.customObjectiveSoundChoice) or "beep"
-                        end,
-                        set = function(_, val)
-                            db.sound = db.sound or {}
-                            db.sound.customObjectiveSoundChoice = val
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                            if ns.SocialModule and ns.SocialModule.PlayPreviewObjectiveSound then
-                                ns.SocialModule:PlayPreviewObjectiveSound("custom")
-                            end
-                        end,
-                    },
-                    customObjectiveSoundPath = {
-                        name = "Custom Objective Sound Path (Manual)",
-                        desc = "File path or LibSharedMedia sound name (e.g. Interface\\AddOns\\BleakfibersQuestTracker-Forever\\Media\\Sounds\\beep.wav).",
-                        type = "input",
-                        width = "double",
-                        order = 25,
-                        hidden = function()
-                            return not (db.sound and (db.sound.useCustomObjectiveSound or db.sound.objectiveSoundChoice == "custom") and db.sound.customObjectiveSoundChoice == "manual")
-                        end,
-                        get = function()
-                            return (db.sound and db.sound.customObjectiveSoundPath) or "Interface\\AddOns\\BleakfibersQuestTracker-Forever\\Media\\Sounds\\beep.wav"
-                        end,
-                        set = function(_, val)
-                            db.sound = db.sound or {}
-                            db.sound.customObjectiveSoundPath = val
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                        end,
-                    },
                     previewObjectiveBtn = {
                         name = "Preview Objective Sound",
                         desc = "Play the currently selected objective progress sound effect at the configured volume.",
                         type = "execute",
-                        order = 26,
+                        order = 24,
                         func = function()
                             if ns.SocialModule and ns.SocialModule.PlayPreviewObjectiveSound then
                                 local c = (db.sound and db.sound.objectiveSoundChoice) or "whisper_ping"
@@ -2867,10 +2966,130 @@ local function GetOptionsTable()
                             end
                         end,
                     },
-                    customSoundNotes = {
-                        name = "\n|cff00c0ffCustom Audio Notes & Slots:|r\n• To use your own sounds without typing paths, drop audio files into:\n  |cffffd100Interface\\AddOns\\BleakfibersQuestTracker-Forever\\Media\\Sounds\\|r\n  named |cffffffffcustom1.wav|r, |cffffffffcustom2.wav|r, etc. (up to 5 slots).\n• Bundled ready-to-use sounds: |cffffffffbeep.wav|r (clean subtle tone) and |cffffffffclick.wav|r (soft tick).\n• Any sound registered through LibSharedMedia also automatically appears in the dropdown.\n• 16-bit 44.1kHz PCM .wav files are recommended for universal WoW compatibility.",
-                        type = "description",
+                    customSoundHeader = {
+                        name = "Custom Audio Files",
+                        type = "header",
                         order = 30,
+                    },
+                    customSoundDesc = {
+                        name = "You can use any custom .wav sound file! Place your audio files into:\n|cffffd100Interface\\AddOns\\BleakfibersQuestTracker-Forever\\Media\\Sounds\\|r\n|cffaaaaaa(Note: The WoW client must be completely restarted after adding new files to disk so the engine indexes them)|r\n\nAdd your filename below (e.g. |cfffffffffart.wav|r) or list it in |cffffffffMedia\\CustomSounds.lua|r. Loaded custom sounds will appear directly in the sound dropdowns above as |cffffd100Custom 1 (fart.wav)|r, etc.",
+                        type = "description",
+                        order = 31,
+                    },
+                    newCustomSound = {
+                        name = "Add Sound Filename",
+                        desc = "Enter the filename of a sound placed in Media\\Sounds\\ (e.g. fart.wav or cheer.wav).",
+                        type = "input",
+                        width = "double",
+                        order = 32,
+                        get = function() return Config.tempNewSoundName or "" end,
+                        set = function(_, val) Config.tempNewSoundName = val end,
+                    },
+                    addCustomSoundBtn = {
+                        name = "Add Sound",
+                        desc = "Register this sound file so it appears in the Quest Complete and Objective Progress dropdowns.",
+                        type = "execute",
+                        order = 33,
+                        func = function()
+                            local fname = Config.tempNewSoundName
+                            if fname and fname:match("%S") then
+                                local ok, res = ns.AddCustomSound(fname)
+                                if ok then
+                                    Config.tempNewSoundName = ""
+                                    local ACR = LibStub and LibStub("AceConfigRegistry-3.0", true)
+                                    if ACR then ACR:NotifyChange("BleakfiberQuestTracker") end
+                                elseif res and DEFAULT_CHAT_FRAME then
+                                    DEFAULT_CHAT_FRAME:AddMessage("|cff00c0ff[BQT]|r |cffff2020Error:|r " .. res)
+                                end
+                            end
+                        end,
+                    },
+                    manageHeader = {
+                        name = "Manage Registered Custom Sounds",
+                        type = "header",
+                        order = 34,
+                        hidden = function()
+                            local list = ns.GetCustomSoundList and ns.GetCustomSoundList()
+                            return not list or #list == 0
+                        end,
+                    },
+                    manageSelect = {
+                        name = "Select Custom Sound",
+                        desc = "Choose a registered custom sound to preview or remove.",
+                        type = "select",
+                        order = 35,
+                        width = "double",
+                        hidden = function()
+                            local list = ns.GetCustomSoundList and ns.GetCustomSoundList()
+                            return not list or #list == 0
+                        end,
+                        values = function()
+                            local t = {}
+                            local list = ns.GetCustomSoundList and ns.GetCustomSoundList()
+                            if list then
+                                for _, item in ipairs(list) do
+                                    t[item.file] = item.label .. (item.origin == "file" and " [CustomSounds.lua]" or "")
+                                end
+                            end
+                            return t
+                        end,
+                        get = function()
+                            if Config.selectedManageSound then
+                                return Config.selectedManageSound
+                            end
+                            local list = ns.GetCustomSoundList and ns.GetCustomSoundList()
+                            if list and list[1] then
+                                Config.selectedManageSound = list[1].file
+                                return list[1].file
+                            end
+                            return ""
+                        end,
+                        set = function(_, val)
+                            Config.selectedManageSound = val
+                        end,
+                    },
+                    previewManageBtn = {
+                        name = "Preview",
+                        desc = "Play this custom sound file.",
+                        type = "execute",
+                        order = 36,
+                        hidden = function()
+                            local list = ns.GetCustomSoundList and ns.GetCustomSoundList()
+                            return not list or #list == 0
+                        end,
+                        func = function()
+                            local file = Config.selectedManageSound
+                            if not file then
+                                local list = ns.GetCustomSoundList and ns.GetCustomSoundList()
+                                if list and list[1] then file = list[1].file end
+                            end
+                            if file and ns.SocialModule and ns.SocialModule.PlaySoundKey then
+                                ns.SocialModule:PlaySoundKey("custom:" .. file)
+                            end
+                        end,
+                    },
+                    removeManageBtn = {
+                        name = "Remove",
+                        desc = "Remove this sound from your registered custom sounds list (Note: sounds defined in CustomSounds.lua must be removed from that file).",
+                        type = "execute",
+                        order = 37,
+                        hidden = function()
+                            local list = ns.GetCustomSoundList and ns.GetCustomSoundList()
+                            return not list or #list == 0
+                        end,
+                        func = function()
+                            local file = Config.selectedManageSound
+                            if not file then
+                                local list = ns.GetCustomSoundList and ns.GetCustomSoundList()
+                                if list and list[1] then file = list[1].file end
+                            end
+                            if file then
+                                ns.RemoveCustomSound(file)
+                                Config.selectedManageSound = nil
+                                local ACR = LibStub and LibStub("AceConfigRegistry-3.0", true)
+                                if ACR then ACR:NotifyChange("BleakfiberQuestTracker") end
+                            end
+                        end,
                     },
                 },
             },
@@ -2940,6 +3159,24 @@ local function GetOptionsTable()
                             db.wayfinder = db.wayfinder or {}
                             db.wayfinder.arrowScale = val
                             if ns.WayfinderModule then ns.WayfinderModule:ApplyHUDSettings() end
+                        end,
+                    },
+                    textDistance = {
+                        name = "HUD Text Spacing",
+                        desc = "Set the vertical distance between the floating HUD navigation arrow and destination/distance text (5px - 50px).",
+                        type = "range",
+                        order = 4.5,
+                        min = 5,
+                        max = 50,
+                        step = 1,
+                        get = function() return (db.wayfinder and db.wayfinder.textDistance) or 12 end,
+                        set = function(_, val)
+                            db.wayfinder = db.wayfinder or {}
+                            db.wayfinder.textDistance = val
+                            if ns.WayfinderModule and ns.WayfinderModule.UpdateHUDTextAnchors then
+                                ns.WayfinderModule:UpdateHUDTextAnchors()
+                            end
+                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
                         end,
                     },
                     showBackdrop = {
@@ -4831,6 +5068,11 @@ local function CreateStyledColorPickerWithHex(parent, labelText, width, height, 
             end
         end
         if ns.Tracker and ns.Tracker.UpdateBackdrop then ns.Tracker:UpdateBackdrop() end
+        if ns.Tracker and ns.Tracker.UpdateSettings then ns.Tracker:UpdateSettings() end
+        if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
+        if ns.DataBarsModule and ns.DataBarsModule.RefreshBars then ns.DataBarsModule:RefreshBars() end
+        if ns.WayfinderModule and ns.WayfinderModule.ApplyHUDSettings then ns.WayfinderModule:ApplyHUDSettings() end
+        if ns.WayfinderModule and ns.WayfinderModule.ForceImmediateUpdate then ns.WayfinderModule:ForceImmediateUpdate() end
         if ns.FireCallback then ns:FireCallback("SETTINGS_UPDATED") end
         if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
     end
@@ -5409,6 +5651,48 @@ local function CreateStyledCycleButton(parent, labelPrefix, width, height, optio
     return CreateStyledDropdown(parent, labelPrefix, width, height, options, getFunc, setFunc, tooltipText)
 end
 
+local function CreateStyledTextInput(parent, width, height, placeholder, onEnterFunc)
+    local boxFrame = CreateFrame("Frame", nil, parent, BACKDROP_TEMPLATE)
+    boxFrame:SetSize(width or 180, height or 22)
+    boxFrame:SetBackdrop(INSET_BACKDROP)
+    boxFrame:SetBackdropColor(0.04, 0.05, 0.07, 0.95)
+    boxFrame:SetBackdropBorderColor(unpack(COLORS.goldMuted))
+
+    local edit = CreateFrame("EditBox", nil, boxFrame)
+    edit:SetPoint("LEFT", boxFrame, "LEFT", 8, 0)
+    edit:SetPoint("RIGHT", boxFrame, "RIGHT", -8, 0)
+    edit:SetHeight(height or 22)
+    edit:SetAutoFocus(false)
+    edit:SetFontObject("GameFontHighlightSmall")
+    edit:SetJustifyH("LEFT")
+    boxFrame.EditBox = edit
+
+    local hint = boxFrame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    hint:SetPoint("LEFT", boxFrame, "LEFT", 8, 0)
+    hint:SetText(placeholder or "")
+
+    edit:SetScript("OnTextChanged", function(self)
+        local txt = self:GetText()
+        if txt and txt ~= "" then
+            hint:Hide()
+        else
+            hint:Show()
+        end
+    end)
+
+    edit:SetScript("OnEnterPressed", function(self)
+        self:ClearFocus()
+        if onEnterFunc then onEnterFunc(self:GetText()) end
+    end)
+
+    edit:SetScript("OnEscapePressed", function(self)
+        self:ClearFocus()
+    end)
+
+    boxFrame.EditBox = edit
+    return boxFrame
+end
+
 --[[-----------------------------------------------------------------------------
     Native Tab Builders for Quest Tracker
 -------------------------------------------------------------------------------]]
@@ -5416,6 +5700,15 @@ local OUTLINE_OPTIONS = {
     { key = "OUTLINE",      label = "Outline" },
     { key = "THICKOUTLINE", label = "Thick Outline" },
     { key = "",             label = "None" },
+}
+
+local BACKGROUND_SURFACE_TEXTURES = {
+    { key = "solid",           label = "Solid / Flat" },
+    { key = "tooltip",         label = "Blizzard Tooltip Dark" },
+    { key = "marble",          label = "Blizzard Marble" },
+    { key = "rock",            label = "Blizzard Rock" },
+    { key = "parchment",       label = "Blizzard Quest Parchment" },
+    { key = "parchment_clean", label = "Blizzard Parchment (Clean)" },
 }
 
 local BORDER_STYLES = {
@@ -5430,6 +5723,18 @@ local HEADER_STYLES = {
     { key = "flat",     label = "Flat Solid Bar" },
     { key = "blizzard", label = "Blizzard Header" },
     { key = "none",     label = "None (Transparent)" },
+}
+
+local ZONE_COLLAPSE_ICONS = {
+    { key = "arrow",     label = "Triangle / Arrow" },
+    { key = "plusminus", label = "Plus / Minus ([-] / [+])" },
+    { key = "none",      label = "None (Hide)" },
+}
+
+local COMPLETED_TITLE_MODES = {
+    { key = "difficulty", label = "Keep Level Difficulty Color" },
+    { key = "turnin",     label = "Turn-In Green" },
+    { key = "custom",     label = "Custom Color" },
 }
 
 local ARROW_STYLES = {
@@ -5497,7 +5802,8 @@ local COMPLETE_SOUNDS = {
     { key = "raid_warning",   label = "Raid Warning Chime" },
     { key = "ready_check",    label = "Ready Check Chime" },
     { key = "pvp_horn",       label = "PvP Queue Horn" },
-    { key = "custom",         label = "Custom Sound Slot" },
+    { key = "beep",           label = "Bleakfiber Beep (beep.wav)" },
+    { key = "click",          label = "Bleakfiber Click (click.wav)" },
 }
 
 local OBJECTIVE_SOUNDS = {
@@ -5506,8 +5812,71 @@ local OBJECTIVE_SOUNDS = {
     { key = "loot_clink",   label = "Loot Coin Clink" },
     { key = "map_ping",     label = "Mini-Map Ping" },
     { key = "item_click",   label = "Subtle Click" },
-    { key = "custom",       label = "Custom Sound Slot" },
+    { key = "beep",         label = "Bleakfiber Beep (beep.wav)" },
+    { key = "click",        label = "Bleakfiber Click (click.wav)" },
 }
+
+local function GetCompleteSoundOptions()
+    local options = {}
+    local seen = {}
+    for _, opt in ipairs(COMPLETE_SOUNDS) do
+        table.insert(options, { key = opt.key, label = opt.label })
+        seen[opt.key] = true
+    end
+    local customList = ns.GetCustomSoundList and ns.GetCustomSoundList()
+    if customList and #customList > 0 then
+        for _, item in ipairs(customList) do
+            if not seen[item.key] then
+                table.insert(options, { key = item.key, label = item.label })
+                seen[item.key] = true
+            end
+        end
+    end
+    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+    if LSM and LSM.List then
+        local lsmSounds = LSM:List("sound")
+        if type(lsmSounds) == "table" then
+            for _, soundName in ipairs(lsmSounds) do
+                if not seen[soundName] then
+                    table.insert(options, { key = soundName, label = soundName })
+                    seen[soundName] = true
+                end
+            end
+        end
+    end
+    return options
+end
+
+local function GetObjectiveSoundOptions()
+    local options = {}
+    local seen = {}
+    for _, opt in ipairs(OBJECTIVE_SOUNDS) do
+        table.insert(options, { key = opt.key, label = opt.label })
+        seen[opt.key] = true
+    end
+    local customList = ns.GetCustomSoundList and ns.GetCustomSoundList()
+    if customList and #customList > 0 then
+        for _, item in ipairs(customList) do
+            if not seen[item.key] then
+                table.insert(options, { key = item.key, label = item.label })
+                seen[item.key] = true
+            end
+        end
+    end
+    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+    if LSM and LSM.List then
+        local lsmSounds = LSM:List("sound")
+        if type(lsmSounds) == "table" then
+            for _, soundName in ipairs(lsmSounds) do
+                if not seen[soundName] then
+                    table.insert(options, { key = soundName, label = soundName })
+                    seen[soundName] = true
+                end
+            end
+        end
+    end
+    return options
+end
 
 -- TAB 1: General Settings
 local function BuildGeneralTab(content, syncList)
@@ -6194,10 +6563,15 @@ local function BuildColorsTab(content, syncList)
     local db = ns.db or {}
     local bgDb = db.backdrop or {}
     local fontDb = db.fonts or {}
+    local headerDb = db.headers or {}
+    local wfDb = db.wayfinder or {}
+    local dataDb = db.databars or {}
+    local ui = {}
 
-    local h1, d1 = CreateSectionHeader(content, "TRACKER BACKDROP & BORDER", 12, 0)
+    -- SECTION 1: TRACKER BACKDROP & BORDER
+    ui.h1, ui.d1 = CreateSectionHeader(content, "TRACKER BACKDROP & BORDER", 12, 0)
 
-    local cpBgColor = CreateStyledColorPickerWithHex(content, "Bg Color", 190, 22,
+    ui.cpBgColor = CreateStyledColorPickerWithHex(content, "Bg Color", 190, 22,
         function()
             local c = bgDb.bgColor or { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
             return c.r, c.g, c.b, c.a or 0.65
@@ -6209,9 +6583,9 @@ local function BuildColorsTab(content, syncList)
         "Click the swatch to open the color picker with live palette, or click the editbox and type any Hex code (e.g. #000000) and press Enter.",
         syncList
     )
-    table.insert(syncList, cpBgColor)
+    table.insert(syncList, ui.cpBgColor)
 
-    local btnPureBlack = CreateStyledButton(content, "Pure Black (#000000)", 190, 22, function()
+    ui.btnPureBlack = CreateStyledButton(content, "Pure Black (#000000)", 190, 22, function()
         bgDb.bgTexture = "solid"
         bgDb.bgColor = { r = 0, g = 0, b = 0, a = 1.0 }
         if ns.Tracker and ns.Tracker.UpdateBackdrop then ns.Tracker:UpdateBackdrop() end
@@ -6220,7 +6594,7 @@ local function BuildColorsTab(content, syncList)
         if ns.Print then ns.Print("Tracker background set to Pure Black (#000000) at 100% opacity.") end
     end, "Instantly sets the background to solid pitch black (#000000) with 100% opacity for maximum contrast and readability.")
 
-    local slBgAlpha = CreateStyledSlider(content, "BFQ_SlBgAlpha", "Background Opacity:",
+    ui.slBgAlpha = CreateStyledSlider(content, "BFQ_SlBgAlpha", "Background Opacity:",
         "Controls the dark backdrop fill opacity (0% - 100%).",
         0.0, 1.0, 0.05,
         function() return (bgDb.bgColor and bgDb.bgColor.a) or 0.65 end,
@@ -6230,9 +6604,9 @@ local function BuildColorsTab(content, syncList)
         end,
         "%.2f"
     )
-    table.insert(syncList, slBgAlpha)
+    table.insert(syncList, ui.slBgAlpha)
 
-    local slBorderAlpha = CreateStyledSlider(content, "BFQ_SlBorderAlpha", "Border Opacity:",
+    ui.slBorderAlpha = CreateStyledSlider(content, "BFQ_SlBorderAlpha", "Border Opacity:",
         "Controls the border opacity (0% - 100%).",
         0.0, 1.0, 0.05,
         function() return (bgDb.borderColor and bgDb.borderColor.a) or 0.90 end,
@@ -6242,16 +6616,37 @@ local function BuildColorsTab(content, syncList)
         end,
         "%.2f"
     )
-    table.insert(syncList, slBorderAlpha)
+    table.insert(syncList, ui.slBorderAlpha)
 
-    local btnBorder = CreateStyledDropdown(content, "Border Style", 190, 22, BORDER_STYLES,
+    ui.btnBgTexture = CreateStyledDropdown(content, "Surface Texture", 190, 22, BACKGROUND_SURFACE_TEXTURES,
+        function() return bgDb.bgTexture or "solid" end,
+        function(v)
+            local prev = bgDb.bgTexture or "solid"
+            bgDb.bgTexture = v
+            local isParchment = (v == "parchment" or v == "parchment_clean")
+            local wasParchment = (prev == "parchment" or prev == "parchment_clean")
+            if isParchment and not wasParchment then
+                bgDb.bgColor = { r = 0.96, g = 0.90, b = 0.78, a = 0.90 }
+            elseif not isParchment and wasParchment then
+                bgDb.bgColor = { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
+            end
+            if ns.Tracker and ns.Tracker.UpdateBackdrop then ns.Tracker:UpdateBackdrop() end
+            if ns.DataBarsModule and ns.DataBarsModule.RefreshBars then ns.DataBarsModule:RefreshBars() end
+            for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
+            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+        end,
+        "Select the background surface texture for the tracker window (Solid, Tooltip, Marble, Rock, or Parchment)."
+    )
+    table.insert(syncList, ui.btnBgTexture)
+
+    ui.btnBorder = CreateStyledDropdown(content, "Border Style", 190, 22, BORDER_STYLES,
         function() return bgDb.borderStyle or "flat" end,
         function(v) bgDb.borderStyle = v end,
         "Choose between Flat 1px border, Blizzard Tooltip rounded corners, Dialog, or borderless."
     )
-    table.insert(syncList, btnBorder)
+    table.insert(syncList, ui.btnBorder)
 
-    local cpBorderColor = CreateStyledColorPickerWithHex(content, "Border Color", 190, 22,
+    ui.cpBorderColor = CreateStyledColorPickerWithHex(content, "Border Color", 190, 22,
         function()
             local c = bgDb.borderColor or { r = 0.15, g = 0.15, b = 0.15, a = 0.90 }
             return c.r, c.g, c.b, c.a or 0.90
@@ -6263,25 +6658,40 @@ local function BuildColorsTab(content, syncList)
         "Choose a custom border color or enter a Hex code (e.g. #262626) when Class-Colored Border is disabled.",
         syncList
     )
-    table.insert(syncList, cpBorderColor)
+    table.insert(syncList, ui.cpBorderColor)
 
-    local cbClassBorder = CreateStyledCheckbox(content, "Class-Colored Tracker Border",
+    ui.cbClassBorder = CreateStyledCheckbox(content, "Class-Colored Tracker Border",
         "Tints the tracker frame border using your player character's class color.",
         function() return bgDb.classColorBorder == true end,
         function(v) bgDb.classColorBorder = v end
     )
-    table.insert(syncList, cbClassBorder)
+    table.insert(syncList, ui.cbClassBorder)
 
-    local h1b, d1b = CreateSectionHeader(content, "QUEST & OBJECTIVE TEXT COLORS", 12, 0)
+    ui.btnResetBackdrop = CreateStyledButton(content, "Reset Backdrop Defaults", 190, 22, function()
+        if bgDb then
+            bgDb.bgTexture = "solid"
+            bgDb.bgColor = { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
+            bgDb.borderColor = { r = 0.15, g = 0.15, b = 0.15, a = 0.90 }
+            bgDb.borderStyle = "flat"
+            bgDb.classColorBorder = false
+        end
+        if ns.Tracker and ns.Tracker.UpdateBackdrop then ns.Tracker:UpdateBackdrop() end
+        for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
+        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+        if ns.Print then ns.Print("Tracker backdrop and border colors reset to defaults.") end
+    end, "Reset tracker background color, border color, and opacity back to defaults.")
 
-    local cbColorDiff = CreateStyledCheckbox(content, "Color Quest Titles by Level Difficulty",
+    -- SECTION 2: QUEST & OBJECTIVE TYPOGRAPHY & COLORS
+    ui.h1b, ui.d1b = CreateSectionHeader(content, "QUEST & OBJECTIVE TYPOGRAPHY & COLORS", 12, 0)
+
+    ui.cbColorDiff = CreateStyledCheckbox(content, "Color Quest Titles by Level Difficulty",
         "Colors quest titles by level difficulty (Green/Yellow/Orange/Red). Uncheck to use your custom Quest Title Color below.",
         function() return fontDb.colorDifficulty ~= false end,
         function(v) fontDb.colorDifficulty = v end
     )
-    table.insert(syncList, cbColorDiff)
+    table.insert(syncList, ui.cbColorDiff)
 
-    local cpTitleColor = CreateStyledColorPickerWithHex(content, "Quest Title", 190, 22,
+    ui.cpTitleColor = CreateStyledColorPickerWithHex(content, "Quest Title", 190, 22,
         function()
             local c = fontDb.titleColor or { r = 1.00, g = 0.82, b = 0.00 }
             return c.r, c.g, c.b, 1.0
@@ -6292,9 +6702,9 @@ local function BuildColorsTab(content, syncList)
         "Custom color for quest titles when 'Color Quest Titles by Level Difficulty' is unchecked. Supports #RRGGBB Hex input.",
         syncList
     )
-    table.insert(syncList, cpTitleColor)
+    table.insert(syncList, ui.cpTitleColor)
 
-    local cpObjColor = CreateStyledColorPickerWithHex(content, "Objectives", 190, 22,
+    ui.cpObjColor = CreateStyledColorPickerWithHex(content, "Objectives", 190, 22,
         function()
             local c = fontDb.objectiveColor or { r = 0.80, g = 0.80, b = 0.80 }
             return c.r, c.g, c.b, 1.0
@@ -6305,9 +6715,9 @@ local function BuildColorsTab(content, syncList)
         "Custom text color for incomplete quest objective lines. Supports #RRGGBB Hex input (e.g. #FFFFFF for pure white).",
         syncList
     )
-    table.insert(syncList, cpObjColor)
+    table.insert(syncList, ui.cpObjColor)
 
-    local cpCompColor = CreateStyledColorPickerWithHex(content, "Completed", 190, 22,
+    ui.cpCompColor = CreateStyledColorPickerWithHex(content, "Completed", 190, 22,
         function()
             local c = fontDb.completedObjectiveColor or { r = 0.00, g = 1.00, b = 0.00 }
             return c.r, c.g, c.b, 1.0
@@ -6318,11 +6728,88 @@ local function BuildColorsTab(content, syncList)
         "Custom text color for finished objectives and 'Ready for turn-in' lines. Supports #RRGGBB Hex input (default: #00FF00).",
         syncList
     )
-    table.insert(syncList, cpCompColor)
+    table.insert(syncList, ui.cpCompColor)
 
-    local h2, d2 = CreateSectionHeader(content, "TYPOGRAPHY & TEXT SIZES", 12, 0)
+    ui.cbCompletedBg = CreateStyledCheckbox(content, "Completed Quest Background Tint",
+        "Display a soft background tint behind quests that are ready for turn-in.",
+        function() return fontDb.completedQuestBg ~= false end,
+        function(v)
+            fontDb.completedQuestBg = v
+            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
+        end
+    )
+    table.insert(syncList, ui.cbCompletedBg)
 
-    local ddHeaderFont = CreateStyledFontDropdown(content, "Header Font", 190, 22,
+    ui.cpCompletedBgColor = CreateStyledColorPickerWithHex(content, "Completed Bg Tint", 190, 22,
+        function()
+            local c = fontDb.completedQuestBgColor or { r = 0.00, g = 0.80, b = 0.20, a = 0.14 }
+            return c.r, c.g, c.b, c.a or 0.14
+        end,
+        function(r, g, b, a)
+            local curA = (fontDb.completedQuestBgColor and fontDb.completedQuestBgColor.a) or 0.14
+            fontDb.completedQuestBgColor = { r = r, g = g, b = b, a = a or curA }
+            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
+        end,
+        "Custom background tint color and opacity for completed quests ready for turn-in.",
+        syncList
+    )
+    table.insert(syncList, ui.cpCompletedBgColor)
+
+    ui.ddCompletedTitleMode = CreateStyledDropdown(content, "Completed Title Color", 190, 22, COMPLETED_TITLE_MODES,
+        function() return fontDb.completedTitleColorMode or "difficulty" end,
+        function(v)
+            fontDb.completedTitleColorMode = v
+            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
+        end,
+        "Choose how completed quest titles are colored (keep level difficulty color, match turn-in green, or custom color)."
+    )
+    table.insert(syncList, ui.ddCompletedTitleMode)
+
+    ui.cpCompletedTitleCustomColor = CreateStyledColorPickerWithHex(content, "Custom Title Color", 190, 22,
+        function()
+            local c = fontDb.completedTitleCustomColor or { r = 0.00, g = 1.00, b = 0.00 }
+            return c.r, c.g, c.b, 1.0
+        end,
+        function(r, g, b)
+            fontDb.completedTitleCustomColor = { r = r, g = g, b = b }
+            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
+        end,
+        "Custom title color for completed quests when 'Completed Title Color' is set to Custom.",
+        syncList
+    )
+    table.insert(syncList, ui.cpCompletedTitleCustomColor)
+
+    ui.cpQuestHoverColor = CreateStyledColorPickerWithHex(content, "Quest Hover Color", 190, 22,
+        function()
+            local c = fontDb.questHoverColor or { r = 1.00, g = 1.00, b = 1.00, a = 0.08 }
+            return c.r, c.g, c.b, c.a or 0.08
+        end,
+        function(r, g, b, a)
+            local curA = (fontDb.questHoverColor and fontDb.questHoverColor.a) or 0.08
+            fontDb.questHoverColor = { r = r, g = g, b = b, a = a or curA }
+            if ns.StandaloneTracker and ns.StandaloneTracker.ApplyHighlightColors then ns.StandaloneTracker:ApplyHighlightColors() end
+        end,
+        "Mouseover highlight color and opacity when hovering over a quest row.",
+        syncList
+    )
+    table.insert(syncList, ui.cpQuestHoverColor)
+
+    ui.cpZoneHoverColor = CreateStyledColorPickerWithHex(content, "Zone Hover Color", 190, 22,
+        function()
+            local c = fontDb.zoneHoverColor or { r = 1.00, g = 0.82, b = 0.00, a = 0.12 }
+            return c.r, c.g, c.b, c.a or 0.12
+        end,
+        function(r, g, b, a)
+            local curA = (fontDb.zoneHoverColor and fontDb.zoneHoverColor.a) or 0.12
+            fontDb.zoneHoverColor = { r = r, g = g, b = b, a = a or curA }
+            if ns.StandaloneTracker and ns.StandaloneTracker.ApplyHighlightColors then ns.StandaloneTracker:ApplyHighlightColors() end
+        end,
+        "Mouseover highlight color and opacity when hovering over a zone header.",
+        syncList
+    )
+    table.insert(syncList, ui.cpZoneHoverColor)
+
+    ui.ddHeaderFont = CreateStyledFontDropdown(content, "Header Font", 190, 22,
         function() return fontDb.headerFont or fontDb.font or "Nata Sans Bold" end,
         function(v)
             fontDb.headerFont = v
@@ -6331,9 +6818,9 @@ local function BuildColorsTab(content, syncList)
         end,
         "Select the typography face for tracker headers, zone titles, and quest titles."
     )
-    table.insert(syncList, ddHeaderFont)
+    table.insert(syncList, ui.ddHeaderFont)
 
-    local ddHeaderOutline = CreateStyledDropdown(content, "Header Outline", 190, 22, OUTLINE_OPTIONS,
+    ui.ddHeaderOutline = CreateStyledDropdown(content, "Header Outline", 190, 22, OUTLINE_OPTIONS,
         function() return fontDb.headerOutline or "OUTLINE" end,
         function(v)
             fontDb.headerOutline = v
@@ -6341,9 +6828,9 @@ local function BuildColorsTab(content, syncList)
         end,
         "Select the font outline rendering style for headers and quest titles."
     )
-    table.insert(syncList, ddHeaderOutline)
+    table.insert(syncList, ui.ddHeaderOutline)
 
-    local ddObjFont = CreateStyledFontDropdown(content, "Objective Font", 190, 22,
+    ui.ddObjFont = CreateStyledFontDropdown(content, "Objective Font", 190, 22,
         function() return fontDb.objectiveFont or "Nata Sans Regular" end,
         function(v)
             fontDb.objectiveFont = v
@@ -6351,9 +6838,9 @@ local function BuildColorsTab(content, syncList)
         end,
         "Select the typography face for quest objectives, progress text, and descriptions."
     )
-    table.insert(syncList, ddObjFont)
+    table.insert(syncList, ui.ddObjFont)
 
-    local ddObjOutline = CreateStyledDropdown(content, "Objective Outline", 190, 22, OUTLINE_OPTIONS,
+    ui.ddObjOutline = CreateStyledDropdown(content, "Objective Outline", 190, 22, OUTLINE_OPTIONS,
         function() return fontDb.objectiveOutline or "" end,
         function(v)
             fontDb.objectiveOutline = v
@@ -6361,105 +6848,512 @@ local function BuildColorsTab(content, syncList)
         end,
         "Select the font outline rendering style for objective lines."
     )
-    table.insert(syncList, ddObjOutline)
+    table.insert(syncList, ui.ddObjOutline)
 
-    local slHeaderSize = CreateStyledSlider(content, "BFQ_SlHdrSize", "Header Font Size:",
+    ui.slHeaderSize = CreateStyledSlider(content, "BFQ_SlHdrSize", "Header Font Size:",
         "Font size for quest title headers in the tracker (9 - 20 pt).",
         9, 20, 1,
         function() return fontDb.headerSize or 13 end,
         function(v) fontDb.headerSize = v end,
         "%d pt"
     )
-    table.insert(syncList, slHeaderSize)
+    table.insert(syncList, ui.slHeaderSize)
 
-    local slObjSize = CreateStyledSlider(content, "BFQ_SlObjSize", "Objective Font Size:",
+    ui.slObjSize = CreateStyledSlider(content, "BFQ_SlObjSize", "Objective Font Size:",
         "Font size for objective lines and progress counters (8 - 18 pt).",
         8, 18, 1,
         function() return fontDb.objectiveSize or 11 end,
         function(v) fontDb.objectiveSize = v end,
         "%d pt"
     )
-    table.insert(syncList, slObjSize)
+    table.insert(syncList, ui.slObjSize)
 
-    local slZoneSize = CreateStyledSlider(content, "BFQ_SlZoneSize", "Zone Header Font Size:",
+    ui.slZoneSize = CreateStyledSlider(content, "BFQ_SlZoneSize", "Zone Header Font Size:",
         "Font size for collapsible zone title headers (9 - 18 pt).",
         9, 18, 1,
         function() return fontDb.zoneHeaderSize or 12 end,
         function(v) fontDb.zoneHeaderSize = v end,
         "%d pt"
     )
-    table.insert(syncList, slZoneSize)
+    table.insert(syncList, ui.slZoneSize)
 
-    local cbShadow = CreateStyledCheckbox(content, "Enable Text Dropshadows",
+    ui.cbShadow = CreateStyledCheckbox(content, "Enable Text Dropshadows",
         "Adds crisp dropshadows behind all tracker text for maximum readability.",
         function() return fontDb.enableTextShadow ~= false end,
         function(v) fontDb.enableTextShadow = v end
     )
-    table.insert(syncList, cbShadow)
+    table.insert(syncList, ui.cbShadow)
 
-    local h3, d3 = CreateSectionHeader(content, "THEME PRESETS", 12, 0)
-    local btnPresetGlass = CreateStyledButton(content, "Modern Dark Glass", 190, 22, function()
-        if Config.ApplyModernGlassPreset then Config:ApplyModernGlassPreset() end
-        if ns.Print then ns.Print("Applied Modern Dark Glass preset.") end
-        for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
-    end, "Modern dark glassmorphism preset with sleek flat 1px border and crisp white text.")
-
-    local btnPresetClassic = CreateStyledButton(content, "Classic WoW Plus", 190, 22, function()
-        if Config.ApplyClassicPreset then Config:ApplyClassicPreset() end
-        if ns.Print then ns.Print("Applied Classic WoW Plus preset.") end
-        for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
-    end, "Classic World of Warcraft parchment tooltip border with gold headers and high contrast.")
-
-    local btnPresetMinimal = CreateStyledButton(content, "Ultra Minimalist", 190, 22, function()
-        if Config.ApplyMinimalPreset then Config:ApplyMinimalPreset() end
-        if ns.Print then ns.Print("Applied Ultra Minimalist preset.") end
-        for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
-    end, "Borderless flat backdrop with compact typography for maximum screen space.")
-
-    local h4, d4 = CreateSectionHeader(content, "RESET COLORS", 12, 0)
-    local btnResetBg = CreateStyledButton(content, "Reset Background Color", 190, 22, function()
-        if bgDb then
-            if bgDb.bgTexture == "parchment" or bgDb.bgTexture == "parchment_clean" then
-                bgDb.bgColor = { r = 0.96, g = 0.90, b = 0.78, a = 0.90 }
-            else
-                bgDb.bgColor = { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
+    ui.slMenuScale = CreateStyledSlider(content, "BFQ_SlMenuScale", "Menu & Dropdown Scale:",
+        "Adjust display scale of the right-click quest menu and header Tracker Options quick menu (80% - 160%).",
+        0.8, 1.6, 0.05,
+        function() return fontDb.menuScale or 1.0 end,
+        function(v)
+            fontDb.menuScale = v
+            if quickMenuPopup then
+                quickMenuPopup:SetScale(v)
             end
-            bgDb.borderColor = { r = 0.15, g = 0.15, b = 0.15, a = 0.90 }
-        end
-        if ns.Tracker and ns.Tracker.UpdateBackdrop then ns.Tracker:UpdateBackdrop() end
-        for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
-    end, "Reset tracker background and border color/opacity back to defaults.")
+            if DropDownList1 and DropDownList1:IsShown() then
+                DropDownList1:SetScale(v)
+            end
+        end,
+        "%.2f"
+    )
+    table.insert(syncList, ui.slMenuScale)
 
-    local btnResetText = CreateStyledButton(content, "Reset Header & Zone Colors", 190, 22, function()
+    ui.btnResetQuestColors = CreateStyledButton(content, "Reset Quest & Obj Defaults", 190, 22, function()
+        if fontDb then
+            fontDb.colorDifficulty = true
+            fontDb.titleColor = { r = 1.00, g = 0.82, b = 0.00 }
+            fontDb.objectiveColor = { r = 0.80, g = 0.80, b = 0.80 }
+            fontDb.completedObjectiveColor = { r = 0.00, g = 1.00, b = 0.00 }
+            fontDb.headerSize = 13
+            fontDb.objectiveSize = 11
+            fontDb.zoneHeaderSize = 12
+            fontDb.headerOutline = "OUTLINE"
+            fontDb.objectiveOutline = ""
+            fontDb.enableTextShadow = true
+            fontDb.menuScale = 1.0
+            fontDb.completedQuestBg = true
+            fontDb.completedQuestBgColor = { r = 0.00, g = 0.80, b = 0.20, a = 0.14 }
+            fontDb.completedTitleColorMode = "difficulty"
+            fontDb.completedTitleCustomColor = { r = 0.00, g = 1.00, b = 0.00 }
+            fontDb.questHoverColor = { r = 1.00, g = 1.00, b = 1.00, a = 0.08 }
+            fontDb.zoneHoverColor = { r = 1.00, g = 0.82, b = 0.00, a = 0.12 }
+        end
+        if quickMenuPopup then quickMenuPopup:SetScale(1.0) end
+        if ns.StandaloneTracker and ns.StandaloneTracker.ApplyHighlightColors then ns.StandaloneTracker:ApplyHighlightColors() end
+        if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
+        if ns.Tracker and ns.Tracker.UpdateTypography then ns.Tracker:UpdateTypography() end
+        for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
+        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+        if ns.Print then ns.Print("Quest and objective text colors & typography reset to defaults.") end
+    end, "Reset quest title, objective, completed colors, and font sizes back to defaults.")
+
+    -- SECTION 3: HEADER & ZONE BAR COLORS
+    ui.h2, ui.d2 = CreateSectionHeader(content, "HEADER & ZONE BAR COLORS", 12, 0)
+
+    ui.cpHeaderText = CreateStyledColorPickerWithHex(content, "Header Text", 190, 22,
+        function()
+            local c = headerDb.textColor or (ns.GetClassColor and ns.GetClassColor()) or { r = 0.0, g = 0.75, b = 1.0 }
+            return c.r, c.g, c.b, 1.0
+        end,
+        function(r, g, b)
+            headerDb.textColor = { r = r, g = g, b = b }
+        end,
+        "Choose a custom color or #RRGGBB Hex code for the main 'Quests (X/Y)' header title text.",
+        syncList
+    )
+    table.insert(syncList, ui.cpHeaderText)
+
+    ui.cpHeaderBar = CreateStyledColorPickerWithHex(content, "Header Bar", 190, 22,
+        function()
+            local c = headerDb.textureColor or { r = 0.05, g = 0.08, b = 0.12, a = 0.85 }
+            return c.r, c.g, c.b, c.a or 0.85
+        end,
+        function(r, g, b, a)
+            local curA = (headerDb.textureColor and headerDb.textureColor.a) or 0.85
+            headerDb.textureColor = { r = r, g = g, b = b, a = a or curA }
+        end,
+        "Choose a custom color or #RRGGBB Hex code for the main header bar background.",
+        syncList
+    )
+    table.insert(syncList, ui.cpHeaderBar)
+
+    ui.cpHeaderBtns = CreateStyledColorPickerWithHex(content, "Header Buttons", 190, 22,
+        function()
+            local c = headerDb.buttonColor or (ns.GetClassColor and ns.GetClassColor()) or { r = 1.0, g = 0.82, b = 0.0 }
+            return c.r, c.g, c.b, 1.0
+        end,
+        function(r, g, b)
+            headerDb.buttonColor = { r = r, g = g, b = b }
+        end,
+        "Choose a custom color or #RRGGBB Hex code for header bar buttons ([Log], [Zone], [All], gear icon, collapse).",
+        syncList
+    )
+    table.insert(syncList, ui.cpHeaderBtns)
+
+    ui.cpZoneText = CreateStyledColorPickerWithHex(content, "Zone Text", 190, 22,
+        function()
+            local c = headerDb.zoneTextColor or headerDb.zoneHeaderColor or { r = 1.0, g = 0.82, b = 0.0, a = 1.0 }
+            return c.r, c.g, c.b, 1.0
+        end,
+        function(r, g, b)
+            headerDb.zoneTextColor = { r = r, g = g, b = b, a = 1.0 }
+        end,
+        "Choose a custom color or #RRGGBB Hex code for collapsible zone header titles (e.g. 'Westfall (3)').",
+        syncList
+    )
+    table.insert(syncList, ui.cpZoneText)
+
+    ui.cpZoneBar = CreateStyledColorPickerWithHex(content, "Zone Bar", 190, 22,
+        function()
+            local c = headerDb.zoneHeaderColor or { r = 1.0, g = 0.82, b = 0.0, a = 1.0 }
+            return c.r, c.g, c.b, c.a or 1.0
+        end,
+        function(r, g, b, a)
+            local curA = (headerDb.zoneHeaderColor and headerDb.zoneHeaderColor.a) or 1.0
+            headerDb.zoneHeaderColor = { r = r, g = g, b = b, a = a or curA }
+        end,
+        "Choose a custom color or #RRGGBB Hex code for collapsible zone header bar backgrounds.",
+        syncList
+    )
+    table.insert(syncList, ui.cpZoneBar)
+
+    ui.cbZoneShareBorder = CreateStyledCheckbox(content, "Match Zone Header Color to Border",
+        "Automatically synchronizes zone header bar and text colors with your tracker border color.",
+        function() return headerDb.zoneHeaderColorShare == true end,
+        function(v) headerDb.zoneHeaderColorShare = v end
+    )
+    table.insert(syncList, ui.cbZoneShareBorder)
+
+    ui.btnResetHeaderColors = CreateStyledButton(content, "Reset Header & Zone Defaults", 190, 22, function()
         if db.headers then
             db.headers.textColor = nil
-            db.headers.textureColor = { r = 0.0, g = 0.75, b = 1.0, a = 0.35 }
+            db.headers.textureColor = { r = 0.05, g = 0.08, b = 0.12, a = 0.85 }
             db.headers.buttonColor = nil
             db.headers.zoneTextColor = { r = 1.0, g = 0.82, b = 0.0, a = 1.0 }
             db.headers.zoneHeaderColor = { r = 1.0, g = 0.82, b = 0.0, a = 1.0 }
+            db.headers.zoneHeaderColorShare = false
         end
         if ns.Tracker and ns.Tracker.UpdateSettings then ns.Tracker:UpdateSettings() end
         if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
         for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
         if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-    end, "Reset main header and zone header colors back to their defaults.")
+        if ns.Print then ns.Print("Main header and zone header colors reset to defaults.") end
+    end, "Reset main header and zone header colors back to defaults.")
 
-    local btnResetBtnColor = CreateStyledButton(content, "Reset Quest & Obj Colors", 190, 22, function()
+    -- SECTION 4: WAYFINDER NAVIGATION COLORS & FONTS
+    ui.h3, ui.d3 = CreateSectionHeader(content, "WAYFINDER NAVIGATION COLORS & FONTS", 12, 0)
+
+    ui.cpWfAhead = CreateStyledColorPickerWithHex(content, "Arrow Ahead", 190, 22,
+        function()
+            local c = wfDb.arrowAheadColor or { r = 0.10, g = 1.00, b = 0.20, a = 1.0 }
+            return c.r, c.g, c.b, 1.0
+        end,
+        function(r, g, b)
+            wfDb.arrowAheadColor = { r = r, g = g, b = b, a = 1.0 }
+        end,
+        "Color of the Wayfinder arrow when facing directly toward your destination (default: green #1AFF33).",
+        syncList
+    )
+    table.insert(syncList, ui.cpWfAhead)
+
+    ui.cpWfAngle = CreateStyledColorPickerWithHex(content, "Arrow Angled", 190, 22,
+        function()
+            local c = wfDb.arrowAngleColor or { r = 1.00, g = 0.85, b = 0.10, a = 1.0 }
+            return c.r, c.g, c.b, 1.0
+        end,
+        function(r, g, b)
+            wfDb.arrowAngleColor = { r = r, g = g, b = b, a = 1.0 }
+        end,
+        "Color of the Wayfinder arrow when facing sideways / off-course (default: amber #FFD91A).",
+        syncList
+    )
+    table.insert(syncList, ui.cpWfAngle)
+
+    ui.cpWfBehind = CreateStyledColorPickerWithHex(content, "Arrow Behind", 190, 22,
+        function()
+            local c = wfDb.arrowBehindColor or { r = 1.00, g = 0.25, b = 0.25, a = 1.0 }
+            return c.r, c.g, c.b, 1.0
+        end,
+        function(r, g, b)
+            wfDb.arrowBehindColor = { r = r, g = g, b = b, a = 1.0 }
+        end,
+        "Color of the Wayfinder arrow when facing away from your destination (default: red #FF4040).",
+        syncList
+    )
+    table.insert(syncList, ui.cpWfBehind)
+
+    ui.cpWfArrived = CreateStyledColorPickerWithHex(content, "Arrow Arrived", 190, 22,
+        function()
+            local c = wfDb.arrowArrivedColor or { r = 0.10, g = 1.00, b = 0.20, a = 1.0 }
+            return c.r, c.g, c.b, 1.0
+        end,
+        function(r, g, b)
+            wfDb.arrowArrivedColor = { r = r, g = g, b = b, a = 1.0 }
+        end,
+        "Color of the Wayfinder arrow and 'Arrived!' text when destination range is reached (default: #1AFF33).",
+        syncList
+    )
+    table.insert(syncList, ui.cpWfArrived)
+
+    ui.cpWfDest = CreateStyledColorPickerWithHex(content, "Destination Text", 190, 22,
+        function()
+            local c = wfDb.destTextColor or { r = 1.00, g = 0.82, b = 0.00, a = 1.0 }
+            return c.r, c.g, c.b, 1.0
+        end,
+        function(r, g, b)
+            wfDb.destTextColor = { r = r, g = g, b = b, a = 1.0 }
+        end,
+        "Color of the HUD destination title text above the distance readout (default: gold #FFD100).",
+        syncList
+    )
+    table.insert(syncList, ui.cpWfDest)
+
+    ui.cpWfDist = CreateStyledColorPickerWithHex(content, "Distance Text", 190, 22,
+        function()
+            local c = wfDb.distTextColor or { r = 1.00, g = 1.00, b = 1.00, a = 1.0 }
+            return c.r, c.g, c.b, 1.0
+        end,
+        function(r, g, b)
+            wfDb.distTextColor = { r = r, g = g, b = b, a = 1.0 }
+        end,
+        "Color of the HUD distance readout numbers and units below the arrow (default: white #FFFFFF).",
+        syncList
+    )
+    table.insert(syncList, ui.cpWfDist)
+
+    ui.slWfDistSize = CreateStyledSlider(content, "BFQ_SlWfDistSize", "HUD Distance Font Size:",
+        "Font size for the distance text below the floating HUD arrow (8 - 18 pt).",
+        8, 18, 1,
+        function() return wfDb.hudFontSize or 11 end,
+        function(v)
+            wfDb.hudFontSize = v
+            if ns.WayfinderModule and ns.WayfinderModule.ApplyHUDSettings then ns.WayfinderModule:ApplyHUDSettings() end
+        end,
+        "%d pt"
+    )
+    table.insert(syncList, ui.slWfDistSize)
+
+    ui.slWfTitleSize = CreateStyledSlider(content, "BFQ_SlWfTitleSize", "HUD Destination Font Size:",
+        "Font size for the destination title text above the floating HUD arrow (8 - 18 pt).",
+        8, 18, 1,
+        function() return wfDb.hudTitleFontSize or 11 end,
+        function(v)
+            wfDb.hudTitleFontSize = v
+            if ns.WayfinderModule and ns.WayfinderModule.ApplyHUDSettings then ns.WayfinderModule:ApplyHUDSettings() end
+        end,
+        "%d pt"
+    )
+    table.insert(syncList, ui.slWfTitleSize)
+
+    ui.btnResetWfColors = CreateStyledButton(content, "Reset Wayfinder Defaults", 190, 22, function()
+        if wfDb then
+            wfDb.arrowAheadColor = { r = 0.10, g = 1.00, b = 0.20, a = 1.0 }
+            wfDb.arrowAngleColor = { r = 1.00, g = 0.85, b = 0.10, a = 1.0 }
+            wfDb.arrowBehindColor = { r = 1.00, g = 0.25, b = 0.25, a = 1.0 }
+            wfDb.arrowArrivedColor = { r = 0.10, g = 1.00, b = 0.20, a = 1.0 }
+            wfDb.destTextColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.0 }
+            wfDb.distTextColor = { r = 1.00, g = 1.00, b = 1.00, a = 1.0 }
+            wfDb.hudFontSize = 11
+            wfDb.hudTitleFontSize = 11
+        end
+        if ns.WayfinderModule and ns.WayfinderModule.ApplyHUDSettings then ns.WayfinderModule:ApplyHUDSettings() end
+        if ns.WayfinderModule and ns.WayfinderModule.ForceImmediateUpdate then ns.WayfinderModule:ForceImmediateUpdate() end
+        for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
+        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+        if ns.Print then ns.Print("Wayfinder arrow colors, text colors, and font sizes reset to defaults.") end
+    end, "Reset Wayfinder navigation arrow colors, destination text color, and distance text color back to defaults.")
+
+    -- SECTION 5: DATABARS COLORS & FONTS
+    ui.h4, ui.d4 = CreateSectionHeader(content, "DATABARS COLORS & FONTS", 12, 0)
+
+    ui.cpXPColor = CreateStyledColorPickerWithHex(content, "XP Bar Normal", 190, 22,
+        function()
+            local c = dataDb.xpColor or { r = 0.58, g = 0.00, b = 0.83, a = 1.00 }
+            return c.r, c.g, c.b, 1.0
+        end,
+        function(r, g, b)
+            dataDb.xpColor = { r = r, g = g, b = b, a = 1.00 }
+        end,
+        "Color of standard player experience progress on the XP DataBar (default: purple #9400D3).",
+        syncList
+    )
+    table.insert(syncList, ui.cpXPColor)
+
+    ui.cpRestedColor = CreateStyledColorPickerWithHex(content, "Rested XP Bonus", 190, 22,
+        function()
+            local c = dataDb.restedColor or { r = 0.00, g = 0.44, b = 0.88, a = 1.00 }
+            return c.r, c.g, c.b, 1.0
+        end,
+        function(r, g, b)
+            dataDb.restedColor = { r = r, g = g, b = b, a = 1.00 }
+        end,
+        "Color of the rested experience bonus pool segment (default: blue #0070DE).",
+        syncList
+    )
+    table.insert(syncList, ui.cpRestedColor)
+
+    ui.cpQuestXPColor = CreateStyledColorPickerWithHex(content, "Turn-in Quest XP", 190, 22,
+        function()
+            local c = dataDb.questXPColor or { r = 0.25, g = 0.85, b = 0.45, a = 0.65 }
+            return c.r, c.g, c.b, 1.0
+        end,
+        function(r, g, b)
+            dataDb.questXPColor = { r = r, g = g, b = b, a = 0.65 }
+        end,
+        "Color of the completed quest turn-in XP overlay ghost bar (default: ghost green #40D973).",
+        syncList
+    )
+    table.insert(syncList, ui.cpQuestXPColor)
+
+    ui.cpDingReadyColor = CreateStyledColorPickerWithHex(content, "Ding Ready Alert", 190, 22,
+        function()
+            local c = dataDb.dingReadyColor or { r = 1.00, g = 0.82, b = 0.00, a = 1.00 }
+            return c.r, c.g, c.b, 1.0
+        end,
+        function(r, g, b)
+            dataDb.dingReadyColor = { r = r, g = g, b = b, a = 1.00 }
+        end,
+        "Color of the glowing [Ding Ready!] level-up notification on the XP Bar (default: gold #FFD100).",
+        syncList
+    )
+    table.insert(syncList, ui.cpDingReadyColor)
+
+    ui.cpLocTextColor = CreateStyledColorPickerWithHex(content, "Location Text", 190, 22,
+        function()
+            local c = dataDb.locTextColor or { r = 1.00, g = 0.82, b = 0.00, a = 1.00 }
+            return c.r, c.g, c.b, 1.0
+        end,
+        function(r, g, b)
+            dataDb.locTextColor = { r = r, g = g, b = b, a = 1.00 }
+        end,
+        "Custom text color for zone and subzone names on the Location Bar (when PvP territory coloring is bypassed).",
+        syncList
+    )
+    table.insert(syncList, ui.cpLocTextColor)
+
+    ui.cpCoordsColor = CreateStyledColorPickerWithHex(content, "Coordinates Text", 190, 22,
+        function()
+            local c = dataDb.coordsColor or { r = 1.00, g = 1.00, b = 1.00, a = 1.00 }
+            return c.r, c.g, c.b, 1.0
+        end,
+        function(r, g, b)
+            dataDb.coordsColor = { r = r, g = g, b = b, a = 1.00 }
+        end,
+        "Color of player map coordinates readout (XX.X, YY.Y) on the Location Bar (default: white #FFFFFF).",
+        syncList
+    )
+    table.insert(syncList, ui.cpCoordsColor)
+
+    ui.cpTimerColor = CreateStyledColorPickerWithHex(content, "Quest Timer Bar", 190, 22,
+        function()
+            local c = dataDb.timerColor or { r = 1.00, g = 0.82, b = 0.00, a = 1.00 }
+            return c.r, c.g, c.b, 1.0
+        end,
+        function(r, g, b)
+            dataDb.timerColor = { r = r, g = g, b = b, a = 1.00 }
+        end,
+        "Statusbar fill and border color for the timed quest countdown bar (default: gold #FFD100).",
+        syncList
+    )
+    table.insert(syncList, ui.cpTimerColor)
+
+    ui.cbLocCustomColor = CreateStyledCheckbox(content, "Override Territory With Custom Location Color",
+        "When checked, uses your custom Location Text color instead of automatic PvP territory coloring.",
+        function() return dataDb.locCustomTextColor == true end,
+        function(v)
+            dataDb.locCustomTextColor = v
+            if ns.DataBarsModule and ns.DataBarsModule.RefreshBars then ns.DataBarsModule:RefreshBars() end
+        end
+    )
+    table.insert(syncList, ui.cbLocCustomColor)
+
+    ui.btnResetDataBarsColors = CreateStyledButton(content, "Reset DataBars Defaults", 190, 22, function()
+        if dataDb then
+            dataDb.xpBgColor = { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
+            dataDb.xpColor = { r = 0.58, g = 0.00, b = 0.83, a = 1.00 }
+            dataDb.restedColor = { r = 0.00, g = 0.44, b = 0.88, a = 1.00 }
+            dataDb.questXPColor = { r = 0.25, g = 0.85, b = 0.45, a = 0.65 }
+            dataDb.allQuestXPColor = { r = 0.12, g = 0.45, b = 0.25, a = 0.80 }
+            dataDb.dingReadyColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 }
+            dataDb.locTextColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 }
+            dataDb.locCustomTextColor = false
+            dataDb.coordsColor = { r = 1.00, g = 1.00, b = 1.00, a = 1.00 }
+            dataDb.timerColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 }
+        end
+        if ns.DataBarsModule and ns.DataBarsModule.RefreshBars then ns.DataBarsModule:RefreshBars() end
+        for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
+        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+        if ns.Print then ns.Print("DataBars colors reset to defaults.") end
+    end, "Reset XP Bar, Location Bar, coordinates, and Timer Bar colors back to defaults.")
+
+    -- SECTION 6: THEME PRESETS & MASTER RESET
+    ui.h5, ui.d5 = CreateSectionHeader(content, "THEME PRESETS & MASTER RESET", 12, 0)
+
+    ui.btnPresetGlass = CreateStyledButton(content, "Modern Dark Glass", 190, 22, function()
+        if Config.ApplyModernGlassPreset then Config:ApplyModernGlassPreset() end
+        if ns.Print then ns.Print("Applied Modern Dark Glass preset.") end
+        for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
+    end, "Modern dark glassmorphism preset with sleek flat 1px border and crisp white text.")
+
+    ui.btnPresetClassic = CreateStyledButton(content, "Classic WoW Plus", 190, 22, function()
+        if Config.ApplyClassicPreset then Config:ApplyClassicPreset() end
+        if ns.Print then ns.Print("Applied Classic WoW Plus preset.") end
+        for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
+    end, "Classic World of Warcraft parchment tooltip border with gold headers and high contrast.")
+
+    ui.btnPresetMinimal = CreateStyledButton(content, "Ultra Minimalist", 190, 22, function()
+        if Config.ApplyMinimalPreset then Config:ApplyMinimalPreset() end
+        if ns.Print then ns.Print("Applied Ultra Minimalist preset.") end
+        for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
+    end, "Borderless flat backdrop with compact typography for maximum screen space.")
+
+    ui.btnResetAllColors = CreateStyledButton(content, "Reset All Colors to Defaults", 190, 22, function()
+        -- Reset Backdrop
+        if bgDb then
+            bgDb.bgColor = { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
+            bgDb.borderColor = { r = 0.15, g = 0.15, b = 0.15, a = 0.90 }
+            bgDb.borderStyle = "flat"
+            bgDb.classColorBorder = false
+        end
+        -- Reset Quests & Typography
         if fontDb then
             fontDb.colorDifficulty = true
             fontDb.titleColor = { r = 1.00, g = 0.82, b = 0.00 }
             fontDb.objectiveColor = { r = 0.80, g = 0.80, b = 0.80 }
             fontDb.completedObjectiveColor = { r = 0.00, g = 1.00, b = 0.00 }
         end
+        -- Reset Headers
+        if headerDb then
+            headerDb.textColor = nil
+            headerDb.textureColor = { r = 0.05, g = 0.08, b = 0.12, a = 0.85 }
+            headerDb.buttonColor = nil
+            headerDb.zoneTextColor = { r = 1.0, g = 0.82, b = 0.0, a = 1.0 }
+            headerDb.zoneHeaderColor = { r = 1.0, g = 0.82, b = 0.0, a = 1.0 }
+            headerDb.zoneHeaderColorShare = false
+        end
+        -- Reset Wayfinder
+        if wfDb then
+            wfDb.arrowAheadColor = { r = 0.10, g = 1.00, b = 0.20, a = 1.0 }
+            wfDb.arrowAngleColor = { r = 1.00, g = 0.85, b = 0.10, a = 1.0 }
+            wfDb.arrowBehindColor = { r = 1.00, g = 0.25, b = 0.25, a = 1.0 }
+            wfDb.arrowArrivedColor = { r = 0.10, g = 1.00, b = 0.20, a = 1.0 }
+            wfDb.destTextColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.0 }
+            wfDb.distTextColor = { r = 1.00, g = 1.00, b = 1.00, a = 1.0 }
+        end
+        -- Reset DataBars
+        if dataDb then
+            dataDb.xpBgColor = { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
+            dataDb.xpColor = { r = 0.58, g = 0.00, b = 0.83, a = 1.00 }
+            dataDb.restedColor = { r = 0.00, g = 0.44, b = 0.88, a = 1.00 }
+            dataDb.questXPColor = { r = 0.25, g = 0.85, b = 0.45, a = 0.65 }
+            dataDb.allQuestXPColor = { r = 0.12, g = 0.45, b = 0.25, a = 0.80 }
+            dataDb.dingReadyColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 }
+            dataDb.locTextColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 }
+            dataDb.locCustomTextColor = false
+            dataDb.coordsColor = { r = 1.00, g = 1.00, b = 1.00, a = 1.00 }
+            dataDb.timerColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 }
+        end
+
+        if ns.Tracker and ns.Tracker.UpdateBackdrop then ns.Tracker:UpdateBackdrop() end
+        if ns.Tracker and ns.Tracker.UpdateSettings then ns.Tracker:UpdateSettings() end
         if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
+        if ns.WayfinderModule and ns.WayfinderModule.ApplyHUDSettings then ns.WayfinderModule:ApplyHUDSettings() end
+        if ns.WayfinderModule and ns.WayfinderModule.ForceImmediateUpdate then ns.WayfinderModule:ForceImmediateUpdate() end
+        if ns.DataBarsModule and ns.DataBarsModule.RefreshBars then ns.DataBarsModule:RefreshBars() end
         for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
         if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-    end, "Reset quest title, objective, and completed objective colors back to defaults.")
+        if ns.Print then ns.Print("All tracker, header, Wayfinder, and DataBars colors have been reset to defaults.") end
+    end, "Resets ALL colors across the entire addon (Tracker Backdrop, Quests, Headers, Wayfinder arrow, DataBars) back to default settings.")
 
     local function Layout(w)
         if not w or w < 100 then w = content:GetWidth() or 500 end
         local y = -10
-        h1:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+
+        -- SECTION 1: TRACKER BACKDROP & BORDER
+        ui.h1:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
         y = y - 30
 
         if w >= 470 then
@@ -6467,203 +7361,420 @@ local function BuildColorsTab(content, syncList)
             local col1X = 16
             local col2X = col1X + colWidth + 16
 
-            cpBgColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            cpBgColor:SetWidth(math.min(190, colWidth - 20))
-            btnPureBlack:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
-            btnPureBlack:SetWidth(math.min(190, colWidth - 20))
+            ui.btnBgTexture:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnBgTexture:SetWidth(math.min(190, colWidth - 20))
+            ui.btnBorder:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.btnBorder:SetWidth(math.min(190, colWidth - 20))
             y = y - 36
 
-            slBgAlpha:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            slBgAlpha:SetWidth(math.min(190, colWidth - 20))
-            slBorderAlpha:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
-            slBorderAlpha:SetWidth(math.min(190, colWidth - 20))
+            ui.cpBgColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpBgColor:SetWidth(math.min(190, colWidth - 20))
+            ui.cpBorderColor:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.cpBorderColor:SetWidth(math.min(190, colWidth - 20))
+            y = y - 36
+
+            ui.slBgAlpha:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.slBgAlpha:SetWidth(math.min(190, colWidth - 20))
+            ui.slBorderAlpha:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.slBorderAlpha:SetWidth(math.min(190, colWidth - 20))
             y = y - 48
 
-            btnBorder:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            btnBorder:SetWidth(math.min(190, colWidth - 20))
-            cpBorderColor:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
-            cpBorderColor:SetWidth(math.min(190, colWidth - 20))
+            ui.btnPureBlack:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnPureBlack:SetWidth(math.min(190, colWidth - 20))
+            ui.cbClassBorder:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.cbClassBorder.Text:SetWidth(colWidth - 32)
             y = y - 36
 
-            cbClassBorder:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            cbClassBorder.Text:SetWidth(w - 56)
+            ui.btnResetBackdrop:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnResetBackdrop:SetWidth(math.min(190, colWidth - 20))
+            y = y - 44
+
+            -- SECTION 2: QUEST & OBJECTIVE TYPOGRAPHY & COLORS
+            ui.h1b:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+            y = y - 30
+
+            ui.cbColorDiff:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cbColorDiff.Text:SetWidth(colWidth - 32)
+            ui.cpTitleColor:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.cpTitleColor:SetWidth(math.min(190, colWidth - 20))
+            y = y - 36
+
+            ui.cpObjColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpObjColor:SetWidth(math.min(190, colWidth - 20))
+            ui.cpCompColor:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.cpCompColor:SetWidth(math.min(190, colWidth - 20))
             y = y - 40
 
-            h1b:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
-            y = y - 30
-
-            cbColorDiff:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            cbColorDiff.Text:SetWidth(colWidth - 32)
-            cpTitleColor:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
-            cpTitleColor:SetWidth(math.min(190, colWidth - 20))
+            ui.cbCompletedBg:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cbCompletedBg.Text:SetWidth(colWidth - 32)
+            ui.cpCompletedBgColor:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.cpCompletedBgColor:SetWidth(math.min(190, colWidth - 20))
             y = y - 36
 
-            cpObjColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            cpObjColor:SetWidth(math.min(190, colWidth - 20))
-            cpCompColor:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
-            cpCompColor:SetWidth(math.min(190, colWidth - 20))
-            y = y - 42
-
-            h2:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
-            y = y - 30
-
-            ddHeaderFont:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            ddHeaderFont:SetWidth(math.min(190, colWidth - 20))
-            ddHeaderOutline:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
-            ddHeaderOutline:SetWidth(math.min(190, colWidth - 20))
+            ui.ddCompletedTitleMode:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.ddCompletedTitleMode:SetWidth(math.min(190, colWidth - 20))
+            ui.cpCompletedTitleCustomColor:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.cpCompletedTitleCustomColor:SetWidth(math.min(190, colWidth - 20))
             y = y - 38
 
-            slHeaderSize:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            slHeaderSize:SetWidth(math.min(190, colWidth - 20))
-            slZoneSize:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
-            slZoneSize:SetWidth(math.min(190, colWidth - 20))
-            y = y - 48
-
-            ddObjFont:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            ddObjFont:SetWidth(math.min(190, colWidth - 20))
-            ddObjOutline:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
-            ddObjOutline:SetWidth(math.min(190, colWidth - 20))
-            y = y - 38
-
-            slObjSize:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            slObjSize:SetWidth(math.min(190, colWidth - 20))
-            cbShadow:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
-            cbShadow.Text:SetWidth(colWidth - 32)
-            y = y - 48
-
-            h3:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
-            y = y - 30
-
-            btnPresetGlass:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            btnPresetGlass:SetWidth(math.min(190, colWidth - 20))
-            btnPresetClassic:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
-            btnPresetClassic:SetWidth(math.min(190, colWidth - 20))
-            y = y - 36
-
-            btnPresetMinimal:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            btnPresetMinimal:SetWidth(math.min(190, colWidth - 20))
+            ui.cpQuestHoverColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpQuestHoverColor:SetWidth(math.min(190, colWidth - 20))
+            ui.cpZoneHoverColor:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.cpZoneHoverColor:SetWidth(math.min(190, colWidth - 20))
             y = y - 40
 
-            h4:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+            ui.ddHeaderFont:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.ddHeaderFont:SetWidth(math.min(190, colWidth - 20))
+            ui.ddHeaderOutline:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.ddHeaderOutline:SetWidth(math.min(190, colWidth - 20))
+            y = y - 38
+
+            ui.slHeaderSize:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.slHeaderSize:SetWidth(math.min(190, colWidth - 20))
+            ui.slZoneSize:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.slZoneSize:SetWidth(math.min(190, colWidth - 20))
+            y = y - 48
+
+            ui.ddObjFont:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.ddObjFont:SetWidth(math.min(190, colWidth - 20))
+            ui.ddObjOutline:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.ddObjOutline:SetWidth(math.min(190, colWidth - 20))
+            y = y - 38
+
+            ui.slObjSize:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.slObjSize:SetWidth(math.min(190, colWidth - 20))
+            ui.cbShadow:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.cbShadow.Text:SetWidth(colWidth - 32)
+            y = y - 48
+
+            ui.slMenuScale:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.slMenuScale:SetWidth(math.min(190, colWidth - 20))
+            ui.btnResetQuestColors:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.btnResetQuestColors:SetWidth(math.min(190, colWidth - 20))
+            y = y - 44
+
+            -- SECTION 3: HEADER & ZONE BAR COLORS
+            ui.h2:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
             y = y - 30
 
-            btnResetBg:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            btnResetBg:SetWidth(math.min(190, colWidth - 20))
-            btnResetText:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
-            btnResetText:SetWidth(math.min(190, colWidth - 20))
+            ui.cpHeaderText:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpHeaderText:SetWidth(math.min(190, colWidth - 20))
+            ui.cpHeaderBar:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.cpHeaderBar:SetWidth(math.min(190, colWidth - 20))
             y = y - 36
 
-            btnResetBtnColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            btnResetBtnColor:SetWidth(math.min(190, colWidth - 20))
+            ui.cpHeaderBtns:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpHeaderBtns:SetWidth(math.min(190, colWidth - 20))
+            ui.cpZoneText:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.cpZoneText:SetWidth(math.min(190, colWidth - 20))
             y = y - 36
+
+            ui.cpZoneBar:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpZoneBar:SetWidth(math.min(190, colWidth - 20))
+            ui.cbZoneShareBorder:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.cbZoneShareBorder.Text:SetWidth(colWidth - 32)
+            y = y - 40
+
+            ui.btnResetHeaderColors:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnResetHeaderColors:SetWidth(math.min(190, colWidth - 20))
+            y = y - 44
+
+            -- SECTION 4: WAYFINDER NAVIGATION COLORS & FONTS
+            ui.h3:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+            y = y - 30
+
+            ui.cpWfAhead:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpWfAhead:SetWidth(math.min(190, colWidth - 20))
+            ui.cpWfAngle:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.cpWfAngle:SetWidth(math.min(190, colWidth - 20))
+            y = y - 36
+
+            ui.cpWfBehind:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpWfBehind:SetWidth(math.min(190, colWidth - 20))
+            ui.cpWfArrived:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.cpWfArrived:SetWidth(math.min(190, colWidth - 20))
+            y = y - 36
+
+            ui.cpWfDest:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpWfDest:SetWidth(math.min(190, colWidth - 20))
+            ui.cpWfDist:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.cpWfDist:SetWidth(math.min(190, colWidth - 20))
+            y = y - 40
+
+            ui.slWfDistSize:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.slWfDistSize:SetWidth(math.min(190, colWidth - 20))
+            ui.slWfTitleSize:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.slWfTitleSize:SetWidth(math.min(190, colWidth - 20))
+            y = y - 48
+
+            ui.btnResetWfColors:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnResetWfColors:SetWidth(math.min(190, colWidth - 20))
+            y = y - 44
+
+            -- SECTION 5: DATABARS COLORS & FONTS
+            ui.h4:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+            y = y - 30
+
+            ui.cpXPColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpXPColor:SetWidth(math.min(190, colWidth - 20))
+            ui.cpRestedColor:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.cpRestedColor:SetWidth(math.min(190, colWidth - 20))
+            y = y - 36
+
+            ui.cpQuestXPColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpQuestXPColor:SetWidth(math.min(190, colWidth - 20))
+            ui.cpDingReadyColor:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.cpDingReadyColor:SetWidth(math.min(190, colWidth - 20))
+            y = y - 36
+
+            ui.cpLocTextColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpLocTextColor:SetWidth(math.min(190, colWidth - 20))
+            ui.cpCoordsColor:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.cpCoordsColor:SetWidth(math.min(190, colWidth - 20))
+            y = y - 36
+
+            ui.cpTimerColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpTimerColor:SetWidth(math.min(190, colWidth - 20))
+            ui.cbLocCustomColor:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.cbLocCustomColor.Text:SetWidth(colWidth - 32)
+            y = y - 40
+
+            ui.btnResetDataBarsColors:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnResetDataBarsColors:SetWidth(math.min(190, colWidth - 20))
+            y = y - 44
+
+            -- SECTION 6: THEME PRESETS & MASTER RESET
+            ui.h5:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+            y = y - 30
+
+            ui.btnPresetGlass:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnPresetGlass:SetWidth(math.min(190, colWidth - 20))
+            ui.btnPresetClassic:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.btnPresetClassic:SetWidth(math.min(190, colWidth - 20))
+            y = y - 36
+
+            ui.btnPresetMinimal:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnPresetMinimal:SetWidth(math.min(190, colWidth - 20))
+            ui.btnResetAllColors:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ui.btnResetAllColors:SetWidth(math.min(190, colWidth - 20))
+            y = y - 44
         else
             local colWidth = w - 36
             local col1X = 16
 
-            cpBgColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            cpBgColor:SetWidth(math.min(220, colWidth - 20))
-            y = y - 34
-            btnPureBlack:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            btnPureBlack:SetWidth(math.min(220, colWidth - 20))
+            -- SECTION 1
+            ui.btnBgTexture:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnBgTexture:SetWidth(math.min(220, colWidth - 20))
             y = y - 36
-
-            slBgAlpha:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            slBgAlpha:SetWidth(math.min(220, colWidth - 20))
+            ui.btnBorder:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnBorder:SetWidth(math.min(220, colWidth - 20))
+            y = y - 36
+            ui.cpBgColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpBgColor:SetWidth(math.min(220, colWidth - 20))
+            y = y - 36
+            ui.cpBorderColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpBorderColor:SetWidth(math.min(220, colWidth - 20))
+            y = y - 36
+            ui.btnPureBlack:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnPureBlack:SetWidth(math.min(220, colWidth - 20))
+            y = y - 36
+            ui.slBgAlpha:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.slBgAlpha:SetWidth(math.min(220, colWidth - 20))
             y = y - 46
-            slBorderAlpha:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            slBorderAlpha:SetWidth(math.min(220, colWidth - 20))
+            ui.slBorderAlpha:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.slBorderAlpha:SetWidth(math.min(220, colWidth - 20))
             y = y - 46
-
-            btnBorder:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            btnBorder:SetWidth(math.min(220, colWidth - 20))
+            ui.cbClassBorder:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cbClassBorder.Text:SetWidth(colWidth - 32)
             y = y - 36
-            cpBorderColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            cpBorderColor:SetWidth(math.min(220, colWidth - 20))
-            y = y - 36
-            cbClassBorder:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            cbClassBorder.Text:SetWidth(colWidth - 32)
-            y = y - 38
+            ui.btnResetBackdrop:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnResetBackdrop:SetWidth(math.min(220, colWidth - 20))
+            y = y - 44
 
-            h1b:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+            -- SECTION 2
+            ui.h1b:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
             y = y - 30
 
-            cbColorDiff:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            cbColorDiff.Text:SetWidth(colWidth - 32)
+            ui.cbColorDiff:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cbColorDiff.Text:SetWidth(colWidth - 32)
             y = y - 34
-            cpTitleColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            cpTitleColor:SetWidth(math.min(220, colWidth - 20))
+            ui.cpTitleColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpTitleColor:SetWidth(math.min(220, colWidth - 20))
             y = y - 34
-            cpObjColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            cpObjColor:SetWidth(math.min(220, colWidth - 20))
+            ui.cpObjColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpObjColor:SetWidth(math.min(220, colWidth - 20))
             y = y - 34
-            cpCompColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            cpCompColor:SetWidth(math.min(220, colWidth - 20))
+            ui.cpCompColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpCompColor:SetWidth(math.min(220, colWidth - 20))
+            y = y - 36
+
+            ui.cbCompletedBg:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cbCompletedBg.Text:SetWidth(colWidth - 32)
+            y = y - 34
+            ui.cpCompletedBgColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpCompletedBgColor:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.ddCompletedTitleMode:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.ddCompletedTitleMode:SetWidth(math.min(220, colWidth - 20))
+            y = y - 38
+            ui.cpCompletedTitleCustomColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpCompletedTitleCustomColor:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cpQuestHoverColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpQuestHoverColor:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cpZoneHoverColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpZoneHoverColor:SetWidth(math.min(220, colWidth - 20))
             y = y - 38
 
-            h2:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+            ui.ddHeaderFont:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.ddHeaderFont:SetWidth(math.min(220, colWidth - 20))
+            y = y - 38
+            ui.ddHeaderOutline:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.ddHeaderOutline:SetWidth(math.min(220, colWidth - 20))
+            y = y - 38
+            ui.slHeaderSize:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.slHeaderSize:SetWidth(math.min(220, colWidth - 20))
+            y = y - 46
+            ui.slZoneSize:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.slZoneSize:SetWidth(math.min(220, colWidth - 20))
+            y = y - 46
+
+            ui.ddObjFont:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.ddObjFont:SetWidth(math.min(220, colWidth - 20))
+            y = y - 38
+            ui.ddObjOutline:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.ddObjOutline:SetWidth(math.min(220, colWidth - 20))
+            y = y - 38
+            ui.slObjSize:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.slObjSize:SetWidth(math.min(220, colWidth - 20))
+            y = y - 46
+            ui.slMenuScale:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.slMenuScale:SetWidth(math.min(220, colWidth - 20))
+            y = y - 46
+            ui.cbShadow:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cbShadow.Text:SetWidth(colWidth - 32)
+            y = y - 38
+            ui.btnResetQuestColors:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnResetQuestColors:SetWidth(math.min(220, colWidth - 20))
+            y = y - 44
+
+            -- SECTION 3
+            ui.h2:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
             y = y - 30
 
-            ddHeaderFont:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            ddHeaderFont:SetWidth(math.min(220, colWidth - 20))
-            y = y - 38
-            ddHeaderOutline:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            ddHeaderOutline:SetWidth(math.min(220, colWidth - 20))
-            y = y - 38
-            slHeaderSize:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            slHeaderSize:SetWidth(math.min(220, colWidth - 20))
-            y = y - 46
-            slZoneSize:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            slZoneSize:SetWidth(math.min(220, colWidth - 20))
-            y = y - 46
+            ui.cpHeaderText:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpHeaderText:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cpHeaderBar:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpHeaderBar:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cpHeaderBtns:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpHeaderBtns:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cpZoneText:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpZoneText:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cpZoneBar:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpZoneBar:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cbZoneShareBorder:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cbZoneShareBorder.Text:SetWidth(colWidth - 32)
+            y = y - 36
+            ui.btnResetHeaderColors:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnResetHeaderColors:SetWidth(math.min(220, colWidth - 20))
+            y = y - 44
 
-            ddObjFont:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            ddObjFont:SetWidth(math.min(220, colWidth - 20))
-            y = y - 38
-            ddObjOutline:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            ddObjOutline:SetWidth(math.min(220, colWidth - 20))
-            y = y - 38
-            slObjSize:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            slObjSize:SetWidth(math.min(220, colWidth - 20))
-            y = y - 46
-            cbShadow:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            cbShadow.Text:SetWidth(colWidth - 32)
-            y = y - 38
-
-            h3:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+            -- SECTION 4
+            ui.h3:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
             y = y - 30
 
-            btnPresetGlass:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            btnPresetGlass:SetWidth(math.min(220, colWidth - 20))
-            y = y - 36
-            btnPresetClassic:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            btnPresetClassic:SetWidth(math.min(220, colWidth - 20))
-            y = y - 36
-            btnPresetMinimal:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            btnPresetMinimal:SetWidth(math.min(220, colWidth - 20))
-            y = y - 38
+            ui.cpWfAhead:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpWfAhead:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cpWfAngle:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpWfAngle:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cpWfBehind:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpWfBehind:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cpWfArrived:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpWfArrived:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cpWfDest:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpWfDest:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cpWfDist:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpWfDist:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.slWfDistSize:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.slWfDistSize:SetWidth(math.min(220, colWidth - 20))
+            y = y - 46
+            ui.slWfTitleSize:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.slWfTitleSize:SetWidth(math.min(220, colWidth - 20))
+            y = y - 46
+            ui.btnResetWfColors:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnResetWfColors:SetWidth(math.min(220, colWidth - 20))
+            y = y - 44
 
-            h4:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+            -- SECTION 5
+            ui.h4:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
             y = y - 30
 
-            btnResetBg:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            btnResetBg:SetWidth(math.min(220, colWidth - 20))
+            ui.cpXPColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpXPColor:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cpRestedColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpRestedColor:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cpQuestXPColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpQuestXPColor:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cpDingReadyColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpDingReadyColor:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cpLocTextColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpLocTextColor:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cpCoordsColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpCoordsColor:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cpTimerColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cpTimerColor:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            ui.cbLocCustomColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.cbLocCustomColor.Text:SetWidth(colWidth - 32)
             y = y - 36
-            btnResetText:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            btnResetText:SetWidth(math.min(220, colWidth - 20))
+            ui.btnResetDataBarsColors:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnResetDataBarsColors:SetWidth(math.min(220, colWidth - 20))
+            y = y - 44
+
+            -- SECTION 6
+            ui.h5:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+            y = y - 30
+
+            ui.btnPresetGlass:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnPresetGlass:SetWidth(math.min(220, colWidth - 20))
             y = y - 36
-            btnResetBtnColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            btnResetBtnColor:SetWidth(math.min(220, colWidth - 20))
+            ui.btnPresetClassic:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnPresetClassic:SetWidth(math.min(220, colWidth - 20))
             y = y - 36
+            ui.btnPresetMinimal:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnPresetMinimal:SetWidth(math.min(220, colWidth - 20))
+            y = y - 36
+            ui.btnResetAllColors:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ui.btnResetAllColors:SetWidth(math.min(220, colWidth - 20))
+            y = y - 44
         end
 
-        content:SetHeight(math.abs(y) + 20)
+        content:SetHeight(math.abs(y) + 30)
     end
 
     content.LayoutTab = Layout
     Layout(content:GetWidth())
 end
 
--- TAB 4: Headers & Filters
+-- TAB 4: Headers & Sort
 local function BuildHeadersTab(content, syncList)
     local db = ns.db or {}
     local headerDb = db.headers or {}
@@ -6705,7 +7816,7 @@ local function BuildHeadersTab(content, syncList)
     )
     table.insert(syncList, cbCollapse)
 
-    local h1b, d1b = CreateSectionHeader(content, "HEADER & ZONE BAR STYLING & COLORS", 12, 0)
+    local h1b, d1b = CreateSectionHeader(content, "HEADER & ZONE STYLING & COLORS", 12, 0)
 
     local ddHeaderTex = CreateStyledDropdown(content, "Header Bar Style", 190, 22, HEADER_STYLES,
         function() return headerDb.texture or "gradient" end,
@@ -6714,26 +7825,33 @@ local function BuildHeadersTab(content, syncList)
     )
     table.insert(syncList, ddHeaderTex)
 
+    local ddZoneTex = CreateStyledDropdown(content, "Zone Bar Style", 190, 22, HEADER_STYLES,
+        function() return headerDb.zoneHeaderTexture or "gradient" end,
+        function(v) headerDb.zoneHeaderTexture = v end,
+        "Choose the visual background style for collapsible zone category header bars."
+    )
+    table.insert(syncList, ddZoneTex)
+
     local cpHeaderText = CreateStyledColorPickerWithHex(content, "Header Text", 190, 22,
         function()
-            local c = headerDb.textColor or (ns.GetClassColor and ns.GetClassColor()) or { r = 0.0, g = 0.75, b = 1.0 }
+            local c = headerDb.textColor or (ns.GetClassColor and ns.GetClassColor()) or { r = 1.0, g = 0.82, b = 0.0 }
             return c.r, c.g, c.b, 1.0
         end,
         function(r, g, b)
             headerDb.textColor = { r = r, g = g, b = b }
         end,
-        "Choose a custom color or #RRGGBB Hex code for the main 'Quests (X/Y)' header title text.",
+        "Choose a custom color or #RRGGBB Hex code for the main header title text (default: Gold).",
         syncList
     )
     table.insert(syncList, cpHeaderText)
 
     local cpHeaderBar = CreateStyledColorPickerWithHex(content, "Header Bar", 190, 22,
         function()
-            local c = headerDb.textureColor or { r = 0.0, g = 0.75, b = 1.0, a = 0.35 }
-            return c.r, c.g, c.b, c.a or 0.35
+            local c = headerDb.textureColor or { r = 0.05, g = 0.08, b = 0.12, a = 0.85 }
+            return c.r, c.g, c.b, c.a or 0.85
         end,
         function(r, g, b, a)
-            local curA = (headerDb.textureColor and headerDb.textureColor.a) or 0.35
+            local curA = (headerDb.textureColor and headerDb.textureColor.a) or 0.85
             headerDb.textureColor = { r = r, g = g, b = b, a = a or curA }
         end,
         "Choose a custom color or #RRGGBB Hex code for the main header bar background.",
@@ -6749,17 +7867,10 @@ local function BuildHeadersTab(content, syncList)
         function(r, g, b)
             headerDb.buttonColor = { r = r, g = g, b = b }
         end,
-        "Choose a custom color or #RRGGBB Hex code for the header bar buttons ([Log], [Zone], [All], gear icon, collapse).",
+        "Choose a custom color or #RRGGBB Hex code for header bar buttons ([Log], [Zone], [All], gear icon, collapse).",
         syncList
     )
     table.insert(syncList, cpHeaderBtns)
-
-    local ddZoneTex = CreateStyledDropdown(content, "Zone Bar Style", 190, 22, HEADER_STYLES,
-        function() return headerDb.zoneHeaderTexture or "gradient" end,
-        function(v) headerDb.zoneHeaderTexture = v end,
-        "Choose the visual background style for collapsible zone category header bars."
-    )
-    table.insert(syncList, ddZoneTex)
 
     local cpZoneText = CreateStyledColorPickerWithHex(content, "Zone Text", 190, 22,
         function()
@@ -6795,6 +7906,25 @@ local function BuildHeadersTab(content, syncList)
     )
     table.insert(syncList, cbZoneShareBorder)
 
+    local btnResetHeaderColors = CreateStyledButton(content, "Reset Header & Zone Defaults", 190, 22, function()
+        if db.headers then
+            db.headers.textColor = nil
+            db.headers.textureColor = { r = 0.05, g = 0.08, b = 0.12, a = 0.85 }
+            db.headers.buttonColor = nil
+            db.headers.zoneTextColor = { r = 1.0, g = 0.82, b = 0.0, a = 1.0 }
+            db.headers.zoneHeaderColor = { r = 1.0, g = 0.82, b = 0.0, a = 1.0 }
+            db.headers.zoneHeaderColorShare = false
+            db.headers.zoneCollapseIcon = "arrow"
+            db.headers.zoneCollapseIconColor = nil
+            if db.sorting then db.sorting.alignQuestTitles = true end
+        end
+        if ns.Tracker and ns.Tracker.UpdateSettings then ns.Tracker:UpdateSettings() end
+        if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
+        for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
+        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+        if ns.Print then ns.Print("Main header and zone header colors reset to defaults.") end
+    end, "Reset main header and zone header colors back to defaults.")
+
     local h2, d2 = CreateSectionHeader(content, "ZONE GROUPING & SORTING", 12, 0)
     local cbZoneHeaders = CreateStyledCheckbox(content, "Group Quests Under Zone Headers",
         "Groups quests into collapsible zone header categories.",
@@ -6809,6 +7939,45 @@ local function BuildHeadersTab(content, syncList)
         function(v) headerDb.showZoneCount = v end
     )
     table.insert(syncList, cbZoneCount)
+
+    local ddCollapseShape = CreateStyledDropdown(content, "Collapse Indicator", 190, 22, ZONE_COLLAPSE_ICONS,
+        function() return headerDb.zoneCollapseIcon or "arrow" end,
+        function(v)
+            headerDb.zoneCollapseIcon = v
+            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
+        end,
+        "Choose the symbol next to zone names (Triangle/Arrow, Plus/Minus, or None)."
+    )
+    table.insert(syncList, ddCollapseShape)
+
+    local cpCollapseColor = CreateStyledColorPickerWithHex(content, "Indicator Color", 190, 22,
+        function()
+            local c = headerDb.zoneCollapseIconColor or headerDb.zoneTextColor or headerDb.zoneHeaderColor or { r = 1.0, g = 0.82, b = 0.0, a = 1.0 }
+            return c.r, c.g, c.b, c.a or 1.0
+        end,
+        function(r, g, b, a)
+            local curA = (headerDb.zoneCollapseIconColor and headerDb.zoneCollapseIconColor.a) or 1.0
+            headerDb.zoneCollapseIconColor = { r = r, g = g, b = b, a = a or curA }
+            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
+        end,
+        "Choose a custom color for the zone collapse shape/icon (defaults to zone header text color).",
+        syncList
+    )
+    table.insert(syncList, cpCollapseColor)
+
+    local cbClassHeader = CreateStyledCheckbox(content, "Separate Class Quests Header",
+        "Groups class quests into a dedicated class header (e.g. Paladin, Druid) and keeps them visible across all zones.",
+        function() return headerDb.separateClassHeader ~= false end,
+        function(v)
+            headerDb.separateClassHeader = v
+            if db.filtering then
+                db.filtering.alwaysShowClassQuests = v
+            end
+            if ns.Tracker and ns.Tracker.UpdateSettings then ns.Tracker:UpdateSettings() end
+            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
+        end
+    )
+    table.insert(syncList, cbClassHeader)
 
     local btnSort = CreateStyledDropdown(content, "Sorting Mode", 190, 22, SORT_MODES,
         function() return sortDb.mode or "level" end,
@@ -6830,6 +7999,26 @@ local function BuildHeadersTab(content, syncList)
         function(v) sortDb.activeOnTop = v end
     )
     table.insert(syncList, cbActiveTop)
+
+    local cbLeftClickActive = CreateStyledCheckbox(content, "Left-Click Sets Active Quest (Move to Top)",
+        "When unchecked (default), clicking any quest minimizes or expands it in place without moving it. When checked, clicking an inactive quest sets it active and moves it to top.",
+        function() return sortDb.leftClickSetsActive == true end,
+        function(v)
+            sortDb.leftClickSetsActive = v
+            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
+        end
+    )
+    table.insert(syncList, cbLeftClickActive)
+
+    local cbAlignTitles = CreateStyledCheckbox(content, "Align Quest Titles (Uniform Column)",
+        "Aligns all quest titles into a uniform column regardless of whether an active tracking arrow or completion icon is present. Prevents jagged offsets.",
+        function() return sortDb.alignQuestTitles ~= false end,
+        function(v)
+            sortDb.alignQuestTitles = v
+            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
+        end
+    )
+    table.insert(syncList, cbAlignTitles)
 
     local function Layout(w)
         if not w or w < 100 then w = content:GetWidth() or 500 end
@@ -6863,18 +8052,18 @@ local function BuildHeadersTab(content, syncList)
 
             ddHeaderTex:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             ddHeaderTex:SetWidth(math.min(190, colWidth - 20))
-            cpHeaderText:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
-            cpHeaderText:SetWidth(math.min(190, colWidth - 20))
+            ddZoneTex:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            ddZoneTex:SetWidth(math.min(190, colWidth - 20))
             y = y - 36
 
-            cpHeaderBar:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cpHeaderText:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cpHeaderText:SetWidth(math.min(190, colWidth - 20))
+            cpHeaderBar:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
             cpHeaderBar:SetWidth(math.min(190, colWidth - 20))
-            cpHeaderBtns:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
-            cpHeaderBtns:SetWidth(math.min(190, colWidth - 20))
-            y = y - 38
+            y = y - 36
 
-            ddZoneTex:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            ddZoneTex:SetWidth(math.min(190, colWidth - 20))
+            cpHeaderBtns:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cpHeaderBtns:SetWidth(math.min(190, colWidth - 20))
             cpZoneText:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
             cpZoneText:SetWidth(math.min(190, colWidth - 20))
             y = y - 36
@@ -6883,7 +8072,11 @@ local function BuildHeadersTab(content, syncList)
             cpZoneBar:SetWidth(math.min(190, colWidth - 20))
             cbZoneShareBorder:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
             cbZoneShareBorder.Text:SetWidth(colWidth - 32)
-            y = y - 42
+            y = y - 36
+
+            btnResetHeaderColors:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            btnResetHeaderColors:SetWidth(math.min(190, colWidth - 20))
+            y = y - 44
 
             h2:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
             y = y - 30
@@ -6894,14 +8087,30 @@ local function BuildHeadersTab(content, syncList)
             cbZoneCount.Text:SetWidth(colWidth - 32)
             y = y - 34
 
-            btnSort:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            btnSort:SetWidth(math.min(190, colWidth - 20))
-            cbCompletedBottom:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
-            cbCompletedBottom.Text:SetWidth(colWidth - 32)
-            y = y - 40
+            ddCollapseShape:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ddCollapseShape:SetWidth(math.min(190, colWidth - 20))
+            cpCollapseColor:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            cpCollapseColor:SetWidth(math.min(190, colWidth - 20))
+            y = y - 38
 
-            cbActiveTop:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cbClassHeader:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cbClassHeader.Text:SetWidth(colWidth - 32)
+            btnSort:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            btnSort:SetWidth(math.min(190, colWidth - 20))
+            y = y - 38
+
+            cbCompletedBottom:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cbCompletedBottom.Text:SetWidth(colWidth - 32)
+            cbActiveTop:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
             cbActiveTop.Text:SetWidth(colWidth - 32)
+            y = y - 34
+
+            cbLeftClickActive:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cbLeftClickActive.Text:SetWidth(math.max(260, w - 48))
+            y = y - 34
+
+            cbAlignTitles:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cbAlignTitles.Text:SetWidth(math.max(260, w - 48))
             y = y - 34
         else
             local colWidth = w - 36
@@ -6929,28 +8138,30 @@ local function BuildHeadersTab(content, syncList)
             ddHeaderTex:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             ddHeaderTex:SetWidth(math.min(220, colWidth - 20))
             y = y - 36
-            cpHeaderText:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            cpHeaderText:SetWidth(math.min(220, colWidth - 20))
-            y = y - 34
-            cpHeaderBar:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            cpHeaderBar:SetWidth(math.min(220, colWidth - 20))
-            y = y - 34
-            cpHeaderBtns:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
-            cpHeaderBtns:SetWidth(math.min(220, colWidth - 20))
-            y = y - 36
-
             ddZoneTex:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             ddZoneTex:SetWidth(math.min(220, colWidth - 20))
             y = y - 36
+            cpHeaderText:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cpHeaderText:SetWidth(math.min(220, colWidth - 20))
+            y = y - 36
+            cpHeaderBar:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cpHeaderBar:SetWidth(math.min(220, colWidth - 20))
+            y = y - 36
+            cpHeaderBtns:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cpHeaderBtns:SetWidth(math.min(220, colWidth - 20))
+            y = y - 36
             cpZoneText:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             cpZoneText:SetWidth(math.min(220, colWidth - 20))
-            y = y - 34
+            y = y - 36
             cpZoneBar:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             cpZoneBar:SetWidth(math.min(220, colWidth - 20))
-            y = y - 34
+            y = y - 36
             cbZoneShareBorder:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             cbZoneShareBorder.Text:SetWidth(colWidth - 32)
-            y = y - 38
+            y = y - 34
+            btnResetHeaderColors:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            btnResetHeaderColors:SetWidth(math.min(220, colWidth - 20))
+            y = y - 44
 
             h2:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
             y = y - 30
@@ -6961,6 +8172,15 @@ local function BuildHeadersTab(content, syncList)
             cbZoneCount:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             cbZoneCount.Text:SetWidth(colWidth - 32)
             y = y - 32
+            ddCollapseShape:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ddCollapseShape:SetWidth(math.min(220, colWidth - 20))
+            y = y - 38
+            cpCollapseColor:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cpCollapseColor:SetWidth(math.min(220, colWidth - 20))
+            y = y - 34
+            cbClassHeader:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cbClassHeader.Text:SetWidth(colWidth - 32)
+            y = y - 32
             btnSort:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             btnSort:SetWidth(math.min(220, colWidth - 20))
             y = y - 38
@@ -6969,6 +8189,12 @@ local function BuildHeadersTab(content, syncList)
             y = y - 32
             cbActiveTop:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             cbActiveTop.Text:SetWidth(colWidth - 32)
+            y = y - 32
+            cbLeftClickActive:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cbLeftClickActive.Text:SetWidth(colWidth - 32)
+            y = y - 32
+            cbAlignTitles:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cbAlignTitles.Text:SetWidth(colWidth - 32)
             y = y - 32
         end
 
@@ -6995,29 +8221,66 @@ local function BuildAutomationTab(content, syncList)
 
     local cbAutoAcceptNPC = CreateStyledCheckbox(content, "Auto-Accept Quests from NPCs",
         "Automatically accepts quests offered by friendly questgiver NPCs.",
-        function() return socialDb.autoAcceptNPC == true end,
-        function(v) socialDb.autoAcceptNPC = v end
+        function()
+            if db.questAutomation and db.questAutomation.autoAcceptNPC ~= nil then
+                return db.questAutomation.autoAcceptNPC == true
+            end
+            return socialDb.autoAcceptNPC == true
+        end,
+        function(v)
+            db.questAutomation = db.questAutomation or {}
+            db.questAutomation.autoAcceptNPC = v
+            if db.social then db.social.autoAcceptNPC = v end
+        end
     )
     table.insert(syncList, cbAutoAcceptNPC)
 
     local cbAutoAcceptShared = CreateStyledCheckbox(content, "Auto-Accept Quests Shared by Party",
         "Automatically accepts quests shared by group or raid members.",
-        function() return socialDb.autoAcceptShared == true end,
-        function(v) socialDb.autoAcceptShared = v end
+        function()
+            if db.questAutomation and db.questAutomation.autoAcceptShared ~= nil then
+                return db.questAutomation.autoAcceptShared == true
+            end
+            return socialDb.autoAcceptShared == true
+        end,
+        function(v)
+            db.questAutomation = db.questAutomation or {}
+            db.questAutomation.autoAcceptShared = v
+            if db.social then db.social.autoAcceptShared = v end
+        end
     )
     table.insert(syncList, cbAutoAcceptShared)
 
     local cbAutoTurnIn = CreateStyledCheckbox(content, "Auto-Turn In Quests (Single Reward)",
         "Automatically turns in completed quests when there is 0 or only 1 item reward choice.",
-        function() return socialDb.autoTurnIn == true end,
-        function(v) socialDb.autoTurnIn = v end
+        function()
+            if db.questAutomation and db.questAutomation.autoTurnIn ~= nil then
+                return db.questAutomation.autoTurnIn == true
+            end
+            return socialDb.autoTurnIn == true
+        end,
+        function(v)
+            db.questAutomation = db.questAutomation or {}
+            db.questAutomation.autoTurnIn = v
+            if db.social then db.social.autoTurnIn = v end
+        end
     )
     table.insert(syncList, cbAutoTurnIn)
 
     local cbShiftBypass = CreateStyledCheckbox(content, "Hold Shift to Temporarily Bypass",
         "Holding Shift disables automated loot and quest accept/turn-in while interacting.",
-        function() return socialDb.shiftBypass ~= false end,
-        function(v) socialDb.shiftBypass = v end
+        function()
+            if db.questAutomation and db.questAutomation.shiftBypass ~= nil then
+                return db.questAutomation.shiftBypass ~= false
+            end
+            return socialDb.shiftBypass ~= false
+        end,
+        function(v)
+            db.questAutomation = db.questAutomation or {}
+            db.questAutomation.shiftBypass = v
+            if db.social then db.social.shiftBypass = v end
+            if db.qol then db.qol.shiftBypass = v end
+        end
     )
     table.insert(syncList, cbShiftBypass)
 
@@ -7208,19 +8471,37 @@ local function BuildWayfinderTab(content, syncList)
     local db = ns.db or {}
     local wfDb = db.wayfinder or {}
     local soundDb = db.sound or {}
+    if soundDb.soundChoice == "custom" then
+        soundDb.soundChoice = (soundDb.customCompleteSoundChoice and soundDb.customCompleteSoundChoice ~= "custom" and soundDb.customCompleteSoundChoice) or "peon"
+        soundDb.useCustomCompleteSound = false
+    end
+    if soundDb.objectiveSoundChoice == "custom" then
+        soundDb.objectiveSoundChoice = (soundDb.customObjectiveSoundChoice and soundDb.customObjectiveSoundChoice ~= "custom" and soundDb.customObjectiveSoundChoice) or "whisper_ping"
+        soundDb.useCustomObjectiveSound = false
+    end
 
     local h1, d1 = CreateSectionHeader(content, "WAYFINDER HUD NAVIGATION", 12, 0)
     local cbHUDArrow = CreateStyledCheckbox(content, "Enable Floating HUD Arrow",
         "Shows a floating navigation arrow pointing toward your active quest objective.",
         function() return wfDb.enableHUDArrow ~= false end,
-        function(v) wfDb.enableHUDArrow = v end
+        function(v)
+            wfDb.enableHUDArrow = v
+            if ns.WayfinderModule and ns.WayfinderModule.UpdateFrameVisibility then
+                ns.WayfinderModule:UpdateFrameVisibility()
+            end
+        end
     )
     table.insert(syncList, cbHUDArrow)
 
     local cbInlineArrow = CreateStyledCheckbox(content, "Enable Inline Tracker Arrow",
         "Shows a mini directional arrow directly inside the tracker next to each quest.",
         function() return wfDb.enableInlineArrow ~= false end,
-        function(v) wfDb.enableInlineArrow = v end
+        function(v)
+            wfDb.enableInlineArrow = v
+            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then
+                ns.StandaloneTracker:UpdateTracker()
+            end
+        end
     )
     table.insert(syncList, cbInlineArrow)
 
@@ -7250,7 +8531,14 @@ local function BuildWayfinderTab(content, syncList)
         "Scales the size of the floating HUD navigation arrow (60% - 160%).",
         0.6, 1.6, 0.05,
         function() return wfDb.arrowScale or 1.0 end,
-        function(v) wfDb.arrowScale = v end,
+        function(v)
+            wfDb.arrowScale = v
+            if ns.WayfinderModule and ns.WayfinderModule.ApplyHUDScale then
+                ns.WayfinderModule:ApplyHUDScale()
+            elseif ns.WayfinderModule and ns.WayfinderModule.ApplyHUDSettings then
+                ns.WayfinderModule:ApplyHUDSettings()
+            end
+        end,
         "%.2f"
     )
     table.insert(syncList, slArrowScale)
@@ -7259,10 +8547,29 @@ local function BuildWayfinderTab(content, syncList)
         "Pixel dimensions of mini arrows in the tracker (14 - 32px).",
         14, 32, 1,
         function() return wfDb.inlineArrowSize or 22 end,
-        function(v) wfDb.inlineArrowSize = v end,
+        function(v)
+            wfDb.inlineArrowSize = v
+            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then
+                ns.StandaloneTracker:UpdateTracker()
+            end
+        end,
         "%d px"
     )
     table.insert(syncList, slInlineSize)
+
+    local slTextDistance = CreateStyledSlider(content, "BFQ_SlWfTextDist", "HUD Text Spacing:",
+        "Vertical distance between floating arrow and destination text (5 - 50px).",
+        5, 50, 1,
+        function() return wfDb.textDistance or 12 end,
+        function(v)
+            wfDb.textDistance = v
+            if ns.WayfinderModule and ns.WayfinderModule.UpdateHUDTextAnchors then
+                ns.WayfinderModule:UpdateHUDTextAnchors()
+            end
+        end,
+        "%d px"
+    )
+    table.insert(syncList, slTextDistance)
 
     local cbArrivalSound = CreateStyledCheckbox(content, "Play Arrival Chime",
         "Plays an arrival sound effect when entering destination range.",
@@ -7274,7 +8581,12 @@ local function BuildWayfinderTab(content, syncList)
     local cbHideCombat = CreateStyledCheckbox(content, "Hide Waypoint in Combat",
         "Hides waypoint arrows and distance readouts during combat.",
         function() return wfDb.hideInCombat ~= false end,
-        function(v) wfDb.hideInCombat = v end
+        function(v)
+            wfDb.hideInCombat = v
+            if ns.WayfinderModule and ns.WayfinderModule.UpdateFrameVisibility then
+                ns.WayfinderModule:UpdateFrameVisibility()
+            end
+        end
     )
     table.insert(syncList, cbHideCombat)
 
@@ -7326,11 +8638,11 @@ local function BuildWayfinderTab(content, syncList)
     )
     table.insert(syncList, slCompleteVol)
 
-    local btnCompleteSound = CreateStyledDropdown(content, "Complete Sound", 190, 22, COMPLETE_SOUNDS,
+    local btnCompleteSound = CreateStyledDropdown(content, "Complete Sound", 190, 22, GetCompleteSoundOptions,
         function() return soundDb.soundChoice or "peon" end,
         function(v)
             soundDb.soundChoice = v
-            soundDb.useCustomCompleteSound = (v == "custom")
+            soundDb.useCustomCompleteSound = false
             if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
             if ns.SocialModule and ns.SocialModule.PlayPreviewSound then
                 ns.SocialModule:PlayPreviewSound(v)
@@ -7375,11 +8687,11 @@ local function BuildWayfinderTab(content, syncList)
     )
     table.insert(syncList, slObjVol)
 
-    local btnObjSound = CreateStyledDropdown(content, "Objective Sound", 190, 22, OBJECTIVE_SOUNDS,
+    local btnObjSound = CreateStyledDropdown(content, "Objective Sound", 190, 22, GetObjectiveSoundOptions,
         function() return soundDb.objectiveSoundChoice or "whisper_ping" end,
         function(v)
             soundDb.objectiveSoundChoice = v
-            soundDb.useCustomObjectiveSound = (v == "custom")
+            soundDb.useCustomObjectiveSound = false
             if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
             if ns.SocialModule and ns.SocialModule.PlayPreviewObjectiveSound then
                 ns.SocialModule:PlayPreviewObjectiveSound(v)
@@ -7408,6 +8720,29 @@ local function BuildWayfinderTab(content, syncList)
         end
     end, "Play the currently selected objective progress sound effect at configured volume.")
 
+    local h3 = CreateSectionHeader(content, "CUSTOM AUDIO FILES", 12, 0)
+
+    local descCustom = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    descCustom:SetJustifyH("LEFT")
+    descCustom:SetText("Place .wav files in Media\\Sounds\\ & restart WoW. Enter filename below or list in Media\\CustomSounds.lua:")
+
+    local inputCustom = CreateStyledTextInput(content, 190, 22, "filename.wav (e.g. fart.wav)")
+    local btnAddCustom = CreateStyledButton(content, "Add Sound", 100, 22, function()
+        local eb = inputCustom.EditBox
+        local txt = eb and eb:GetText()
+        if txt and txt:match("%S") then
+            local ok, res = ns.AddCustomSound(txt)
+            if ok then
+                if eb then eb:SetText("") end
+                if btnCompleteSound and btnCompleteSound.Update then btnCompleteSound:Update() end
+                if btnObjSound and btnObjSound.Update then btnObjSound:Update() end
+                DEFAULT_CHAT_FRAME:AddMessage("|cff00c0ff[BQT]|r Registered custom sound: |cffffd100" .. res .. "|r")
+            elseif res and DEFAULT_CHAT_FRAME then
+                DEFAULT_CHAT_FRAME:AddMessage("|cff00c0ff[BQT]|r |cffff2020Error:|r " .. res)
+            end
+        end
+    end, "Register this sound file so it appears in the Complete Sound and Objective Sound dropdowns.")
+
     local function Layout(w)
         if not w or w < 100 then w = content:GetWidth() or 500 end
         local y = -10
@@ -7435,6 +8770,10 @@ local function BuildWayfinderTab(content, syncList)
             slArrowScale:SetWidth(math.min(190, colWidth - 20))
             slInlineSize:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
             slInlineSize:SetWidth(math.min(190, colWidth - 20))
+            y = y - 48
+
+            slTextDistance:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            slTextDistance:SetWidth(math.min(190, colWidth - 20))
             y = y - 48
 
             cbArrivalSound:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
@@ -7492,6 +8831,20 @@ local function BuildWayfinderTab(content, syncList)
             btnPreviewObj:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             btnPreviewObj:SetWidth(math.min(190, colWidth - 20))
             y = y - 36
+
+            y = y - 14
+            h3:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+            y = y - 28
+
+            descCustom:SetPoint("TOPLEFT", content, "TOPLEFT", 16, y)
+            descCustom:SetWidth(math.max(200, w - 32))
+            y = y - 24
+
+            inputCustom:SetPoint("TOPLEFT", content, "TOPLEFT", 16, y)
+            inputCustom:SetWidth(math.min(220, math.max(160, w - 160)))
+            btnAddCustom:SetPoint("LEFT", inputCustom, "RIGHT", 10, 0)
+            btnAddCustom:SetWidth(100)
+            y = y - 36
         else
             local colWidth = w - 36
             local col1X = 16
@@ -7513,6 +8866,9 @@ local function BuildWayfinderTab(content, syncList)
             y = y - 46
             slInlineSize:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             slInlineSize:SetWidth(math.min(220, colWidth - 20))
+            y = y - 46
+            slTextDistance:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            slTextDistance:SetWidth(math.min(220, colWidth - 20))
             y = y - 46
             cbArrivalSound:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             cbArrivalSound.Text:SetWidth(colWidth - 32)
@@ -7571,6 +8927,21 @@ local function BuildWayfinderTab(content, syncList)
             btnPreviewObj:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             btnPreviewObj:SetWidth(math.min(220, colWidth - 20))
             y = y - 36
+
+            y = y - 14
+            h3:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+            y = y - 28
+
+            descCustom:SetPoint("TOPLEFT", content, "TOPLEFT", 16, y)
+            descCustom:SetWidth(colWidth - 20)
+            y = y - 30
+
+            inputCustom:SetPoint("TOPLEFT", content, "TOPLEFT", 16, y)
+            inputCustom:SetWidth(math.min(220, colWidth - 20))
+            y = y - 28
+            btnAddCustom:SetPoint("TOPLEFT", content, "TOPLEFT", 16, y)
+            btnAddCustom:SetWidth(100)
+            y = y - 36
         end
 
         content:SetHeight(math.abs(y) + 20)
@@ -7619,19 +8990,46 @@ local function BuildDataBarsTab(content, syncList)
 
     local btnXPDock = CreateStyledDropdown(content, "XP Dock Mode", 190, 22, XP_DOCK_MODES,
         function() return dataDb.xpDockMode or "tracker_bottom" end,
-        function(v) dataDb.xpDockMode = v end,
+        function(v)
+            dataDb.xpDockMode = v
+            if ns.DataBarsModule and ns.DataBarsModule.UpdateXPDocking then
+                ns.DataBarsModule:UpdateXPDocking()
+            end
+            if content and content.LayoutTab then
+                content.LayoutTab(content:GetWidth())
+            end
+        end,
         "Dock experience bar directly underneath the tracker or unlock for free movement."
     )
     table.insert(syncList, btnXPDock)
 
     local slXPHeight = CreateStyledSlider(content, "BFQ_SlXpHeight", "XP Bar Height:",
-        "Pixel height of the experience bar (8 - 32px).",
-        8, 32, 1,
+        "Pixel height of the experience bar (8 - 36px).",
+        8, 36, 1,
         function() return dataDb.xpHeight or 14 end,
-        function(v) dataDb.xpHeight = v end,
+        function(v)
+            dataDb.xpHeight = v
+            if ns.DataBarsModule and ns.DataBarsModule.UpdateXPDocking then
+                ns.DataBarsModule:UpdateXPDocking()
+            end
+        end,
         "%d px"
     )
     table.insert(syncList, slXPHeight)
+
+    local slXPWidth = CreateStyledSlider(content, "BFQ_SlXpWidth", "XP Bar Width (Floating):",
+        "Pixel width of the floating experience bar (140 - 800px).",
+        140, 800, 10,
+        function() return dataDb.xpWidth or 280 end,
+        function(v)
+            dataDb.xpWidth = v
+            if ns.DataBarsModule and ns.DataBarsModule.UpdateXPDocking then
+                ns.DataBarsModule:UpdateXPDocking()
+            end
+        end,
+        "%d px"
+    )
+    table.insert(syncList, slXPWidth)
 
     local cbQuestXP = CreateStyledCheckbox(content, "Show Completed Turn-in Ghost Bar",
         "Overlays anticipated experience from completed turn-in quests onto the XP bar.",
@@ -7728,6 +9126,8 @@ local function BuildDataBarsTab(content, syncList)
         h1:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
         y = y - 30
 
+        local isFreeXP = (dataDb.xpDockMode == "free")
+
         if w >= 470 then
             local colWidth = math.floor((w - 48) / 2)
             local col1X = 16
@@ -7747,13 +9147,22 @@ local function BuildDataBarsTab(content, syncList)
 
             slXPHeight:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             slXPHeight:SetWidth(math.min(190, colWidth - 20))
-            cbQuestXP:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
-            cbQuestXP.Text:SetWidth(colWidth - 32)
+            if isFreeXP then
+                slXPWidth:Show()
+                slXPWidth:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+                slXPWidth:SetWidth(math.min(190, colWidth - 20))
+            else
+                slXPWidth:Hide()
+            end
             y = y - 48
 
-            cbDingReady:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cbQuestXP:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cbQuestXP.Text:SetWidth(colWidth - 32)
+            cbDingReady:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
             cbDingReady.Text:SetWidth(colWidth - 32)
-            cbRestedXP:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            y = y - 34
+
+            cbRestedXP:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             cbRestedXP.Text:SetWidth(colWidth - 32)
             y = y - 34
 
@@ -7809,6 +9218,14 @@ local function BuildDataBarsTab(content, syncList)
             slXPHeight:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             slXPHeight:SetWidth(math.min(220, colWidth - 20))
             y = y - 46
+            if isFreeXP then
+                slXPWidth:Show()
+                slXPWidth:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+                slXPWidth:SetWidth(math.min(220, colWidth - 20))
+                y = y - 46
+            else
+                slXPWidth:Hide()
+            end
             cbQuestXP:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             cbQuestXP.Text:SetWidth(colWidth - 32)
             y = y - 32
@@ -7864,40 +9281,221 @@ end
 
 -- TAB 8: Profiles
 local function BuildProfilesTab(content, syncList)
-    local h1, d1 = CreateSectionHeader(content, "PROFILE MANAGEMENT", 12, 0)
+    local h1, d1 = CreateSectionHeader(content, "ACTIVE PROFILE", 12, 0)
 
     local lblCurrent = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    lblCurrent:SetPoint("TOPLEFT", content, "TOPLEFT", 16, -42)
     local function UpdateCurrent()
         local cur = (ns.dbObject and ns.dbObject.GetCurrentProfile and ns.dbObject:GetCurrentProfile()) or "Default"
         lblCurrent:SetText("Active Profile: |cFFFFD100" .. cur .. "|r")
     end
-    UpdateCurrent()
 
-    local btnReset = CreateStyledButton(content, "Reset to Defaults", 160, 24, function()
+    local function TriggerFullSync()
+        UpdateCurrent()
+        if ns.Tracker and ns.Tracker.UpdateSettings then ns.Tracker:UpdateSettings() end
+        if ns.Tracker and ns.Tracker.UpdateBackdrop then ns.Tracker:UpdateBackdrop() end
+        if ns.Tracker and ns.Tracker.UpdateTypography then ns.Tracker:UpdateTypography() end
+        if ns.DataBarsModule and ns.DataBarsModule.RefreshBars then ns.DataBarsModule:RefreshBars() end
+        if Config.SyncAllNative then Config.SyncAllNative() end
+        for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
+    end
+
+    local function GetProfileOptions()
+        local list = {}
+        if ns.dbObject and ns.dbObject.GetProfiles then
+            local profiles = ns.dbObject:GetProfiles()
+            for _, p in ipairs(profiles or {}) do
+                table.insert(list, { key = p, label = p })
+            end
+        end
+        if #list == 0 then
+            table.insert(list, { key = "Default", label = "Default" })
+        end
+        return list
+    end
+
+    local function GetOtherProfileOptions()
+        local list = {}
+        local cur = (ns.dbObject and ns.dbObject.GetCurrentProfile and ns.dbObject:GetCurrentProfile()) or "Default"
+        if ns.dbObject and ns.dbObject.GetProfiles then
+            local profiles = ns.dbObject:GetProfiles()
+            for _, p in ipairs(profiles or {}) do
+                if p ~= cur then
+                    table.insert(list, { key = p, label = p })
+                end
+            end
+        end
+        return list
+    end
+
+    local ddSelectProfile = CreateStyledDropdown(content, "Switch Profile", 220, 22,
+        GetProfileOptions,
+        function() return (ns.dbObject and ns.dbObject.GetCurrentProfile and ns.dbObject:GetCurrentProfile()) or "Default" end,
+        function(v)
+            if ns.dbObject and ns.dbObject.SetProfile and v then
+                ns.dbObject:SetProfile(v)
+                TriggerFullSync()
+            end
+        end,
+        "Select a profile to switch your active quest tracker configuration to."
+    )
+    table.insert(syncList, ddSelectProfile)
+
+    local btnReset = CreateStyledButton(content, "Reset to Defaults", 180, 22, function()
         if ns.dbObject and ns.dbObject.ResetProfile then
             ns.dbObject:ResetProfile()
-            if ns.Tracker and ns.Tracker.UpdateSettings then ns.Tracker:UpdateSettings() end
-            if ns.Print then ns.Print("Active profile reset to defaults.") end
-            UpdateCurrent()
+            TriggerFullSync()
         end
     end, "Resets all quest tracker settings in the active profile back to defaults.")
+
+    -- SECTION 2: CREATE NEW PROFILE
+    local h2, d2 = CreateSectionHeader(content, "CREATE NEW PROFILE", 12, 0)
+    local newProfileInput = CreateStyledTextInput(content, 220, 22, "Enter profile name...")
+    local btnCreate = CreateStyledButton(content, "Create Profile", 180, 22, function()
+        local name = newProfileInput.EditBox:GetText()
+        if name then
+            name = name:match("^%s*(.-)%s*$")
+            if name and name ~= "" then
+                if ns.dbObject and ns.dbObject.SetProfile then
+                    ns.dbObject:SetProfile(name)
+                    newProfileInput.EditBox:SetText("")
+                    newProfileInput.EditBox:ClearFocus()
+                    TriggerFullSync()
+                end
+            end
+        end
+    end, "Create and switch to a new profile with default settings.")
+    newProfileInput.EditBox:SetScript("OnEnterPressed", function(self)
+        self:ClearFocus()
+        btnCreate:GetScript("OnClick")(btnCreate)
+    end)
+
+    -- SECTION 3: COPY FROM EXISTING PROFILE
+    local h3, d3 = CreateSectionHeader(content, "COPY FROM EXISTING PROFILE", 12, 0)
+    local selectedCopySource = nil
+    local ddCopyProfile = CreateStyledDropdown(content, "Copy From", 220, 22,
+        GetOtherProfileOptions,
+        function() return selectedCopySource or "" end,
+        function(v) selectedCopySource = v end,
+        "Select an existing profile to copy its settings into the current profile."
+    )
+    table.insert(syncList, ddCopyProfile)
+
+    local btnCopy = CreateStyledButton(content, "Copy Selected Profile", 180, 22, function()
+        if selectedCopySource and selectedCopySource ~= "" and ns.dbObject and ns.dbObject.CopyProfile then
+            ns.dbObject:CopyProfile(selectedCopySource)
+            TriggerFullSync()
+        end
+    end, "Copies all settings from the selected profile into your active profile (overwriting existing settings).")
+
+    -- SECTION 4: DELETE PROFILE
+    local h4, d4 = CreateSectionHeader(content, "DELETE PROFILE", 12, 0)
+    local selectedDeleteTarget = nil
+    local ddDeleteProfile = CreateStyledDropdown(content, "Delete Profile", 220, 22,
+        GetOtherProfileOptions,
+        function() return selectedDeleteTarget or "" end,
+        function(v) selectedDeleteTarget = v end,
+        "Select an inactive profile to delete permanently."
+    )
+    table.insert(syncList, ddDeleteProfile)
+
+    local btnDelete = CreateStyledButton(content, "Delete Selected Profile", 180, 22, function()
+        if selectedDeleteTarget and selectedDeleteTarget ~= "" and ns.dbObject and ns.dbObject.DeleteProfile then
+            ns.dbObject:DeleteProfile(selectedDeleteTarget)
+            selectedDeleteTarget = nil
+            TriggerFullSync()
+        end
+    end, "Permanently deletes the selected profile (cannot delete your currently active profile).")
+
+    UpdateCurrent()
 
     local function Layout(w)
         if not w or w < 100 then w = content:GetWidth() or 500 end
         local y = -10
-        h1:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
-        y = y - 34
 
-        lblCurrent:ClearAllPoints()
-        lblCurrent:SetPoint("TOPLEFT", content, "TOPLEFT", 16, y)
+        -- SECTION 1: ACTIVE PROFILE
+        h1:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
         y = y - 30
 
-        btnReset:ClearAllPoints()
-        btnReset:SetPoint("TOPLEFT", content, "TOPLEFT", 16, y)
-        y = y - 40
+        lblCurrent:SetPoint("TOPLEFT", content, "TOPLEFT", 16, y)
+        y = y - 26
 
-        content:SetHeight(math.abs(y) + 20)
+        if w >= 470 then
+            local colWidth = math.floor((w - 48) / 2)
+            local col1X = 16
+            local col2X = col1X + colWidth + 16
+
+            ddSelectProfile:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ddSelectProfile:SetWidth(math.min(220, colWidth - 20))
+            btnReset:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            btnReset:SetWidth(math.min(180, colWidth - 20))
+            y = y - 44
+
+            -- SECTION 2: CREATE NEW PROFILE
+            h2:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+            y = y - 30
+            newProfileInput:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            newProfileInput:SetWidth(math.min(220, colWidth - 20))
+            btnCreate:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            btnCreate:SetWidth(math.min(180, colWidth - 20))
+            y = y - 44
+
+            -- SECTION 3: COPY FROM EXISTING PROFILE
+            h3:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+            y = y - 30
+            ddCopyProfile:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ddCopyProfile:SetWidth(math.min(220, colWidth - 20))
+            btnCopy:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            btnCopy:SetWidth(math.min(180, colWidth - 20))
+            y = y - 44
+
+            -- SECTION 4: DELETE PROFILE
+            h4:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+            y = y - 30
+            ddDeleteProfile:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ddDeleteProfile:SetWidth(math.min(220, colWidth - 20))
+            btnDelete:SetPoint("TOPLEFT", content, "TOPLEFT", col2X, y)
+            btnDelete:SetWidth(math.min(180, colWidth - 20))
+            y = y - 44
+        else
+            local colWidth = w - 36
+            local col1X = 16
+
+            ddSelectProfile:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ddSelectProfile:SetWidth(math.min(220, colWidth - 20))
+            y = y - 36
+            btnReset:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            btnReset:SetWidth(math.min(180, colWidth - 20))
+            y = y - 44
+
+            h2:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+            y = y - 30
+            newProfileInput:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            newProfileInput:SetWidth(math.min(220, colWidth - 20))
+            y = y - 36
+            btnCreate:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            btnCreate:SetWidth(math.min(180, colWidth - 20))
+            y = y - 44
+
+            h3:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+            y = y - 30
+            ddCopyProfile:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ddCopyProfile:SetWidth(math.min(220, colWidth - 20))
+            y = y - 36
+            btnCopy:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            btnCopy:SetWidth(math.min(180, colWidth - 20))
+            y = y - 44
+
+            h4:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+            y = y - 30
+            ddDeleteProfile:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            ddDeleteProfile:SetWidth(math.min(220, colWidth - 20))
+            y = y - 36
+            btnDelete:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            btnDelete:SetWidth(math.min(180, colWidth - 20))
+            y = y - 44
+        end
+
+        content:SetHeight(math.abs(y) + 30)
     end
 
     content.LayoutTab = Layout
@@ -7920,14 +9518,14 @@ function Config:BuildNativeOptions(containerFrame, isMasterHub)
     end
 
     local tabs = {
-        { id = "general",    label = "General",        builder = BuildGeneralTab },
-        { id = "quests",     label = "Quests & Items", builder = BuildQuestsTab },
-        { id = "appearance", label = "Colors & Fonts", builder = BuildColorsTab },
-        { id = "headers",    label = "Headers & Sort", builder = BuildHeadersTab },
-        { id = "automation", label = "Automation",     builder = BuildAutomationTab },
-        { id = "wayfinder",  label = "Wayfinder/Audio",builder = BuildWayfinderTab },
-        { id = "databars",   label = "DataBars",       builder = BuildDataBarsTab },
-        { id = "profiles",   label = "Profiles",       builder = BuildProfilesTab },
+        { id = "general",    label = "General",         builder = BuildGeneralTab },
+        { id = "quests",     label = "Quests & Items",  builder = BuildQuestsTab },
+        { id = "appearance", label = "Colors & Fonts",  builder = BuildColorsTab },
+        { id = "headers",    label = "Headers & Sort",  builder = BuildHeadersTab },
+        { id = "wayfinder",  label = "Wayfinder/Audio", builder = BuildWayfinderTab },
+        { id = "databars",   label = "Databars",        builder = BuildDataBarsTab },
+        { id = "automation", label = "Automation",      builder = BuildAutomationTab },
+        { id = "profiles",   label = "Profiles",        builder = BuildProfilesTab },
     }
 
     local tabBar = CreateFrame("Frame", nil, containerFrame)
@@ -8082,6 +9680,7 @@ function Config:BuildNativeOptions(containerFrame, isMasterHub)
         end
     end
     containerFrame.SyncAll = SyncAll
+    Config.SyncAllNative = SyncAll
 
     containerFrame:HookScript("OnSizeChanged", function(self, w)
         if w and w > 60 then

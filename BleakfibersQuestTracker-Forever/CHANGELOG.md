@@ -1,25 +1,149 @@
 # Changelog - Bleakfiber's Quest Tracker (Forever)
 
-## [1.1.13] - 2026-10-12
-
-### Added
-- **Header, Zone, Border, Quest Title & Objective Color Pickers (with `#RRGGBB` Hex Input)**:
-  - Added color pickers with direct `#RRGGBB` Hex inputs under **Colors & Fonts** for **Border Color**, **Quest Title Color** (when level difficulty coloring is unchecked), **Objectives Color**, and **Completed Objective Color**, plus one-click reset buttons.
-  - Added color pickers with direct `#RRGGBB` Hex inputs and bar style dropdowns under **Headers & Filters** for **Main Header Text**, **Main Header Bar**, **Main Header Buttons**, **Zone Header Text**, and **Zone Header Bar**, plus a **Match Zone Header Color to Border** toggle.
-- **3D Perspective Floating Wayfinder Arrow Styles**:
-  - Added **3D Perspective (Modern)** and **3D Perspective (Classic)** 64-angle pre-rendered 3D compass arrow styles alongside **2D Modern Minimalist** and **2D Classic Guide Arrow** under **Wayfinder & Audio > Arrow Style**.
-- **Audible Menu Open Sound**:
-  - Added audible UI sound feedback (`SOUNDKIT.IG_MAINMENU_OPEN` / `850`) when clicking the tracker header gear icon or toggling the configuration window, plus checkbox click feedback on quick-menu items.
-
-### Changed
-- **Silent Visibility Toggles**:
-  - Visibility toggles via keybind, macro (`Bleakfiber_ToggleTracker()`, `Bleakfiber_HideTracker()`, `Bleakfiber_ShowTracker()`), header button, and slash commands (`/bfqhide`, `/bfhide`, `/bfq togglehide`, `/bfq hide`, `/bfq show`) now toggle silently without printing chat messages.
+## [1.1.18] - 2026-10-18: Context Menu Tooltip Suppression, Title Column Alignment, Zone Collapse Shapes, Hover Colors, and Completed Quest Styling
 
 ### Fixed
-- **Active Chat Tab Output**: Routed `ns.Print` and `ns.Debug` messages to the currently active chat tab (`SELECTED_CHAT_FRAME` / `FCF_GetCurrentChatFrame()`) instead of always outputting to `ChatFrame1`.
-- **Duplicate Chat Messages on `/bfq togglehide`**: Removed redundant print calls in `HandleSlashCommands` and `TrackerFrame.lua`.
-- **Floating Wayfinder Arrow Jaggies**: Upgraded the 2D minimalist arrow to an 8x-supersampled texture and disabled pixel-grid/texel snapping (`SetSnapToPixelGrid(false)`, `SetTexelSnappingBias(0)`, `"TRILINEAR"` filtering) for smooth, anti-aliased rotation.
-- **Crisp Pixel-Aligned Zone Headers & Text Drop Shadows**: Added physical screen-pixel coordinate snapping (`ns.SnapToPixel`), enforced even-integer header and zone header heights to prevent half-pixel vertical centering jitter, and set full-opacity `SetShadowColor(0, 0, 0, 1.0)` across all tracker FontStrings.
+- **Context Menu Pop-Under Tooltip**:
+  - Resolved an issue where right-clicking a quest row could spawn or leave quest tooltips covering the context menu dropdown.
+  - Implemented active dropdown tracking (`isContextMenuOpen`), hooked `GameTooltip:OnShow` and `DropDownList1:OnHide`, elevated `DropDownList1` stratum to `"TOOLTIP"`, and guarded block mouseover scripts to completely suppress tooltips while menus are open.
+- **Quest Title Column Alignment**:
+  - Fixed an alignment inconsistency where quest titles shifted left into the icon gutter when not displaying an active navigation arrow or turn-in question mark.
+  - Decoupled status icons from the title text string and placed them into a dedicated prefix slot, ensuring all quest titles and level tags align in a consistent vertical column.
+
+### Added
+- **Zone Collapse Indicator Shapes and Custom Color**:
+  - Added a "Zone Collapse Indicator" option under **Headers & Sort > ZONE GROUPING & SORTING** supporting Arrow, Plus / Minus, and None.
+  - Allows players to customize or hide the indicator to prevent visual confusion with Wayfinder navigation arrows.
+  - Added a "Zone Collapse Icon Color" picker under **Colors & Fonts > HEADERS & TITLES** with hex input and reset option.
+- **Customizable Mouseover Hover Colors**:
+  - Added dedicated hover highlight color and opacity pickers under **Colors & Fonts > HIGHLIGHTS & HOVER** for both Quest Rows and Zone Headers.
+  - Configurable via interactive color pickers, opacity sliders, and hex inputs.
+- **Completed Quest Visual Recognition**:
+  - Added a "Completed Quest Background" toggle and color picker under **Colors & Fonts > QUEST STATUS & COMPLETION** to display a subtle background tint behind finished quests.
+  - Added a "Completed Quest Title Color" mode selector:
+    - Difficulty Color (Default): Keeps original quest level difficulty coloring (red/orange/yellow/green/grey) while using the background tint to signal completion.
+    - Turn-in Color: Displays completed quest titles in standard quest turn-in gold.
+    - Custom Color: Allows specifying any custom color for completed quest titles.
+- **Align Quest Titles Toggle**:
+  - Added an optional toggle under **Headers & Sort > ZONE GROUPING & SORTING** ("Align Quest Titles", enabled by default) allowing players to toggle between uniform column alignment and compact left-aligned text.
+
+## [1.1.17] - 2026-10-17: Context Menu Layering Fix, In-Place Collapse, Wayfinder Distance Slider, Usable Item Filter, and Scalable Menus
+
+### Fixed
+- **Quest Context Menu Z-Index Layering**:
+  - Fixed an issue where right-clicking a quest row spawned the dropdown menu underneath the quest tooltip.
+  - Right-clicking now immediately hides the active tooltip, elevates `DropDownList1` to the `"TOOLTIP"` stratum with high frame level, and suppresses tooltip hover events while the menu is open.
+- **Tracker Header Tooltip Persistence**:
+  - Fixed tooltip staying visible after right-clicking or clicking the options button on the tracker header.
+
+### Added
+- **Optional Left-Click In-Place Minimizing (Off by Default)**:
+  - Added an optional toggle under **Headers & Sort > ZONE GROUPING & SORTING** and in the "Tracker Options" quick menu: "Left-Click Sets Active Quest (Move to Top)".
+  - Off by default: left-clicking any quest header expands or minimizes the quest in place without changing list order or promoting it to the active quest.
+  - When enabled, left-clicking an inactive quest promotes it to the active quest and brings it to the top.
+- **Configurable Wayfinder HUD Text Distance (5px to 50px)**:
+  - Added a "HUD Text Spacing" slider in `/bfq` under **Wayfinder / Audio** allowing users to adjust the vertical distance between the floating navigation arrow and the destination/distance text from 5px to 50px (default 12px).
+  - Eliminates dead space beneath the arrow and updates text positioning on screen in real time.
+- **Interactive Quest Items Only Filter**:
+  - Filtered quest item buttons to strictly show items that possess a clickable On-Use spell effect.
+  - Passive quest objectives and loot (such as Tough Wolf Meat) no longer spawn redundant action buttons in the tracker.
+- **Scalable Right-Click & Tracker Options Menus (80% to 160%)**:
+  - Added a "Popup & Context Menu Scale" slider under **Colors & Fonts > TYPOGRAPHY & SIZING** in `/bfq`.
+  - Scales both the right-click quest context menu and the header "Tracker Options" quick menu for improved readability.
+
+## [1.1.16] - 2026-10-15: Dedicated Class Quests Header, Floating XP Bar Sizing, and Custom Sound Slot Selection
+
+### Added
+- **Dedicated Class Quests Header and Cross-Zone Display**:
+  - Added a dedicated "Separate Class Quests Header" toggle under **Headers & Sort > ZONE GROUPING & SORTING** in `/bfq` (enabled by default).
+  - Class quests (such as Druid quests taken in Moonglade or Thunder Bluff) remain visible in the tracker regardless of current zone, even when zone filtering is enabled.
+  - Automatically groups class quests into their own dedicated collapsible header named after your actual class (e.g. Paladin, Druid) styled in your class color.
+  - The class header sorts cleanly to the bottom of the list during normal questing, and immediately pops to the top whenever an active class quest is tracked or selected.
+- **Independent Floating XP Bar Height and Width Controls**:
+  - Added an independent "XP Bar Width (Floating):" slider (140px to 800px) in `/bfq` under **Databars**.
+  - Enabled live visual feedback for both XP Bar Height and XP Bar Width sliders, instantly adjusting bar dimensions on screen as sliders are adjusted without requiring a UI reload.
+- **Dynamic Custom Sound Support & Manager (Named Files & Clean Dropdown)**:
+  - Allowed custom sound files to be named arbitrarily (e.g. `fart.wav`, `cheer.wav`, `custom1.wav`).
+  - Added an in-game **Custom Audio Files** manager in `/bqt` -> **Audio** to add, preview, and remove custom sound files on the fly.
+  - Added `Media\CustomSounds.lua` for players who prefer registering audio files directly in a text file.
+  - Replaced the 1-99 empty slots list with a dynamic list showing only loaded custom sounds formatted as `Custom 1 (fart.wav)`, `Custom 2 (cheer.wav)`, etc.
+  - Fixed fallback logic in `SocialModule:PlaySoundKey` so custom and LibSharedMedia sounds play their actual audio files without falling back to the Peon sound.
+  - Standardized on universal 16-bit 44.1kHz PCM `.wav` format for maximum client reliability.
+
+## [1.1.15] - 2026-10-14: Quest Item Protected Action Fix and Blizzard Interface Difficulty Parity
+
+### Fixed
+- **Quest Item Click Error (`ADDON_ACTION_FORBIDDEN`)**:
+  - Fixed an error when left-clicking quest item buttons in the tracker (`tried to call the protected function 'UNKNOWN()' at StandaloneTracker.lua:520`).
+  - Removed the redundant call to `UseQuestLogSpecialItem` from the button's `PostClick` script. The tracker's secure action button already executes the item use securely via macro attributes (`/use ...`), avoiding taint and protected function errors.
+- **Quest Difficulty Color Parity (Green vs Yellow Resolution)**:
+  - Fixed an issue where quests displayed as green in Blizzard's quest log appeared yellow in the tracker.
+  - Aligned difficulty color calculation directly with Blizzard FrameXML (`DifficultyUtil.lua` and `QuestMapFrame.lua`): the tracker now prioritizes `C_PlayerInfo.GetContentDifficultyQuestForPlayer(questID)` and maps the result through `GetDifficultyColor(difficultyEnum)`.
+  - Updated relative difficulty level delta fallbacks to match Blizzard's native brackets (`levelDiff >= -4` for yellow, within `UnitQuestTrivialLevelRange("player")` for green).
+
+## [1.1.14] - 2026-10-13: Automation Sync, Surface Texture Selector, and Full Profile Management
+
+### Added
+- **Background Surface Texture Dropdown in Native Settings (`/bfq`)**:
+  - Restored the **Surface Texture** selector dropdown under **Colors & Fonts > TRACKER BACKDROP & BORDER** in the native configuration window.
+  - Choose between **Solid / Flat**, **Blizzard Tooltip Dark**, **Blizzard Marble**, **Blizzard Rock**, **Blizzard Quest Parchment**, and **Blizzard Parchment (Clean)**.
+  - Automatically adapts backdrop colors to warm tones when Parchment is selected, and syncs live across the tracker and DataBars.
+- **Header & Zone Text/Bar Colors Directly in Headers & Sort**:
+  - Added direct color pickers with `#RRGGBB` Hex inputs and reset buttons for **Header Text**, **Header Bar**, **Header Buttons**, **Zone Text**, **Zone Bar**, and **Match Zone Header Color to Border** directly inside the **Headers & Sort** tab (as well as **Colors & Fonts**), ensuring effortless discovery regardless of which tab you prefer.
+- **Complete In-Panel Profile Management (Switch, Create, Copy, Delete)**:
+  - Upgraded the **Profiles** tab in `/bfq` with full AceDB profile lifecycle management:
+    - **Active Profile**: Live display and a dropdown to switch between existing profiles instantly.
+    - **Create New Profile**: Name input field with one-click **Create Profile** button.
+    - **Copy From Existing Profile**: Dropdown listing other profiles with a one-click **Copy Profile** button to duplicate existing layouts.
+    - **Delete Profile**: Inactive profile selector with a **Delete Profile** button to clean up unused configurations.
+    - **Reset to Defaults**: One-click reset for the active profile.
+  - Switching, creating, or copying profiles instantly updates the on-screen tracker and refreshes all 8 configuration tabs.
+
+### Fixed
+- **Auto-Accept Quests Toggle Synchronization**:
+  - Fixed a disconnect in the **Automation** tab where toggling **Auto-Accept Quests from NPCs**, **Auto-Accept Shared Quests**, **Auto-Turn In Quests**, or **Hold Shift to Bypass** updated `db.social` while `QuestAutomationModule` read `db.questAutomation`.
+  - Both settings tables are now fully synchronized bidirectionally across the settings panel, the onboarding walkthrough, and the automation module.
+
+## [1.1.13] - 2026-10-13: Config Panel Reorganization, Centralized Colors & Fonts, 3D Wayfinder, and Silent Chat Muting
+
+### Added
+- **Config Panel Layout Reorganization (8 Streamlined Tabs)**:
+  - Reorganized the configuration interface into 8 intuitive top-level tabs:
+    1. **General**: Sizing, layout, backdrop opacity, and visibility toggles.
+    2. **Quests & Items**: Quest item button sizing, placement, tracker filters, and objective grouping.
+    3. **Colors & Fonts**: Unified control center containing all color and typography settings across the entire addon.
+    4. **Headers & Sort**: Header bar styling, zone header sorting, expand/collapse behavior, and zone icons.
+    5. **Wayfinder/Audio**: Navigation arrow styles, range thresholds, waypoint management, and arrival audio alerts.
+    6. **Databars**: Experience Bar, Location/Coordinates Bar, and Quest Timer Bar settings.
+    7. **Automation**: Fast auto-loot, auto-vendor greys/junk, auto-repair, and auto quest turn-in/accept.
+    8. **Profiles**: Profile management, importing, exporting, and switching.
+- **Centralized Colors & Fonts Hub with `#RRGGBB` Hex & Default Resets**:
+  - Consolidated all styling controls into the **Colors & Fonts** tab:
+    - **Tracker Backdrop & Border**: Custom background color, alpha, border color, and one-click `#000000` Pure Black preset.
+    - **Header Colors**: Main Header Text, Main Header Bar, and Main Header Buttons with reset buttons.
+    - **Zone Header Colors**: Zone Header Text, Zone Header Bar, and **Match Zone Header Color to Border** toggle with reset buttons.
+    - **DataBars Colors**: XP Bar, Location Bar, Timer Bar, and Coordinates text color with reset buttons.
+    - **Wayfinder Navigation Colors**: Normal, Warning, Close, and Arrived arrow colors with individual `#RRGGBB` hex fields and reset buttons.
+    - **Quest Title & Objectives**: Quest title color (when level difficulty coloring is off), active objective color, and completed objective color with reset buttons.
+- **3D Perspective Floating Wayfinder Arrow Styles**:
+  - Added **3D Perspective (Modern)** and **3D Perspective (Classic)** 64-angle pre-rendered 3D compass arrow models alongside **2D Modern Minimalist** and **2D Classic Guide Arrow** under **Wayfinder/Audio**.
+- **Audible Menu Open Sound**:
+  - Added native UI sound feedback (`SOUNDKIT.IG_MAINMENU_OPEN` / `850`) when clicking the tracker header gear button or toggling the configuration window.
+
+### Changed
+- **Zero Chat Outputs, Prints & Debug Messages**:
+  - Completely silenced all chat frame outputs across the addon and sub-modules:
+    - Tracker visibility toggles via keybind, macro (`Bleakfiber_ToggleTracker()`, `Bleakfiber_HideTracker()`, `Bleakfiber_ShowTracker()`), header button, and slash commands (`/bfqhide`, `/bfhide`, `/bfq togglehide`, `/bfq hide`, `/bfq show`).
+    - Wayfinder navigation alerts (arrival notifications, waypoint addition/removal, waypoint listing, `/way test` preview).
+    - Auto-repair vendor transaction outputs (personal and guild bank repairs).
+    - Setting resets, preset switches, and diagnostics.
+  - All visual HUD indicators, 3D compass orientation, on-screen arrival messages, and arrival chime sounds remain fully functional.
+
+### Fixed
+- **Floating Wayfinder Arrow Anti-Aliasing (Eliminated Jaggies)**:
+  - Upgraded the 2D minimalist arrow to an 8x-supersampled texture and disabled pixel-snapping during continuous rotation (`SetSnapToPixelGrid(false)`, `SetTexelSnappingBias(0)`, `"TRILINEAR"` filtering) for smooth, jaggie-free directional movement.
+- **Crisp Pixel-Aligned Zone Headers & Text Drop Shadows**:
+  - Added physical screen-pixel coordinate snapping (`ns.SnapToPixel`), enforced even-integer header and zone header heights to eliminate half-pixel vertical centering jitter, and applied full-opacity `SetShadowColor(0, 0, 0, 1.0)` across all tracker FontStrings.
 
 ## [1.1.12] - 2026-10-12
 

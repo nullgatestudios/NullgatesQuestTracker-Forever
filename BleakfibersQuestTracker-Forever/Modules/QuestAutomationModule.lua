@@ -17,12 +17,12 @@ QuestAutomationModule.eventFrame = eventFrame
 QuestAutomationModule.isEnabled = false
 
 local function GetAutomationCfg()
-    local db = (ns.db and ns.db.questAutomation) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.questAutomation)
-    -- Backward compatibility fallback to db.social
-    if not db then
-        db = (ns.db and ns.db.social) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.social)
-    end
-    return db or {}
+    local qa = (ns.db and ns.db.questAutomation) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.questAutomation) or {}
+    local soc = (ns.db and ns.db.social) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.social) or {}
+    local cfg = {}
+    for k, v in pairs(soc) do cfg[k] = v end
+    for k, v in pairs(qa) do cfg[k] = v end
+    return cfg
 end
 
 local function IsBypassed()

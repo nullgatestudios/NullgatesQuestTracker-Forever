@@ -127,10 +127,29 @@ local SOUND_PRESETS = {
     custom_beep = {
         name = "Bleakfiber Beep (Custom)",
         files = {
+            "Interface\\AddOns\\" .. addonName .. "\\Media\\Sounds\\beep.wav",
             "Interface\\AddOns\\BleakfibersQuestTracker-Forever\\Media\\Sounds\\beep.wav",
         },
     },
+    beep = {
+        name = "Bleakfiber Beep (beep.wav)",
+        files = {
+            "Interface\\AddOns\\" .. addonName .. "\\Media\\Sounds\\beep.wav",
+            "Interface\\AddOns\\BleakfibersQuestTracker-Forever\\Media\\Sounds\\beep.wav",
+        },
+    },
+    click = {
+        name = "Bleakfiber Click (click.wav)",
+        files = {
+            "Interface\\AddOns\\" .. addonName .. "\\Media\\Sounds\\click.wav",
+            "Interface\\AddOns\\BleakfibersQuestTracker-Forever\\Media\\Sounds\\click.wav",
+        },
+    },
 }
+
+-- Aliases in SOUND_PRESETS
+SOUND_PRESETS["Bleakfiber Beep"] = SOUND_PRESETS.beep
+SOUND_PRESETS["Bleakfiber Click"] = SOUND_PRESETS.click
 
 -- Track quest and objective completion states so sounds ONLY play on actual completion
 local completedQuestsCache = {}
@@ -194,15 +213,20 @@ local function PlaySoundWithVolume(playFunc, channel, volumePercent)
 end
 
 function SocialModule:PlaySoundKey(choice, channel, volume)
-    local preset = SOUND_PRESETS[choice] or SOUND_PRESETS.peon
+    if not choice or choice == "" or choice == "none" or choice == "disabled" then
+        return
+    end
+
     channel = channel or "Master"
     volume = tonumber(volume) or 100
+
+    local preset = SOUND_PRESETS[choice]
 
     PlaySoundWithVolume(function(ch)
         local played = false
 
-        -- 1. Try runtime SOUNDKIT table first with target channel
-        if SOUNDKIT and PlaySound then
+        -- 1. Try runtime SOUNDKIT table first if preset has a known kit
+        if SOUNDKIT and PlaySound and preset then
             local kitConst = (choice == "peon" and SOUNDKIT.UI_PEON_BUILDING_COMPLETE_01)
                 or (choice == "quest_complete" and SOUNDKIT.IG_QUEST_LIST_COMPLETE)
                 or (choice == "level_up" and SOUNDKIT.LEVEL_UP)
@@ -233,7 +257,7 @@ function SocialModule:PlaySoundKey(choice, channel, volume)
         end
 
         -- 2. Try numeric preset.kit
-        if not played and preset.kit and PlaySound then
+        if not played and preset and preset.kit and PlaySound then
             local ok, willPlay = pcall(PlaySound, preset.kit, ch)
             if ok and willPlay ~= false then
                 played = true
@@ -251,17 +275,20 @@ function SocialModule:PlaySoundKey(choice, channel, volume)
         end
 
         -- 3. Try legacy sound name string via PlaySound
-        if not played and preset.soundName and PlaySound then
+        if not played and preset and preset.soundName and PlaySound then
             local ok, willPlay = pcall(PlaySound, preset.soundName, ch)
             if ok and willPlay ~= false then
                 played = true
             else
-                pcall(PlaySound, preset.soundName)
+                local ok2 = pcall(PlaySound, preset.soundName)
+                if ok2 then
+                    played = true
+                end
             end
         end
 
-        -- 4. Try PlaySoundFile with exact paths and FileDataIDs
-        if not played and preset.files and PlaySoundFile then
+        -- 4. Try PlaySoundFile with exact paths and FileDataIDs from preset
+        if not played and preset and preset.files and PlaySoundFile then
             for _, file in ipairs(preset.files) do
                 local ok, willPlay = pcall(PlaySoundFile, file, ch)
                 if ok and willPlay ~= false then
@@ -279,6 +306,56 @@ function SocialModule:PlaySoundKey(choice, channel, volume)
                             break
                         end
                     end
+                end
+            end
+        end
+
+        -- 5. Try ns.FetchSound (resolves custom slot keys custom1..custom99, LSM sound names, or direct file paths)
+        if not played and ns.FetchSound and PlaySoundFile then
+            local file = ns.FetchSound(choice)
+            if file and type(file) == "string" and file ~= "" then
+                local ok, willPlay = pcall(PlaySoundFile, file, ch)
+                if ok and willPlay ~= false then
+                    played = true
+                else
+                    local ok2, willPlay2 = pcall(PlaySoundFile, file, "Master")
+                    if ok2 and willPlay2 ~= false then
+                        played = true
+                    else
+                        local ok3, willPlay3 = pcall(PlaySoundFile, file)
+                        if ok3 and willPlay3 ~= false then
+                            played = true
+                        end
+                    end
+                end
+            end
+        end
+
+        -- 6. Direct file path fallback if choice contains path or extension
+        if not played and type(choice) == "string" and (choice:find("%.wav$") or choice:find("%.ogg$") or choice:find("%.mp3$") or choice:find("\\") or choice:find("/")) and PlaySoundFile then
+            local ok, willPlay = pcall(PlaySoundFile, choice, ch)
+            if ok and willPlay ~= false then
+                played = true
+            else
+                local ok2, willPlay2 = pcall(PlaySoundFile, choice, "Master")
+                if ok2 and willPlay2 ~= false then
+                    played = true
+                else
+                    local ok3, willPlay3 = pcall(PlaySoundFile, choice)
+                    if ok3 and willPlay3 ~= false then
+                        played = true
+                    end
+                end
+            end
+        end
+
+        -- 7. Fallback ONLY if choice was explicitly "peon"
+        if not played and choice == "peon" and PlaySoundFile then
+            local peonPreset = SOUND_PRESETS.peon
+            if peonPreset and peonPreset.files then
+                for _, file in ipairs(peonPreset.files) do
+                    local ok, willPlay = pcall(PlaySoundFile, file, ch)
+                    if ok and willPlay ~= false then break end
                 end
             end
         end
@@ -310,17 +387,17 @@ local function GetSoundDB()
     return currentDB and currentDB.sound
 end
 
-local function ResolveCustomSound(choice, manualPath)
-    if choice and choice ~= "manual" then
-        if ns.FetchSound then
-            local fetched = ns.FetchSound(choice)
-            if fetched and fetched ~= "" then
-                return fetched
-            end
+local function ResolveLegacyCustomSound(choice, customChoice, customPath)
+    if choice == "custom" then
+        if customChoice and customChoice ~= "custom" and customChoice ~= "" then
+            return customChoice
         end
-        return choice
+        if customPath and customPath ~= "" then
+            return customPath
+        end
+        return "custom1"
     end
-    return manualPath
+    return choice
 end
 
 function SocialModule:PlayCompletionSound()
@@ -334,15 +411,10 @@ function SocialModule:PlayCompletionSound()
 
     local channel = (sdb and sdb.completeSoundChannel) or "Master"
     local volume = (sdb and sdb.completeSoundVolume) or 100
+    local choice = (sdb and sdb.soundChoice) or "peon"
 
-    if sdb and (sdb.useCustomCompleteSound or sdb.soundChoice == "custom") then
-        local soundTarget = ResolveCustomSound(sdb.customCompleteSoundChoice, sdb.customCompleteSoundPath)
-        if soundTarget and soundTarget ~= "" then
-            self:PlaySoundFileWithVolume(soundTarget, channel, volume)
-            return
-        end
-    end
-    self:PlaySoundKey((sdb and sdb.soundChoice) or "peon", channel, volume)
+    choice = ResolveLegacyCustomSound(choice, sdb and sdb.customCompleteSoundChoice, sdb and sdb.customCompleteSoundPath)
+    self:PlaySoundKey(choice, channel, volume)
 end
 
 function SocialModule:PlayObjectiveSound()
@@ -356,15 +428,10 @@ function SocialModule:PlayObjectiveSound()
 
     local channel = (sdb and sdb.objectiveSoundChannel) or "Master"
     local volume = (sdb and sdb.objectiveSoundVolume) or 100
+    local choice = (sdb and sdb.objectiveSoundChoice) or "whisper_ping"
 
-    if sdb and (sdb.useCustomObjectiveSound or sdb.objectiveSoundChoice == "custom") then
-        local soundTarget = ResolveCustomSound(sdb.customObjectiveSoundChoice, sdb.customObjectiveSoundPath)
-        if soundTarget and soundTarget ~= "" then
-            self:PlaySoundFileWithVolume(soundTarget, channel, volume)
-            return
-        end
-    end
-    self:PlaySoundKey((sdb and sdb.objectiveSoundChoice) or "whisper_ping", channel, volume)
+    choice = ResolveLegacyCustomSound(choice, sdb and sdb.customObjectiveSoundChoice, sdb and sdb.customObjectiveSoundPath)
+    self:PlaySoundKey(choice, channel, volume)
 end
 
 function SocialModule:PlayPreviewSound(choice, channel, volume)
@@ -373,13 +440,7 @@ function SocialModule:PlayPreviewSound(choice, channel, volume)
     volume = volume or (sdb and sdb.completeSoundVolume) or 100
     choice = choice or (sdb and sdb.soundChoice) or "peon"
 
-    if (choice == "custom" or (sdb and sdb.useCustomCompleteSound)) then
-        local soundTarget = ResolveCustomSound(sdb and sdb.customCompleteSoundChoice, sdb and sdb.customCompleteSoundPath)
-        if soundTarget and soundTarget ~= "" then
-            self:PlaySoundFileWithVolume(soundTarget, channel, volume)
-            return
-        end
-    end
+    choice = ResolveLegacyCustomSound(choice, sdb and sdb.customCompleteSoundChoice, sdb and sdb.customCompleteSoundPath)
     self:PlaySoundKey(choice, channel, volume)
 end
 
@@ -389,13 +450,7 @@ function SocialModule:PlayPreviewObjectiveSound(choice, channel, volume)
     volume = volume or (sdb and sdb.objectiveSoundVolume) or 100
     choice = choice or (sdb and sdb.objectiveSoundChoice) or "whisper_ping"
 
-    if (choice == "custom" or (sdb and sdb.useCustomObjectiveSound)) then
-        local soundTarget = ResolveCustomSound(sdb and sdb.customObjectiveSoundChoice, sdb and sdb.customObjectiveSoundPath)
-        if soundTarget and soundTarget ~= "" then
-            self:PlaySoundFileWithVolume(soundTarget, channel, volume)
-            return
-        end
-    end
+    choice = ResolveLegacyCustomSound(choice, sdb and sdb.customObjectiveSoundChoice, sdb and sdb.customObjectiveSoundPath)
     self:PlaySoundKey(choice, channel, volume)
 end
 

@@ -306,25 +306,13 @@ end
 
 -- Print helper with colored prefix (outputs to active chat tab)
 function ns.Print(...)
-    local cf = GetActiveChatFrame()
-    if cf then
-        cf:AddMessage(FormatChatArgs("|cff00c0ff[" .. addonName .. "]|r", ...))
-    else
-        print("|cff00c0ff[" .. addonName .. "]|r", ...)
-    end
+    -- Suppressed all chat outputs per user preference
 end
 
--- Debug helper (silent by default, toggleable via /bfq debug)
+-- Debug helper (silenced all debug chat outputs)
 ns.debugMode = false
 function ns.Debug(...)
-    if ns.debugMode then
-        local cf = GetActiveChatFrame()
-        if cf then
-            cf:AddMessage(FormatChatArgs("|cff00c0ff[" .. addonName .. " Debug]|r", ...))
-        else
-            print("|cff00c0ff[" .. addonName .. " Debug]|r", ...)
-        end
-    end
+    -- Suppressed all debug chat outputs per user preference
 end
 
 -- Pixel-Grid Coordinate Snapper (Eliminates sub-pixel text & shadow distortion)
@@ -393,48 +381,70 @@ local DIFF_COLOR_YELLOW = { r = 1.00, g = 1.00, b = 0.00 }
 local DIFF_COLOR_GREEN  = { r = 0.25, g = 1.00, b = 0.25 }
 local DIFF_COLOR_GRAY   = { r = 0.60, g = 0.60, b = 0.60 }
 
-function ns.GetDifficultyColor(level, playerLevelOverride)
+function ns.GetDifficultyColor(level, playerLevelOverride, questID)
     level = tonumber(level) or 0
+
+    local curPlayerLevel = (UnitEffectiveLevel and UnitEffectiveLevel("player")) or (UnitLevel and UnitLevel("player")) or 1
+    local playerLevel = playerLevelOverride or curPlayerLevel
+
+    -- 1. Exact Parity with Quest Log: Query C_PlayerInfo for relative content difficulty
+    if questID and (not playerLevelOverride or playerLevelOverride == curPlayerLevel) then
+        if C_PlayerInfo and C_PlayerInfo.GetContentDifficultyQuestForPlayer then
+            local diffEnum = C_PlayerInfo.GetContentDifficultyQuestForPlayer(questID)
+            if diffEnum ~= nil then
+                local blizzColor = (GetDifficultyColor and GetDifficultyColor(diffEnum))
+                    or (DifficultyUtil and DifficultyUtil.GetDifficultyColor and DifficultyUtil.GetDifficultyColor(diffEnum))
+                if blizzColor and blizzColor.r and blizzColor.g and blizzColor.b then
+                    return blizzColor
+                end
+            end
+        end
+    end
+
     if level <= 0 then
         return DIFF_COLOR_WHITE
     end
 
-    local playerLevel = playerLevelOverride or (UnitLevel and UnitLevel("player")) or 1
-    local diff = level - playerLevel
-
-    -- Calculate Blizzard green difficulty range dynamically (Classic / Wrath bracket formula)
-    local greenRange = 0
-    if GetQuestGreenRange then
-        greenRange = GetQuestGreenRange()
-    end
-    if not greenRange or greenRange <= 0 then
-        if playerLevel <= 5 then
-            greenRange = 2
-        elseif playerLevel <= 39 then
-            greenRange = math.floor(playerLevel / 10) + 3
-        elseif playerLevel <= 59 then
-            greenRange = math.floor(playerLevel / 5) + 1
-        else
-            greenRange = 9
+    -- 2. Native GetQuestDifficultyColor API
+    if (not playerLevelOverride or playerLevelOverride == curPlayerLevel) then
+        local blizzQuestColorFn = GetQuestDifficultyColor or (DifficultyUtil and DifficultyUtil.GetQuestDifficultyColor)
+        if blizzQuestColorFn then
+            local c = blizzQuestColorFn(level, false, questID)
+            if c and c.r and c.g and c.b then
+                return c
+            end
         end
     end
 
-    if diff >= 5 then
-        return (QuestDifficultyColors and QuestDifficultyColors["verydifficult"]) or DIFF_COLOR_RED
-    elseif diff >= 3 then
-        return (QuestDifficultyColors and QuestDifficultyColors["difficult"]) or DIFF_COLOR_ORANGE
-    elseif diff >= -2 then
-        return DIFF_COLOR_YELLOW
-    elseif -diff <= greenRange then
-        return (QuestDifficultyColors and QuestDifficultyColors["easy"]) or DIFF_COLOR_GREEN
+    -- 3. Dynamic Relative Difficulty calculation fallback
+    local levelDiff = level - playerLevel
+    if levelDiff >= 5 then
+        return (QuestDifficultyColors and QuestDifficultyColors["impossible"]) or DIFF_COLOR_RED
+    elseif levelDiff >= 3 then
+        return (QuestDifficultyColors and QuestDifficultyColors["verydifficult"]) or DIFF_COLOR_ORANGE
+    elseif levelDiff >= -4 then
+        return (QuestDifficultyColors and QuestDifficultyColors["difficult"]) or DIFF_COLOR_YELLOW
     else
-        return (QuestDifficultyColors and QuestDifficultyColors["trivial"]) or DIFF_COLOR_GRAY
+        local trivialRange = (UnitQuestTrivialLevelRange and UnitQuestTrivialLevelRange("player"))
+            or (GetQuestGreenRange and (GetQuestGreenRange("player") or GetQuestGreenRange()))
+            or ns.GetGreyThreshold(playerLevel)
+        if -levelDiff <= trivialRange then
+            return (QuestDifficultyColors and QuestDifficultyColors["standard"]) or DIFF_COLOR_GREEN
+        else
+            return (QuestDifficultyColors and QuestDifficultyColors["trivial"]) or DIFF_COLOR_GRAY
+        end
     end
 end
 
 -- Grey / Trivial Quest Level Threshold Calculation
 function ns.GetGreyThreshold(playerLevel)
-    playerLevel = tonumber(playerLevel) or (UnitLevel and UnitLevel("player")) or 1
+    playerLevel = tonumber(playerLevel) or (UnitEffectiveLevel and UnitEffectiveLevel("player")) or (UnitLevel and UnitLevel("player")) or 1
+    if UnitQuestTrivialLevelRange then
+        local r = UnitQuestTrivialLevelRange("player")
+        if r and r > 0 then
+            return r
+        end
+    end
     if playerLevel <= 5 then
         return 5
     elseif playerLevel <= 39 then
@@ -446,12 +456,23 @@ function ns.GetGreyThreshold(playerLevel)
     end
 end
 
-function ns.IsQuestGrey(questLevel, playerLevel)
+function ns.IsQuestGrey(questLevel, playerLevel, questID)
+    if questID and C_PlayerInfo and C_PlayerInfo.GetContentDifficultyQuestForPlayer then
+        local curPlayerLevel = (UnitEffectiveLevel and UnitEffectiveLevel("player")) or (UnitLevel and UnitLevel("player")) or 1
+        if not playerLevel or playerLevel == curPlayerLevel then
+            local diffEnum = C_PlayerInfo.GetContentDifficultyQuestForPlayer(questID)
+            if diffEnum ~= nil and Enum and Enum.RelativeContentDifficulty then
+                return diffEnum == Enum.RelativeContentDifficulty.Trivial
+            end
+        end
+    end
     questLevel = tonumber(questLevel) or 0
-    playerLevel = tonumber(playerLevel) or (UnitLevel and UnitLevel("player")) or 1
+    playerLevel = tonumber(playerLevel) or (UnitEffectiveLevel and UnitEffectiveLevel("player")) or (UnitLevel and UnitLevel("player")) or 1
     if questLevel <= 0 then return false end
-    local threshold = ns.GetGreyThreshold(playerLevel)
-    return (playerLevel - questLevel) >= threshold
+    local levelDiff = questLevel - playerLevel
+    if levelDiff >= -4 then return false end
+    local trivialRange = (UnitQuestTrivialLevelRange and UnitQuestTrivialLevelRange("player")) or ns.GetGreyThreshold(playerLevel)
+    return (-levelDiff > trivialRange)
 end
 
 function ns.IsQuestComplete(questID, questLogIndex, objectives)
@@ -1110,6 +1131,9 @@ ns.defaultDB = {
             zoneTextColor = nil,           -- Optional custom Zone Header text color (defaults to zoneHeaderColor if nil)
             zoneHeaderColorShare = false,  -- Share with border color
             showCompleteIcon = true,       -- Show Blizzard gold ? in front of completed quests
+            separateClassHeader = true,    -- Separate class quests into their own header and keep them visible across zones
+            zoneCollapseIcon = "arrow",    -- "arrow" (triangle), "plusminus" ([-]/[+]), "circle" (●/○), "square" (■/□), "star" (★/☆), "none"
+            zoneCollapseIconColor = nil,   -- Optional custom color for zone collapse indicator (nil = inherit zone text color)
         },
 
         -- Appearance & Backdrop
@@ -1143,6 +1167,13 @@ ns.defaultDB = {
             titleColor = { r = 1.00, g = 0.82, b = 0.00 },             -- Custom Quest Title color (when Color by Difficulty is off)
             objectiveColor = { r = 0.80, g = 0.80, b = 0.80 },         -- Incomplete Objective text color (#CCCCCC)
             completedObjectiveColor = { r = 0.00, g = 1.00, b = 0.00 },-- Completed Objective / Ready text color (#00FF00)
+            menuScale = 1.0,                                            -- Scale for right-click context menu and quick menu (0.8 to 1.6)
+            completedQuestBg = true,                                    -- Subtle background tint behind completed quests (Ready for turn-in)
+            completedQuestBgColor = { r = 0.00, g = 0.80, b = 0.20, a = 0.14 }, -- Tint color for completed quest rows
+            completedTitleColorMode = "difficulty",                     -- "difficulty" (keep level difficulty color), "turnin" (turn-in green), "custom"
+            completedTitleCustomColor = { r = 0.00, g = 1.00, b = 0.00 }, -- Custom completed quest title color
+            questHoverColor = { r = 1.00, g = 1.00, b = 1.00, a = 0.08 }, -- Mouseover highlight color for quest rows
+            zoneHoverColor = { r = 1.00, g = 0.82, b = 0.00, a = 0.12 },  -- Mouseover highlight color for zone headers
         },
 
         -- Filtering & Behavior
@@ -1155,6 +1186,7 @@ ns.defaultDB = {
             collapseInCombat = false,
             hideInCombat = false, -- Automatically hide quest tracker in combat (default: off)
             untrackedQuests = {}, -- [questID] = true for quests manually hidden/untracked by the player
+            alwaysShowClassQuests = true, -- Always keep class quests visible across zones under Class Quests header
         },
 
         -- Sorting
@@ -1163,6 +1195,8 @@ ns.defaultDB = {
             moveCompletedToBottom = false, -- Push "Ready for turn-in" quests to bottom of tracker
             activeOnTop = true,            -- Pin active quest (*) to the very top of tracker
             showGroupTags = true,          -- Show [11+] elite/group and dungeon badges
+            leftClickSetsActive = false,   -- Left-click sets active quest & moves to top (default: false, click only expands/collapses in place)
+            alignQuestTitles = true,       -- Align all quest titles in a uniform column even without icons/arrows (default: true)
         },
 
         -- Social & Quest Automation
@@ -1194,19 +1228,20 @@ ns.defaultDB = {
         -- Audio & Sounds
         sound = {
             enableCompleteSound = true,        -- Play sound on full quest complete (Work complete!)
-            soundChoice = "peon",              -- "peon", "quest_complete", "level_up", "raid_warning", "ready_check", "map_ping", "pvp_horn", "custom"
+            soundChoice = "peon",              -- "peon", "quest_complete", "level_up", "raid_warning", "ready_check", "map_ping", "pvp_horn", "beep", "click", or custom sounds
+            customSoundsList = {},             -- Registered custom sound filenames, e.g. {"fart.wav", "cheer.wav"}
             completeSoundChannel = "Master",   -- "Master", "SFX", "Ambience"
             completeSoundVolume = 100,         -- Playback volume percentage (5 to 100)
             useCustomCompleteSound = false,
-            customCompleteSoundChoice = "beep",-- "beep", "click", "custom1", "custom2", "custom3", "custom4", "custom5", "manual"
+            customCompleteSoundChoice = "beep",-- legacy fallback
             customCompleteSoundPath = "Interface\\AddOns\\BleakfibersQuestTracker-Forever\\Media\\Sounds\\beep.wav",
 
             enableObjectiveSound = true,       -- Play sound when an objective updates (e.g. 3/4 Raptor Horns)
-            objectiveSoundChoice = "whisper_ping", -- Max 5 subtle Classic choices: "whisper_ping", "coins", "loot_clink", "map_ping", "item_click"
+            objectiveSoundChoice = "whisper_ping", -- "whisper_ping", "coins", "loot_clink", "map_ping", "item_click", "beep", "click", "custom1".."custom99"
             objectiveSoundChannel = "Master",  -- "Master", "SFX", "Ambience"
             objectiveSoundVolume = 100,        -- Playback volume percentage (5 to 100)
             useCustomObjectiveSound = false,
-            customObjectiveSoundChoice = "beep", -- "beep", "click", "custom1", "custom2", "custom3", "custom4", "custom5", "manual"
+            customObjectiveSoundChoice = "beep", -- "beep", "click", "custom1" through "custom99" (.wav)
             customObjectiveSoundPath = "Interface\\AddOns\\BleakfibersQuestTracker-Forever\\Media\\Sounds\\beep.wav",
         },
 
@@ -1221,6 +1256,7 @@ ns.defaultDB = {
             showDistance = true,          -- Show yards/meters below arrow / tooltip
             distanceUnit = "imperial",    -- "imperial" (yards/miles) or "metric" (meters/kilometers)
             arrowScale = 1.0,             -- Scale (0.6 to 1.6)
+            textDistance = 12,            -- Vertical distance between HUD arrow and text (5 to 50px, default 12)
             arrivalThreshold = 15,        -- Yards to consider "Arrived"
             arrivalClearDelay = 5,        -- Seconds to display "Arrived!" before auto-clearing (0-30, default 5)
             playArrivalSound = true,      -- Chime when arrived
@@ -1239,6 +1275,12 @@ ns.defaultDB = {
             hudTitleFormat = "zone",      -- "zone" (e.g. Westfall), "quest" (e.g. The People's Militia), or "both" (Westfall - The People's Militia)
             hudTitleFontSize = 11,        -- Floating HUD arrow destination text size (8 to 18px)
             hudTitleFontOutline = "OUTLINE", -- Floating HUD arrow destination text outline
+            arrowAheadColor = { r = 0.10, g = 1.00, b = 0.20, a = 1.0 }, -- Arrow Color when facing objective
+            arrowAngleColor = { r = 1.00, g = 0.85, b = 0.10, a = 1.0 }, -- Arrow Color when angled / off-course
+            arrowBehindColor = { r = 1.00, g = 0.25, b = 0.25, a = 1.0 },-- Arrow Color when facing away / behind
+            arrowArrivedColor = { r = 0.10, g = 1.00, b = 0.20, a = 1.0 },-- Arrow Color when arrived at destination
+            destTextColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.0 },   -- HUD Destination Title text color
+            distTextColor = { r = 1.00, g = 1.00, b = 1.00, a = 1.0 },   -- HUD Distance readout text color
         },
 
         -- DataBars: XP / Quest Log Progress Bar & Location Header Bar
@@ -1290,6 +1332,7 @@ ns.defaultDB = {
             locBorderColor = { r = 0.15, g = 0.55, b = 0.95, a = 0.85 },
             locCustomTextColor = false,        -- Override PvP territory coloring with custom text color
             locTextColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 }, -- Custom text color
+            coordsColor = { r = 1.00, g = 1.00, b = 1.00, a = 1.00 },  -- Precision coordinates text color
             hideMinimapHeader = true,          -- Suppress default Minimap header (MinimapCluster.ZoneTextButton / BorderTop)
             hideDefaultCoordinates = false,    -- Suppress default map coordinates
             colorTerritory = true,             -- Color zone/subzone by PvP status (Sanctuary, Friendly, Contested, Hostile)
@@ -1744,6 +1787,17 @@ local function InitializeDB(triggerEvent)
         end
         if not ns.db.sound.customObjectiveSoundPath then
             ns.db.sound.customObjectiveSoundPath = "Interface\\AddOns\\BleakfibersQuestTracker-Forever\\Media\\Sounds\\beep.wav"
+        end
+        if ns.db.sound.soundChoice == "custom" then
+            ns.db.sound.soundChoice = (ns.db.sound.customCompleteSoundChoice and ns.db.sound.customCompleteSoundChoice ~= "custom" and ns.db.sound.customCompleteSoundChoice) or "peon"
+            ns.db.sound.useCustomCompleteSound = false
+        end
+        if ns.db.sound.objectiveSoundChoice == "custom" then
+            ns.db.sound.objectiveSoundChoice = (ns.db.sound.customObjectiveSoundChoice and ns.db.sound.customObjectiveSoundChoice ~= "custom" and ns.db.sound.customObjectiveSoundChoice) or "whisper_ping"
+            ns.db.sound.useCustomObjectiveSound = false
+        end
+        if not ns.db.sound.customSoundsList then
+            ns.db.sound.customSoundsList = {}
         end
     end
 

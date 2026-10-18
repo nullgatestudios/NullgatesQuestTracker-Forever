@@ -1,29 +1,40 @@
 Bleakfiber's Quest Tracker - Custom Sounds Guide
 ==================================================
 
-How to Add Your Own Custom Sounds (Zero-Typing Method):
--------------------------------------------------------
-1. Simply copy your audio file into this folder:
+How to Add Your Own Custom Sounds:
+----------------------------------
+1. Copy your .wav audio file into this folder:
    World of Warcraft\Interface\AddOns\BleakfibersQuestTracker-Forever\Media\Sounds\
 
-2. Name your file any of the following pre-configured slots:
-   - custom1.wav  (or custom1.mp3, custom1.ogg)
-   - custom2.wav  (or custom2.mp3, custom2.ogg)
-   - custom3.wav  (or custom3.mp3, custom3.ogg)
-   - custom4.wav  (or custom4.mp3, custom4.ogg)
-   - custom5.wav  (or custom5.mp3, custom5.ogg)
+2. Name your file whatever you like (e.g. fart.wav, cheer.wav, levelup.wav, custom1.wav).
 
-3. In-game, open settings via /bfq:
-   - Navigate to "Social & Audio" -> "Audio & Sounds"
-   - Check "Use Custom Sound"
-   - Select your slot (e.g. "Custom Sound 1") directly from the dropdown menu!
-   - No typing long file paths required!
+   Bundled presets already included in this folder:
+   - beep.wav   (Clean subtle tone)
+   - click.wav  (Soft tick)
 
-NOTE ON NEW FILES:
-If you add a brand new audio file while the WoW game client is running, you must completely restart the WoW client once so the game engine indexes the new file on disk.
+3. Restart World of Warcraft:
+   IMPORTANT: If you add a new audio file while WoW is running, you must COMPLETELY RESTART the WoW client.
+   The World of Warcraft engine only indexes new files on disk during initial game launch; typing /reload will not discover new files.
 
-Supported Audio Formats:
-- 16-bit 44.1kHz PCM .wav (Recommended for 100% universal compatibility across all WoW client versions)
-- Stereo or Mono .ogg (Ogg Vorbis)
-- Standard .mp3
+4. Register your sound in the tracker (choose either Method A or Method B):
 
+   Method A - Directly In-Game (Recommended):
+   - Type /bqt to open settings and select "Audio".
+   - Scroll to "Custom Audio Files".
+   - Type your filename (e.g. fart.wav) into the text box and click "Add Sound".
+   - Your sound will immediately appear in the "Quest Complete Sound" and "Objective Progress Sound" dropdowns as:
+     Custom 1 (fart.wav), Custom 2 (cheer.wav), etc.
+   - Only your registered custom sounds are shown in the dropdown (no 1-99 clutter!).
+
+   Method B - Text File Editing:
+   - Open Media\CustomSounds.lua in any text editor.
+   - Add your filename to the list:
+     BleakfiberCustomSounds = {
+         "fart.wav",
+         "cheer.wav",
+     }
+   - Launch WoW. Your custom sounds will automatically appear in the sound dropdowns as:
+     Custom 1 (fart.wav), Custom 2 (cheer.wav), etc.
+
+Supported Audio Format:
+- Standard 16-bit 44.1kHz (or 22.05kHz) PCM .wav (Stereo or Mono).
