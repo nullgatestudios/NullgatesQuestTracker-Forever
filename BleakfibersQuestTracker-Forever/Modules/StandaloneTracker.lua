@@ -220,16 +220,25 @@ local function GetQualityColorHex(quality)
 end
 
 -- Helper: Format Quest Title with Level, Difficulty Color and Badges
-local function GetFormattedQuestTitle(questInfo)
+local function GetFormattedQuestTitle(questInfo, suppressPrefixIcons)
     local level = tonumber(questInfo.level) or 0
     local title = questInfo.title or "Unknown Quest"
     local db = ns.db
     local useDifficultyColor = not (db and db.fonts and db.fonts.colorDifficulty == false)
     
     local hexColor = ""
-    if useDifficultyColor then
-        local color = (ns.GetDifficultyColor and ns.GetDifficultyColor(level))
-            or (level > 0 and GetQuestDifficultyColor and GetQuestDifficultyColor(level))
+    local isComplete = questInfo.isComplete and not questInfo.isFailed
+    local compMode = (db and db.fonts and db.fonts.completedTitleColorMode) or "difficulty"
+
+    if isComplete and compMode == "turnin" then
+        local cCol = (db and db.fonts and db.fonts.completedObjectiveColor) or { r = 0.0, g = 1.0, b = 0.0 }
+        hexColor = string.format("|cff%02x%02x%02x", math.floor((cCol.r or 0) * 255 + 0.5), math.floor((cCol.g or 1) * 255 + 0.5), math.floor((cCol.b or 0) * 255 + 0.5))
+    elseif isComplete and compMode == "custom" then
+        local cCol = (db and db.fonts and db.fonts.completedTitleCustomColor) or { r = 0.0, g = 1.0, b = 0.0 }
+        hexColor = string.format("|cff%02x%02x%02x", math.floor((cCol.r or 0) * 255 + 0.5), math.floor((cCol.g or 1) * 255 + 0.5), math.floor((cCol.b or 0) * 255 + 0.5))
+    elseif useDifficultyColor then
+        local color = (ns.GetDifficultyColor and ns.GetDifficultyColor(level, nil, questInfo.questID))
+            or (level > 0 and GetQuestDifficultyColor and GetQuestDifficultyColor(level, nil, questInfo.questID))
             or { r = 1, g = 1, b = 1 }
         hexColor = string.format("|cff%02x%02x%02x", math.floor((color.r or 1) * 255 + 0.5), math.floor((color.g or 1) * 255 + 0.5), math.floor((color.b or 1) * 255 + 0.5))
     else
@@ -280,7 +289,7 @@ local function GetFormattedQuestTitle(questInfo)
     end
     
     local activeMarker = ""
-    if ns.activeQuestID and questInfo.questID == ns.activeQuestID then
+    if not suppressPrefixIcons and ns.activeQuestID and questInfo.questID == ns.activeQuestID then
         local isWayfinderActive = (not ns.IsModuleEnabled or ns.IsModuleEnabled("wayfinder"))
         local showInline = isWayfinderActive and ns.db and ns.db.wayfinder and ns.db.wayfinder.enableInlineArrow
         local arrowPos = (ns.db and ns.db.wayfinder and ns.db.wayfinder.inlineArrowPosition) or "left"
@@ -305,7 +314,7 @@ local function GetFormattedQuestTitle(questInfo)
     -- Blizzard ? Icon for Completed Quests
     local completeMarker = ""
     local showCompleteIcon = not (db and db.headers and db.headers.showCompleteIcon == false)
-    if showCompleteIcon and questInfo.isComplete and not questInfo.isFailed then
+    if not suppressPrefixIcons and showCompleteIcon and questInfo.isComplete and not questInfo.isFailed then
         local iconSize = math.max(12, StandaloneTracker.titleSize or 13)
         completeMarker = string.format("|TInterface\\GossipFrame\\ActiveQuestIcon:%d:%d:0:0|t ", iconSize, iconSize)
     end
@@ -514,12 +523,6 @@ function StandaloneTracker:GetOrCreateItemButton(index)
 
     -- Secure Action Setup
     btn:RegisterForClicks("AnyDown", "AnyUp")
-    btn:SetScript("PostClick", function(s, mouseButton)
-        if InCombatLockdown and InCombatLockdown() then return end
-        if (mouseButton == "LeftButton" or mouseButton == "LeftButtonDown") and s.questLogIndex and UseQuestLogSpecialItem then
-            pcall(UseQuestLogSpecialItem, s.questLogIndex)
-        end
-    end)
 
     -- Tooltips
     btn:SetScript("OnEnter", function(s)
@@ -1006,7 +1009,8 @@ local function AcquireZoneHeader(parent)
 
         btn.highlight = btn:CreateTexture(nil, "HIGHLIGHT")
         btn.highlight:SetAllPoints(btn)
-        btn.highlight:SetColorTexture(1, 1, 1, 0.08)
+        local zHl = (ns.db and ns.db.fonts and ns.db.fonts.zoneHoverColor) or { r = 1.0, g = 0.82, b = 0.0, a = 0.12 }
+        btn.highlight:SetColorTexture(zHl.r, zHl.g, zHl.b, zHl.a or 0.12)
 
         local fPath = StandaloneTracker.headerFontPath or StandaloneTracker.fontPath
         local zSize = StandaloneTracker.zoneHeaderSize or math.max(10, (StandaloneTracker.titleSize or 13) - 1)
@@ -1191,6 +1195,20 @@ function StandaloneTracker:OpenQuestContextMenu(anchor, qInfo)
         { text = "Cancel", notCheckable = true, func = function() end },
     }
 
+    if GameTooltip and GameTooltip.Hide then
+        GameTooltip:Hide()
+    end
+    StandaloneTracker.isContextMenuOpen = true
+
+    if not GameTooltip._bfqContextMenuHooked then
+        GameTooltip._bfqContextMenuHooked = true
+        GameTooltip:HookScript("OnShow", function(self)
+            if StandaloneTracker.isContextMenuOpen or (DropDownList1 and DropDownList1:IsShown() and DropDownList1._bfqCustomApplied) then
+                self:Hide()
+            end
+        end)
+    end
+
     if MenuUtil and MenuUtil.CreateContextMenu then
         MenuUtil.CreateContextMenu(UIParent, function(ownerRegion, rootDescription)
             for _, item in ipairs(menu) do
@@ -1216,6 +1234,8 @@ function StandaloneTracker:OpenQuestContextMenu(anchor, qInfo)
         return
     end
 
+    local mScale = (ns.db and ns.db.fonts and ns.db.fonts.menuScale) or 1.0
+
     if EasyMenu then
         EasyMenu(menu, questContextMenu, "cursor", 0, 0, "MENU")
     elseif ToggleDropDownMenu and UIDropDownMenu_Initialize then
@@ -1225,6 +1245,36 @@ function StandaloneTracker:OpenQuestContextMenu(anchor, qInfo)
             end
         end, "MENU")
         ToggleDropDownMenu(1, nil, questContextMenu, "cursor", 0, 0)
+    end
+
+    -- Elevate DropDownList1 above GameTooltip and apply custom menu scaling
+    if DropDownList1 then
+        if not DropDownList1._bfqHooked then
+            DropDownList1._bfqHooked = true
+            DropDownList1:HookScript("OnHide", function(self)
+                StandaloneTracker.isContextMenuOpen = false
+                if self._bfqCustomApplied then
+                    self:SetFrameStrata(self._bfqOrigStrata or "FULLSCREEN_DIALOG")
+                    self:SetScale(self._bfqOrigScale or 1.0)
+                    self._bfqCustomApplied = nil
+                end
+            end)
+        end
+        DropDownList1._bfqOrigStrata = DropDownList1._bfqOrigStrata or DropDownList1:GetFrameStrata()
+        DropDownList1._bfqOrigScale = DropDownList1._bfqOrigScale or DropDownList1:GetScale()
+        DropDownList1._bfqCustomApplied = true
+        DropDownList1:SetFrameStrata("TOOLTIP")
+        DropDownList1:SetFrameLevel(2500)
+        if mScale and mScale > 0 then
+            DropDownList1:SetScale(mScale)
+        end
+    end
+    if DropDownList2 then
+        DropDownList2:SetFrameStrata("TOOLTIP")
+        DropDownList2:SetFrameLevel(2510)
+        if mScale and mScale > 0 then
+            DropDownList2:SetScale(mScale)
+        end
     end
 end
 
@@ -1508,6 +1558,10 @@ ns.GetQuestRewards = GetQuestRewards
 
 local function ShowQuestTooltip(anchorFrame, qInfo)
     if not qInfo then return end
+    if StandaloneTracker.isContextMenuOpen or (DropDownList1 and DropDownList1:IsShown()) then
+        if GameTooltip and GameTooltip.Hide then GameTooltip:Hide() end
+        return
+    end
     local questKey = qInfo.questID or qInfo.title
     local isCollapsed = ns.db and ns.db.collapsedQuests and ns.db.collapsedQuests[questKey]
     local isActive = (qInfo.questID and ns.activeQuestID == qInfo.questID)
@@ -1690,20 +1744,28 @@ local function ShowQuestTooltip(anchorFrame, qInfo)
     end
 
     GameTooltip:AddLine(" ")
-    if isActive then
-        GameTooltip:AddLine("|cff00e5ff* Active Quest|r |cffaaaaaa(Left-Click to " .. (isCollapsed and "Expand" or "Collapse") .. ")|r", 0.0, 0.9, 1.0)
-        if ns.WayfinderModule and ns.WayfinderModule.IsCustomTarget and ns.WayfinderModule:IsCustomTarget() then
-            local cur = ns.WayfinderModule.GetCurrentTarget and ns.WayfinderModule:GetCurrentTarget()
-            local nav = ns.WayfinderModule.GetNavigationState and ns.WayfinderModule:GetNavigationState()
-            if cur and cur.title then
-                local distStr = (nav and nav.distanceYards and nav.distanceYards > 0) and string.format("%d yd", math.floor(nav.distanceYards + 0.5)) or ""
-                GameTooltip:AddDoubleLine("|cff00c0ffNavigating to Waypoint:|r", "|cffffd100" .. cur.title .. "|r" .. (distStr ~= "" and (" |cffffffff(" .. distStr .. ")|r") or ""))
-            end
+    local leftClickSetsActive = (ns.db and ns.db.sorting and ns.db.sorting.leftClickSetsActive == true)
+    if not leftClickSetsActive then
+        GameTooltip:AddLine("|cff00ff00Left-Click: " .. (isCollapsed and "Expand Quest" or "Collapse Quest") .. "|r", 0.2, 1, 0.2)
+        if isActive then
+            GameTooltip:AddLine("|cff00e5ff* Active Quest|r", 0.0, 0.9, 1.0)
         end
     else
-        GameTooltip:AddLine("|cff00ff00Left-Click: Set as Active Quest|r", 0.2, 1, 0.2)
+        if isActive then
+            GameTooltip:AddLine("|cff00e5ff* Active Quest|r |cffaaaaaa(Left-Click to " .. (isCollapsed and "Expand" or "Collapse") .. ")|r", 0.0, 0.9, 1.0)
+        else
+            GameTooltip:AddLine("|cff00ff00Left-Click: Set as Active (Move to Top)|r", 0.2, 1, 0.2)
+        end
+        GameTooltip:AddLine("|cffaaaaaaAlt + Left-Click: " .. (isCollapsed and "Expand Quest" or "Collapse Quest") .. "|r", 0.6, 0.6, 0.6)
     end
-    GameTooltip:AddLine("|cffaaaaaaAlt + Left-Click: " .. (isCollapsed and "Expand Quest" or "Collapse Quest") .. "|r", 0.6, 0.6, 0.6)
+    if isActive and ns.WayfinderModule and ns.WayfinderModule.IsCustomTarget and ns.WayfinderModule:IsCustomTarget() then
+        local cur = ns.WayfinderModule.GetCurrentTarget and ns.WayfinderModule:GetCurrentTarget()
+        local nav = ns.WayfinderModule.GetNavigationState and ns.WayfinderModule:GetNavigationState()
+        if cur and cur.title then
+            local distStr = (nav and nav.distanceYards and nav.distanceYards > 0) and string.format("%d yd", math.floor(nav.distanceYards + 0.5)) or ""
+            GameTooltip:AddDoubleLine("|cff00c0ffNavigating to Waypoint:|r", "|cffffd100" .. cur.title .. "|r" .. (distStr ~= "" and (" |cffffffff(" .. distStr .. ")|r") or ""))
+        end
+    end
     GameTooltip:AddLine("|cffaaaaaaCtrl + Left-Click: Open in Quest Log|r", 0.6, 0.6, 0.6)
     GameTooltip:AddLine("|cffaaaaaaShift + Left-Click: Link in Chat|r", 0.6, 0.6, 0.6)
     GameTooltip:AddLine("|cffaaaaaaRight-Click: Quest Actions Menu|r", 0.8, 0.8, 0.8)
@@ -1752,11 +1814,18 @@ local function AcquireQuestBlock(parent)
             end
         end)
         block:SetScript("OnEnter", function(self)
+            if StandaloneTracker.isContextMenuOpen or (DropDownList1 and DropDownList1:IsShown()) then return end
             ShowQuestTooltip(self.header or self, self.questInfo)
         end)
         block:SetScript("OnLeave", function(self)
             HideQuestTooltip(self)
         end)
+
+        -- Completed Quest Subtle Background Tint
+        local completedBg = block:CreateTexture(nil, "BACKGROUND")
+        completedBg:SetAllPoints(block)
+        completedBg:Hide()
+        block.completedBg = completedBg
 
         -- Header Button for Click/Hover
         local header = CreateFrame("Button", nil, block)
@@ -1794,6 +1863,11 @@ local function AcquireQuestBlock(parent)
         local fPath = StandaloneTracker.headerFontPath or StandaloneTracker.fontPath
         SafeSetFont(title, fPath, titleSize, StandaloneTracker.titleOutline or "OUTLINE")
 
+        -- Status / Complete Icon (? or active marker)
+        local statusIcon = header:CreateTexture(nil, "OVERLAY")
+        header.statusIcon = statusIcon
+        statusIcon:Hide()
+
         -- Wayfinder Inline Directional Arrow
         local wayfinderArrow = header:CreateTexture(nil, "OVERLAY")
         header.wayfinderArrow = wayfinderArrow
@@ -1806,7 +1880,9 @@ local function AcquireQuestBlock(parent)
         -- Highlight Texture on mouseover
         local hl = header:CreateTexture(nil, "HIGHLIGHT")
         hl:SetAllPoints(header)
-        hl:SetColorTexture(1, 1, 1, 0.08)
+        local qHl = (ns.db and ns.db.fonts and ns.db.fonts.questHoverColor) or { r = 1.0, g = 1.0, b = 1.0, a = 0.08 }
+        hl:SetColorTexture(qHl.r, qHl.g, qHl.b, qHl.a or 0.08)
+        header.highlight = hl
 
         -- Click Actions: Left = Collapse/Expand, Ctrl+Left = QuestLog, Shift+Left = ChatLink, Right = Context Menu, Shift+Right = Wowhead URL
         header:SetScript("OnClick", function(self, mouseButton)
@@ -1853,11 +1929,24 @@ local function AcquireQuestBlock(parent)
                     end
                 else
                     -- Normal Left-Click:
-                    -- If not the active quest, select it as active!
-                    -- If already active, toggle collapse/expand!
-                    if qInfo.questID and ns.activeQuestID ~= qInfo.questID then
-                        StandaloneTracker:SetActiveQuest(qInfo.questID)
+                    local leftClickSetsActive = (ns.db and ns.db.sorting and ns.db.sorting.leftClickSetsActive == true)
+                    if leftClickSetsActive then
+                        -- Legacy mode: Promote to active quest (moves to top) or collapse if already active
+                        if qInfo.questID and ns.activeQuestID ~= qInfo.questID then
+                            StandaloneTracker:SetActiveQuest(qInfo.questID)
+                        else
+                            local questKey = qInfo.questID or qInfo.title
+                            if questKey and ns.db then
+                                ns.db.collapsedQuests = ns.db.collapsedQuests or {}
+                                ns.db.collapsedQuests[questKey] = not ns.db.collapsedQuests[questKey]
+                                if ns.FlushDBToGlobals then
+                                    ns.FlushDBToGlobals()
+                                end
+                                StandaloneTracker:UpdateTracker()
+                            end
+                        end
                     else
+                        -- In-Place mode (Default): Always collapse or expand in place without reordering
                         local questKey = qInfo.questID or qInfo.title
                         if questKey and ns.db then
                             ns.db.collapsedQuests = ns.db.collapsedQuests or {}
@@ -1889,6 +1978,7 @@ local function AcquireQuestBlock(parent)
 
         -- Tooltip on Hover
         header:SetScript("OnEnter", function(self)
+            if StandaloneTracker.isContextMenuOpen or (DropDownList1 and DropDownList1:IsShown()) then return end
             ShowQuestTooltip(self, self.questInfo)
         end)
 
@@ -1951,6 +2041,21 @@ function StandaloneTracker:ApplyTypography(headerFontPath, objectiveFontPath, ti
     self:UpdateTracker()
 end
 
+function StandaloneTracker:ApplyHighlightColors()
+    local qHl = (ns.db and ns.db.fonts and ns.db.fonts.questHoverColor) or { r = 1.0, g = 1.0, b = 1.0, a = 0.08 }
+    for _, block in ipairs(questBlocks) do
+        if block.header and block.header.highlight then
+            block.header.highlight:SetColorTexture(qHl.r, qHl.g, qHl.b, qHl.a or 0.08)
+        end
+    end
+    local zHl = (ns.db and ns.db.fonts and ns.db.fonts.zoneHoverColor) or { r = 1.0, g = 0.82, b = 0.0, a = 0.12 }
+    for _, zh in ipairs(zoneHeaders) do
+        if zh.highlight then
+            zh.highlight:SetColorTexture(zHl.r, zHl.g, zHl.b, zHl.a or 0.12)
+        end
+    end
+end
+
 -- Static Reusable Valid Zones Table (Zero Allocation across quest loop)
 local playerValidZones = {}
 
@@ -1984,10 +2089,100 @@ local function NormalizeZoneStr(str)
     return s
 end
 
+-- Class Quest Lookup (English tokens + localized class names)
+local CLASS_QUEST_HEADERS = {
+    ["druid"] = true, ["hunter"] = true, ["mage"] = true, ["paladin"] = true,
+    ["priest"] = true, ["rogue"] = true, ["shaman"] = true, ["warlock"] = true,
+    ["warrior"] = true,
+}
+for _, locTable in ipairs({ LOCALIZED_CLASS_NAMES_MALE or {}, LOCALIZED_CLASS_NAMES_FEMALE or {} }) do
+    for _, locName in pairs(locTable) do
+        if type(locName) == "string" and locName ~= "" then
+            CLASS_QUEST_HEADERS[string_lower(locName)] = true
+        end
+    end
+end
+if UnitClass then
+    local locClass, engClass = UnitClass("player")
+    if locClass then CLASS_QUEST_HEADERS[string_lower(locClass)] = true end
+    if engClass then CLASS_QUEST_HEADERS[string_lower(engClass)] = true end
+end
+
+local function IsClassQuest(zoneHeader, questID, questLogIndex, title)
+    -- 1. Direct class header match in quest log
+    if zoneHeader and zoneHeader ~= "" then
+        local norm = NormalizeZoneStr(zoneHeader)
+        if CLASS_QUEST_HEADERS[norm] then
+            return true
+        end
+    end
+
+    -- 2. Class sanctuaries / exclusive zones
+    local playerClass
+    if UnitClass then
+        local _
+        _, playerClass = UnitClass("player")
+    end
+    if playerClass == "DRUID" then
+        local norm = NormalizeZoneStr(zoneHeader)
+        if norm == "moonglade" then
+            return true
+        end
+    elseif playerClass == "ROGUE" then
+        local norm = NormalizeZoneStr(zoneHeader)
+        if norm == "ravenholdt" or norm == "ravenholdt manor" then
+            return true
+        end
+    end
+
+    -- 3. Tag info from C_QuestLog
+    if questID and C_QuestLog and C_QuestLog.GetQuestTagInfo then
+        local tagInfo = C_QuestLog.GetQuestTagInfo(questID)
+        if tagInfo and tagInfo.tagName and string_lower(tagInfo.tagName):find("class") then
+            return true
+        end
+    end
+
+    -- 4. Quest Title check
+    if title and type(title) == "string" then
+        local locClass = UnitClass and UnitClass("player")
+        if locClass and string_lower(title):find("^" .. string_lower(locClass) .. ":") then
+            return true
+        end
+    end
+
+    return false
+end
+ns.IsClassQuest = IsClassQuest
+
+local function IsClassHeaderName(zoneName)
+    if not zoneName or zoneName == "" then return false end
+    local norm = NormalizeZoneStr(zoneName)
+    return (CLASS_QUEST_HEADERS[norm] == true or zoneName == "Class Quests")
+end
+ns.IsClassHeaderName = IsClassHeaderName
+
+local function GetPlayerClassDisplayName()
+    local locClass = (UnitClass and UnitClass("player"))
+    if locClass and locClass ~= "" then
+        return locClass
+    end
+    return "Class"
+end
+ns.GetPlayerClassDisplayName = GetPlayerClassDisplayName
+
 -- Helper: Robust Zone Matching (Checks Zone Header, SubZone, and Starter Heuristics)
 local function MatchesCurrentZone(zoneHeader, questID, questLogIndex)
     local validZones = playerValidZones
     local Normalize = NormalizeZoneStr
+
+    -- 0. Class Quests Cross-Zone Parity:
+    -- If separate class header or always show class quests is enabled (default on), class quests remain visible across all zones
+    local showClassCrossZone = not (ns.db and ns.db.headers and ns.db.headers.separateClassHeader == false)
+        and not (ns.db and ns.db.filtering and ns.db.filtering.alwaysShowClassQuests == false)
+    if showClassCrossZone and IsClassQuest(zoneHeader, questID, questLogIndex) then
+        return true
+    end
 
     -- 1. Compare against Quest Log Zone Header
     local nonZoneHeaders = {
@@ -2121,18 +2316,29 @@ local function UpdateBagQuestItemsCache()
                     itemClassID = cid
                 elseif GetItemInfoInstant then
                     local _, _, _, _, _, cid = GetItemInfoInstant(itemID)
-                    itemClassID = cid
                 elseif GetItemInfo then
                     local _, _, _, _, _, _, _, _, _, _, _, cid = GetItemInfo(hyperlink)
                     itemClassID = cid
                 end
 
-                local isCandidate = (itemClassID == 12 or itemClassID == 0 or itemClassID == 15 or (Enum and Enum.ItemClass and itemClassID == Enum.ItemClass.Questitem))
+                local hasSpell = false
+                if itemID then
+                    local spellName = (GetItemSpell and (GetItemSpell(itemID) or GetItemSpell(hyperlink)))
+                        or (C_Item and C_Item.GetItemSpell and (C_Item.GetItemSpell(itemID) or C_Item.GetItemSpell(hyperlink)))
+                    if spellName and spellName ~= "" then
+                        hasSpell = true
+                    end
+                end
+
+                -- ONLY cache items that actually possess an On-Use action/spell!
+                -- This strictly prevents passive collection/loot items (e.g. Tough Wolf Meat, furs, ores)
+                -- from spawning redundant, non-functional quest item buttons.
+                local isCandidate = hasSpell and (itemClassID == 12 or itemClassID == 0 or itemClassID == 15 or (Enum and Enum.ItemClass and itemClassID == Enum.ItemClass.Questitem))
                 if isCandidate then
                     local itemName = hyperlink:match("%[(.-)%]")
                     if itemName and itemName ~= "" then
                         local nLower = string_lower(itemName)
-                        bagQuestItemsCache[nLower] = { link = hyperlink, icon = icon, count = stackCount, name = itemName }
+                        bagQuestItemsCache[nLower] = { link = hyperlink, icon = icon, count = stackCount, name = itemName, hasSpell = true }
                     end
                     if C_TooltipInfo and C_TooltipInfo.GetBagItem then
                         local data = C_TooltipInfo.GetBagItem(bag, slot)
@@ -2140,7 +2346,7 @@ local function UpdateBagQuestItemsCache()
                             for _, line in ipairs(data.lines) do
                                 if line.leftText and line.leftText ~= "" then
                                     local lText = string_lower(line.leftText)
-                                    bagQuestItemsCache[lText] = { link = hyperlink, icon = icon, count = stackCount, name = itemName }
+                                    bagQuestItemsCache[lText] = { link = hyperlink, icon = icon, count = stackCount, name = itemName, hasSpell = true }
                                 end
                             end
                         end
@@ -2161,13 +2367,15 @@ local function FindQuestItemInBags(targetQuestID, questTitle, objectives)
     -- 1. Direct match on full title
     if qLower ~= "" and bagQuestItemsCache[qLower] then
         local c = bagQuestItemsCache[qLower]
-        return c.link, c.icon, c.count
+        if c.hasSpell then
+            return c.link, c.icon, c.count
+        end
     end
 
     -- 2. Match if any cached tooltip line contains quest title
     if qLower ~= "" then
         for lineLower, data in pairs(bagQuestItemsCache) do
-            if lineLower:find(qLower, 1, true) then
+            if data.hasSpell and lineLower:find(qLower, 1, true) then
                 return data.link, data.icon, data.count
             end
         end
@@ -2179,7 +2387,7 @@ local function FindQuestItemInBags(targetQuestID, questTitle, objectives)
             if obj.text and obj.text ~= "" then
                 local oLower = string_lower(obj.text)
                 for lineLower, data in pairs(bagQuestItemsCache) do
-                    if (data.name and oLower:find(string_lower(data.name), 1, true)) or oLower:find(lineLower, 1, true) then
+                    if data.hasSpell and ((data.name and oLower:find(string_lower(data.name), 1, true)) or oLower:find(lineLower, 1, true)) then
                         return data.link, data.icon, data.count
                     end
                 end
@@ -2270,6 +2478,15 @@ local function ZoneOrderComparator(zA, zB)
         if allCompleteA ~= allCompleteB then
             return not allCompleteA
         end
+    end
+
+    -- Class header sits at the bottom unless it contains the active quest
+    local isClassA = IsClassHeaderName(zA)
+    local isClassB = IsClassHeaderName(zB)
+    if isClassA and not isClassB then
+        return false
+    elseif isClassB and not isClassA then
+        return true
     end
 
     return (initialOrder[zA] or 0) < (initialOrder[zB] or 0)
@@ -2471,7 +2688,14 @@ function StandaloneTracker:GetTrackedQuests()
                 entry.isElite = isElite
                 entry.isDungeon = isDungeon
                 entry.isRaid = isRaid
-                entry.zone = activeZoneHeader
+                local isClassQ = IsClassQuest(activeZoneHeader, questID, i, title)
+                entry.isClassQuest = isClassQ
+                local separateClassHeader = not (ns.db and ns.db.headers and ns.db.headers.separateClassHeader == false)
+                if isClassQ and separateClassHeader then
+                    entry.zone = GetPlayerClassDisplayName()
+                else
+                    entry.zone = activeZoneHeader
+                end
                 entry.isFailed = isFailed
                 entry.isComplete = isComplete
                 entry.frequency = tonumber(frequency) or 1
@@ -2536,60 +2760,184 @@ local function RenderQuestBlock(content, qInfo, yOffset, lineSpacing)
     local leftItemOffset = 0
     local rightItemOffset = (hasItem and itemPlacement == "inside_right") and -(itemSize + 4) or 0
 
-    block.header.title:ClearAllPoints()
-    if showInlineArrow and block.header.wayfinderArrow then
-        local wfArrow = block.header.wayfinderArrow
-        wfArrow:SetSize(inlineSize, inlineSize)
-        local arrowTex = (ns.WayfinderModule and ns.WayfinderModule.GetInlineArrowTexture and ns.WayfinderModule:GetInlineArrowTexture())
-            or (ns.WayfinderModule and ns.WayfinderModule.GetArrowTexture and ns.WayfinderModule:GetArrowTexture())
-            or "Interface\\Minimap\\ROTATING-MINIMAPGUIDEARROW"
-        if wfArrow.SetSnapToPixelGrid then
-            wfArrow:SetSnapToPixelGrid(false)
-        end
-        if wfArrow.SetTexelSnappingBias then
-            wfArrow:SetTexelSnappingBias(0)
-        end
-        local ok = pcall(wfArrow.SetTexture, wfArrow, arrowTex, "CLAMP", "CLAMP", "TRILINEAR")
-        if not ok then
-            wfArrow:SetTexture(arrowTex)
-        end
-        wfArrow:SetTexCoord(0, 1, 0, 1)
-        wfArrow:ClearAllPoints()
-
-        if arrowPos == "left" then
-            wfArrow:SetPoint("LEFT", block.header, "LEFT", leftItemOffset, 0)
-            block.header.title:SetPoint("LEFT", wfArrow, "RIGHT", 4, 0)
-            block.header.title:SetPoint("RIGHT", block.header, "RIGHT", rightItemOffset, 0)
+    local isComplete = qInfo.isComplete and not qInfo.isFailed
+    if block.completedBg then
+        local showCompBg = not (ns.db and ns.db.fonts and ns.db.fonts.completedQuestBg == false)
+        if isComplete and showCompBg then
+            local cBg = (ns.db and ns.db.fonts and ns.db.fonts.completedQuestBgColor) or { r = 0.00, g = 0.80, b = 0.20, a = 0.14 }
+            block.completedBg:SetColorTexture(cBg.r or 0, cBg.g or 0.8, cBg.b or 0.2, cBg.a or 0.14)
+            block.completedBg:Show()
         else
-            wfArrow:SetPoint("RIGHT", block.header, "RIGHT", -2 + rightItemOffset, 0)
-            block.header.title:SetPoint("TOPLEFT", block.header, "TOPLEFT", leftItemOffset, 0)
-            block.header.title:SetPoint("RIGHT", wfArrow, "LEFT", -4, 0)
+            block.completedBg:Hide()
         end
-        wfArrow:Show()
+    end
 
-        if ns.WayfinderModule and ns.WayfinderModule.GetNavigationState then
-            local nav = ns.WayfinderModule:GetNavigationState()
-            if nav and nav.hasTarget then
-                wfArrow:SetRotation(nav.relativeAngle)
-                wfArrow:SetVertexColor(nav.r or 1.0, nav.g or 0.82, nav.b or 0.0, 1.0)
+    local alignTitles = not (ns.db and ns.db.sorting and ns.db.sorting.alignQuestTitles == false)
+    local titleSize = StandaloneTracker.titleSize or 13
+    local prefixWidth = 16
+    local isActive = ns.activeQuestID and (qInfo.questID == ns.activeQuestID)
+    local showCompleteIcon = not (ns.db and ns.db.headers and ns.db.headers.showCompleteIcon == false)
+
+    block.header.title:ClearAllPoints()
+    if alignTitles then
+        block.header.title:SetPoint("TOPLEFT", block.header, "TOPLEFT", leftItemOffset + prefixWidth + 4, 0)
+        block.header.title:SetPoint("TOPRIGHT", block.header, "TOPRIGHT", rightItemOffset, 0)
+
+        if showInlineArrow and block.header.wayfinderArrow and arrowPos == "left" then
+            local wfArrow = block.header.wayfinderArrow
+            local aSize = math.min(prefixWidth, inlineSize)
+            wfArrow:SetSize(aSize, aSize)
+            local arrowTex = (ns.WayfinderModule and ns.WayfinderModule.GetInlineArrowTexture and ns.WayfinderModule:GetInlineArrowTexture())
+                or (ns.WayfinderModule and ns.WayfinderModule.GetArrowTexture and ns.WayfinderModule:GetArrowTexture())
+                or "Interface\\Minimap\\ROTATING-MINIMAPGUIDEARROW"
+            if wfArrow.SetSnapToPixelGrid then wfArrow:SetSnapToPixelGrid(false) end
+            if wfArrow.SetTexelSnappingBias then wfArrow:SetTexelSnappingBias(0) end
+            local ok = pcall(wfArrow.SetTexture, wfArrow, arrowTex, "CLAMP", "CLAMP", "TRILINEAR")
+            if not ok then wfArrow:SetTexture(arrowTex) end
+            wfArrow:SetTexCoord(0, 1, 0, 1)
+            wfArrow:ClearAllPoints()
+            wfArrow:SetPoint("LEFT", block.header, "LEFT", leftItemOffset + math.floor((prefixWidth - aSize) / 2), 0)
+            wfArrow:Show()
+            if ns.WayfinderModule and ns.WayfinderModule.GetNavigationState then
+                local nav = ns.WayfinderModule:GetNavigationState()
+                if nav and nav.hasTarget then
+                    wfArrow:SetRotation(nav.relativeAngle)
+                    wfArrow:SetVertexColor(nav.r or 1.0, nav.g or 0.82, nav.b or 0.0, 1.0)
+                else
+                    wfArrow:SetRotation(0)
+                    wfArrow:SetVertexColor(1.0, 0.82, 0.0, 0.85)
+                end
+            else
+                wfArrow:SetRotation(0)
+                wfArrow:SetVertexColor(1.0, 0.82, 0.0, 0.85)
+            end
+            if block.header.statusIcon then block.header.statusIcon:Hide() end
+        elseif isComplete and showCompleteIcon and block.header.statusIcon then
+            if block.header.wayfinderArrow then block.header.wayfinderArrow:Hide() end
+            local sIcon = block.header.statusIcon
+            local iconSize = math.min(prefixWidth, math.max(12, titleSize))
+            sIcon:ClearAllPoints()
+            sIcon:SetSize(iconSize, iconSize)
+            sIcon:SetPoint("LEFT", block.header, "LEFT", leftItemOffset + math.floor((prefixWidth - iconSize) / 2), 0)
+            sIcon:SetTexture("Interface\\GossipFrame\\ActiveQuestIcon")
+            sIcon:SetTexCoord(0, 1, 0, 1)
+            sIcon:SetVertexColor(1, 1, 1, 1)
+            sIcon:Show()
+        elseif isActive and (not showInlineArrow or arrowPos ~= "left") and block.header.statusIcon then
+            if block.header.wayfinderArrow then block.header.wayfinderArrow:Hide() end
+            local iconChoice = (ns.db and ns.db.activeQuestIcon) or "star"
+            if iconChoice ~= "none" then
+                local sIcon = block.header.statusIcon
+                local iconSize = math.min(prefixWidth, 13)
+                sIcon:ClearAllPoints()
+                sIcon:SetSize(iconSize, iconSize)
+                sIcon:SetPoint("LEFT", block.header, "LEFT", leftItemOffset + math.floor((prefixWidth - iconSize) / 2), 0)
+                if iconChoice == "star" then
+                    sIcon:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_1")
+                    sIcon:SetTexCoord(0, 1, 0, 1)
+                elseif iconChoice == "arrow" or iconChoice == "pointer" then
+                    sIcon:SetTexture("Interface\\Common\\CommonIcons")
+                    sIcon:SetTexCoord(573/2048, 728/2048, 266/1024, 516/1024)
+                elseif iconChoice == "blizz" then
+                    sIcon:SetTexture("Interface\\GossipFrame\\AvailableQuestIcon")
+                    sIcon:SetTexCoord(0, 1, 0, 1)
+                else
+                    sIcon:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_1")
+                    sIcon:SetTexCoord(0, 1, 0, 1)
+                end
+                sIcon:SetVertexColor(1, 1, 1, 1)
+                sIcon:Show()
+            else
+                if block.header.statusIcon then block.header.statusIcon:Hide() end
+            end
+        else
+            if block.header.wayfinderArrow then block.header.wayfinderArrow:Hide() end
+            if block.header.statusIcon then block.header.statusIcon:Hide() end
+        end
+
+        -- If inline arrow on right side
+        if showInlineArrow and block.header.wayfinderArrow and arrowPos == "right" then
+            local wfArrow = block.header.wayfinderArrow
+            wfArrow:SetSize(inlineSize, inlineSize)
+            local arrowTex = (ns.WayfinderModule and ns.WayfinderModule.GetInlineArrowTexture and ns.WayfinderModule:GetInlineArrowTexture())
+                or (ns.WayfinderModule and ns.WayfinderModule.GetArrowTexture and ns.WayfinderModule:GetArrowTexture())
+                or "Interface\\Minimap\\ROTATING-MINIMAPGUIDEARROW"
+            if wfArrow.SetSnapToPixelGrid then wfArrow:SetSnapToPixelGrid(false) end
+            if wfArrow.SetTexelSnappingBias then wfArrow:SetTexelSnappingBias(0) end
+            local ok = pcall(wfArrow.SetTexture, wfArrow, arrowTex, "CLAMP", "CLAMP", "TRILINEAR")
+            if not ok then wfArrow:SetTexture(arrowTex) end
+            wfArrow:SetTexCoord(0, 1, 0, 1)
+            wfArrow:ClearAllPoints()
+            wfArrow:SetPoint("RIGHT", block.header, "RIGHT", -2 + rightItemOffset, 0)
+            block.header.title:SetPoint("RIGHT", wfArrow, "LEFT", -4, 0)
+            wfArrow:Show()
+            if ns.WayfinderModule and ns.WayfinderModule.GetNavigationState then
+                local nav = ns.WayfinderModule:GetNavigationState()
+                if nav and nav.hasTarget then
+                    wfArrow:SetRotation(nav.relativeAngle)
+                    wfArrow:SetVertexColor(nav.r or 1.0, nav.g or 0.82, nav.b or 0.0, 1.0)
+                else
+                    wfArrow:SetRotation(0)
+                    wfArrow:SetVertexColor(1.0, 0.82, 0.0, 0.85)
+                end
+            else
+                wfArrow:SetRotation(0)
+                wfArrow:SetVertexColor(1.0, 0.82, 0.0, 0.85)
+            end
+        end
+
+        block.header.title:SetWordWrap(true)
+        block.header.title:SetJustifyH("LEFT")
+        block.header.title:SetText(GetFormattedQuestTitle(qInfo, true))
+    else
+        -- Legacy non-aligned layout
+        if block.header.statusIcon then block.header.statusIcon:Hide() end
+        if showInlineArrow and block.header.wayfinderArrow then
+            local wfArrow = block.header.wayfinderArrow
+            wfArrow:SetSize(inlineSize, inlineSize)
+            local arrowTex = (ns.WayfinderModule and ns.WayfinderModule.GetInlineArrowTexture and ns.WayfinderModule:GetInlineArrowTexture())
+                or (ns.WayfinderModule and ns.WayfinderModule.GetArrowTexture and ns.WayfinderModule:GetArrowTexture())
+                or "Interface\\Minimap\\ROTATING-MINIMAPGUIDEARROW"
+            if wfArrow.SetSnapToPixelGrid then wfArrow:SetSnapToPixelGrid(false) end
+            if wfArrow.SetTexelSnappingBias then wfArrow:SetTexelSnappingBias(0) end
+            local ok = pcall(wfArrow.SetTexture, wfArrow, arrowTex, "CLAMP", "CLAMP", "TRILINEAR")
+            if not ok then wfArrow:SetTexture(arrowTex) end
+            wfArrow:SetTexCoord(0, 1, 0, 1)
+            wfArrow:ClearAllPoints()
+
+            if arrowPos == "left" then
+                wfArrow:SetPoint("LEFT", block.header, "LEFT", leftItemOffset, 0)
+                block.header.title:SetPoint("LEFT", wfArrow, "RIGHT", 4, 0)
+                block.header.title:SetPoint("RIGHT", block.header, "RIGHT", rightItemOffset, 0)
+            else
+                wfArrow:SetPoint("RIGHT", block.header, "RIGHT", -2 + rightItemOffset, 0)
+                block.header.title:SetPoint("TOPLEFT", block.header, "TOPLEFT", leftItemOffset, 0)
+                block.header.title:SetPoint("RIGHT", wfArrow, "LEFT", -4, 0)
+            end
+            wfArrow:Show()
+
+            if ns.WayfinderModule and ns.WayfinderModule.GetNavigationState then
+                local nav = ns.WayfinderModule:GetNavigationState()
+                if nav and nav.hasTarget then
+                    wfArrow:SetRotation(nav.relativeAngle)
+                    wfArrow:SetVertexColor(nav.r or 1.0, nav.g or 0.82, nav.b or 0.0, 1.0)
+                else
+                    wfArrow:SetRotation(0)
+                    wfArrow:SetVertexColor(1.0, 0.82, 0.0, 0.85)
+                end
             else
                 wfArrow:SetRotation(0)
                 wfArrow:SetVertexColor(1.0, 0.82, 0.0, 0.85)
             end
         else
-            wfArrow:SetRotation(0)
-            wfArrow:SetVertexColor(1.0, 0.82, 0.0, 0.85)
+            if block.header.wayfinderArrow then block.header.wayfinderArrow:Hide() end
+            block.header.title:SetPoint("TOPLEFT", block.header, "TOPLEFT", leftItemOffset, 0)
+            block.header.title:SetPoint("TOPRIGHT", block.header, "TOPRIGHT", rightItemOffset, 0)
         end
-    else
-        if block.header.wayfinderArrow then
-            block.header.wayfinderArrow:Hide()
-        end
-        block.header.title:SetPoint("TOPLEFT", block.header, "TOPLEFT", leftItemOffset, 0)
-        block.header.title:SetPoint("TOPRIGHT", block.header, "TOPRIGHT", rightItemOffset, 0)
+        block.header.title:SetWordWrap(true)
+        block.header.title:SetJustifyH("LEFT")
+        block.header.title:SetText(GetFormattedQuestTitle(qInfo, false))
     end
-    block.header.title:SetWordWrap(true)
-    block.header.title:SetJustifyH("LEFT")
-    block.header.title:SetText(GetFormattedQuestTitle(qInfo))
 
     local titleSize = StandaloneTracker.titleSize or 13
     local titleHeight = math.max(titleSize + 6, math.ceil(block.header.title:GetStringHeight() + 2), showInlineArrow and (inlineSize + 2) or 0)
@@ -2612,7 +2960,7 @@ local function RenderQuestBlock(content, qInfo, yOffset, lineSpacing)
     -- Objective Lines (Rendered only when expanded)
     if not isCollapsed then
         local prevAnchor = block.header
-        local objIndent = 6 + leftItemOffset
+        local objIndent = (alignTitles and (prefixWidth + 4) or 6) + leftItemOffset
         local objWidth = math.max(50, content:GetWidth() - objIndent - 6 + (rightItemOffset < 0 and rightItemOffset or 0))
 
         if qInfo.isFailed then
@@ -2851,6 +3199,13 @@ function StandaloneTracker:UpdateTracker()
                 or hCfg.zoneHeaderColor
                 or { r = 1.0, g = 0.82, b = 0.0, a = 1.0 }
 
+            if IsClassHeaderName(z) and ns.GetClassColor then
+                local cc = ns.GetClassColor()
+                if cc then
+                    zhTextColor = { r = cc.r, g = cc.g, b = cc.b, a = 1.0 }
+                end
+            end
+
             local zhTexType = hCfg.zoneHeaderTexture or "gradient"
             if zhTexType == "none" then
                 zh.bg:Hide()
@@ -2878,22 +3233,55 @@ function StandaloneTracker:UpdateTracker()
                 end
             end
 
-            -- Setup collapse arrow from CommonIcons (right when collapsed, down when expanded)
+            -- Setup collapse indicator (arrow, plusminus, or none)
+            local collapseShape = hCfg.zoneCollapseIcon or "arrow"
+            local collapseIconCol = hCfg.zoneCollapseIconColor or zhTextColor
+
             if not zh.collapseArrow then
                 zh.collapseArrow = zh:CreateTexture(nil, "OVERLAY")
                 zh.collapseArrow:SetSize(12, 12)
+            end
+
+            if zh.highlight then
+                local zHl = (ns.db and ns.db.fonts and ns.db.fonts.zoneHoverColor) or { r = 1.0, g = 0.82, b = 0.0, a = 0.12 }
+                zh.highlight:SetColorTexture(zHl.r, zHl.g, zHl.b, zHl.a or 0.12)
+            end
+
+            if collapseShape == "none" then
+                zh.collapseArrow:Hide()
+                zh.collapseText:Hide()
+                zh.title:ClearAllPoints()
+                zh.title:SetPoint("LEFT", zh, "LEFT", 8, 0)
+                zh.title:SetPoint("RIGHT", zh, "RIGHT", -6, 0)
+            elseif collapseShape == "plusminus" then
+                zh.collapseArrow:Hide()
+                zh.collapseText:Show()
+                zh.collapseText:ClearAllPoints()
+                zh.collapseText:SetPoint("LEFT", zh, "LEFT", 4, 0)
+                zh.collapseText:SetWidth(20)
+                zh.collapseText:SetText(isZoneCollapsed and "[+]" or "[-]")
+                zh.collapseText:SetTextColor(collapseIconCol.r, collapseIconCol.g, collapseIconCol.b, collapseIconCol.a or 1)
+                zh.title:ClearAllPoints()
+                zh.title:SetPoint("LEFT", zh.collapseText, "RIGHT", 4, 0)
+                zh.title:SetPoint("RIGHT", zh, "RIGHT", -6, 0)
+            else -- default "arrow"
+                zh.collapseText:Hide()
+                zh.collapseArrow:Show()
+                zh.collapseArrow:SetSize(12, 12)
                 zh.collapseArrow:SetTexture("Interface\\Common\\CommonIcons")
                 zh.collapseArrow:SetTexCoord(573/2048, 728/2048, 266/1024, 516/1024)
+                zh.collapseArrow:SetVertexColor(collapseIconCol.r, collapseIconCol.g, collapseIconCol.b, collapseIconCol.a or 1)
+                zh.collapseArrow:ClearAllPoints()
+                zh.collapseArrow:SetPoint("LEFT", zh, "LEFT", 6, 0)
+                if isZoneCollapsed then
+                    zh.collapseArrow:SetRotation(0) -- Pointing right
+                else
+                    zh.collapseArrow:SetRotation(math.pi / 2) -- Pointing down
+                end
+                zh.title:ClearAllPoints()
+                zh.title:SetPoint("LEFT", zh.collapseArrow, "RIGHT", 6, 0)
+                zh.title:SetPoint("RIGHT", zh, "RIGHT", -6, 0)
             end
-            zh.collapseArrow:ClearAllPoints()
-            zh.collapseArrow:SetPoint("LEFT", zh, "LEFT", 6, 0)
-            zh.collapseArrow:Show()
-            if isZoneCollapsed then
-                zh.collapseArrow:SetRotation(0) -- Pointing right
-            else
-                zh.collapseArrow:SetRotation(math.pi / 2) -- Pointing down
-            end
-            zh.collapseText:Hide()
 
             -- Format zone title with quest count inline: e.g. "Dun Morogh (3)"
             local zoneDisplayText = z
@@ -2901,9 +3289,6 @@ function StandaloneTracker:UpdateTracker()
                 zoneDisplayText = string.format("%s |cffaaaaaa(%d)|r", z, #qList)
             end
 
-            zh.title:ClearAllPoints()
-            zh.title:SetPoint("LEFT", zh.collapseArrow, "RIGHT", 6, 0)
-            zh.title:SetPoint("RIGHT", zh, "RIGHT", -6, 0)
             zh.title:SetJustifyH("LEFT")
             zh.title:SetJustifyV("MIDDLE")
             zh.title:SetWordWrap(true)

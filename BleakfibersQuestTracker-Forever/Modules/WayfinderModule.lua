@@ -16,6 +16,7 @@ local C_SuperTrack = C_SuperTrack
 local C_QuestLog = C_QuestLog
 local GetPlayerFacing = GetPlayerFacing
 local UnitOnTaxi = UnitOnTaxi
+local print = function(...) end -- Suppressed all chat outputs per user preference
 
 local WayfinderModule = {}
 ns.WayfinderModule = WayfinderModule
@@ -261,7 +262,6 @@ local DUNGEON_LOCATIONS = {
 local NON_ZONE_HEADERS = {
     ["mage"] = true, ["warrior"] = true, ["paladin"] = true, ["hunter"] = true,
     ["rogue"] = true, ["priest"] = true, ["shaman"] = true, ["warlock"] = true, ["druid"] = true,
-    ["death knight"] = true, ["deathknight"] = true,
     ["alchemy"] = true, ["blacksmithing"] = true, ["enchanting"] = true, ["engineering"] = true,
     ["leatherworking"] = true, ["tailoring"] = true, ["herbalism"] = true, ["mining"] = true,
     ["skinning"] = true, ["cooking"] = true, ["first aid"] = true, ["fishing"] = true,
@@ -1936,14 +1936,18 @@ function WayfinderModule:CalculateNavigation()
         relativeAngle = relativeAngle + TWO_PI
     end
 
+    local cAhead = (ns.db and ns.db.wayfinder and ns.db.wayfinder.arrowAheadColor) or { r = 0.1, g = 1.0, b = 0.2 }
+    local cAngle = (ns.db and ns.db.wayfinder and ns.db.wayfinder.arrowAngleColor) or { r = 1.0, g = 0.85, b = 0.1 }
+    local cBehind = (ns.db and ns.db.wayfinder and ns.db.wayfinder.arrowBehindColor) or { r = 1.0, g = 0.25, b = 0.25 }
+
     local diff = math_abs(relativeAngle)
     local r, g, b
     if diff <= 0.26 then
-        r, g, b = 0.1, 1.0, 0.2
+        r, g, b = cAhead.r, cAhead.g, cAhead.b
     elseif diff <= 1.31 then
-        r, g, b = 1.0, 0.85, 0.1
+        r, g, b = cAngle.r, cAngle.g, cAngle.b
     else
-        r, g, b = 1.0, 0.25, 0.25
+        r, g, b = cBehind.r, cBehind.g, cBehind.b
     end
 
     local threshold = (ns.db and ns.db.wayfinder and ns.db.wayfinder.arrivalThreshold) or 15
@@ -1962,6 +1966,8 @@ function WayfinderModule:CalculateNavigation()
     end
 
     if isArrived then
+        local cArrived = (ns.db and ns.db.wayfinder and ns.db.wayfinder.arrowArrivedColor) or { r = 0.1, g = 1.0, b = 0.2 }
+        r, g, b = cArrived.r, cArrived.g, cArrived.b
         if arrivedSoundTargetKey ~= targetKey then
             arrivedSoundTargetKey = targetKey
             if ns.db and ns.db.wayfinder and ns.db.wayfinder.playArrivalSound then
@@ -2148,7 +2154,8 @@ function WayfinderModule:CreateHUDFrame()
     frame.arrow = arrow
 
     local titleText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    titleText:SetPoint("TOP", frame, "BOTTOM", 0, -2)
+    local initDist = (ns.db and ns.db.wayfinder and ns.db.wayfinder.textDistance) or 12
+    titleText:SetPoint("TOP", frame, "CENTER", 0, -initDist)
     titleText:SetJustifyH("CENTER")
     titleText:SetShadowColor(0, 0, 0, 1)
     titleText:SetShadowOffset(1, -1)
@@ -2223,11 +2230,14 @@ end
 
 function WayfinderModule:UpdateHUDTextAnchors()
     if not self.hudFrame or not self.hudFrame.distText or not self.hudFrame.titleText then return end
+    local dist = (ns.db and ns.db.wayfinder and ns.db.wayfinder.textDistance) or 12
+    self.hudFrame.titleText:ClearAllPoints()
+    self.hudFrame.titleText:SetPoint("TOP", self.hudFrame, "CENTER", 0, -dist)
     self.hudFrame.distText:ClearAllPoints()
     if self.hudFrame.titleText:IsShown() and (self.hudFrame.titleText:GetText() or "") ~= "" then
         self.hudFrame.distText:SetPoint("TOP", self.hudFrame.titleText, "BOTTOM", 0, -1)
     else
-        self.hudFrame.distText:SetPoint("TOP", self.hudFrame, "BOTTOM", 0, -2)
+        self.hudFrame.distText:SetPoint("TOP", self.hudFrame, "CENTER", 0, -dist)
     end
 end
 
@@ -2253,6 +2263,10 @@ function WayfinderModule:ApplyTypography(overrideFontPath)
             pcall(self.hudFrame.distText.SetFont, self.hudFrame.distText, fontPath, fontSize)
         end
     end
+    if self.hudFrame.distText then
+        local cDist = (ns.db and ns.db.wayfinder and ns.db.wayfinder.distTextColor) or { r = 1.0, g = 1.0, b = 1.0 }
+        self.hudFrame.distText:SetTextColor(cDist.r, cDist.g, cDist.b, 1.0)
+    end
 
     local titleFontSize = (ns.db and ns.db.wayfinder and ns.db.wayfinder.hudTitleFontSize) or 11
     local titleOutline = (ns.db and ns.db.wayfinder and ns.db.wayfinder.hudTitleFontOutline) or "OUTLINE"
@@ -2263,6 +2277,10 @@ function WayfinderModule:ApplyTypography(overrideFontPath)
         else
             pcall(self.hudFrame.titleText.SetFont, self.hudFrame.titleText, fontPath, titleFontSize)
         end
+    end
+    if self.hudFrame.titleText then
+        local cDest = (ns.db and ns.db.wayfinder and ns.db.wayfinder.destTextColor) or { r = 1.0, g = 0.82, b = 0.0 }
+        self.hudFrame.titleText:SetTextColor(cDest.r, cDest.g, cDest.b, 1.0)
     end
 end
 
@@ -2474,7 +2492,8 @@ function WayfinderModule:UpdateIdleState()
             self.hudFrame:Show()
         end
         self:SetHUDArrowOrientation(0)
-        self.hudFrame.arrow:SetVertexColor(0.1, 1.0, 0.2, 1.0)
+        local cArrived = (ns.db and ns.db.wayfinder and ns.db.wayfinder.arrowArrivedColor) or { r = 0.1, g = 1.0, b = 0.2 }
+        self.hudFrame.arrow:SetVertexColor(cArrived.r, cArrived.g, cArrived.b, 1.0)
         local showDest = not (ns.db and ns.db.wayfinder and ns.db.wayfinder.showDestination == false)
         if showDest and self.hudFrame.titleText then
             self.hudFrame.titleText:Show()
@@ -2560,7 +2579,8 @@ function WayfinderModule:UpdateFrameVisibility()
         end
         if self.previewMode then
             self:SetHUDArrowOrientation(0)
-            self.hudFrame.arrow:SetVertexColor(0.1, 1.0, 0.2, 1.0)
+            local cArrived = (ns.db and ns.db.wayfinder and ns.db.wayfinder.arrowArrivedColor) or { r = 0.1, g = 1.0, b = 0.2 }
+            self.hudFrame.arrow:SetVertexColor(cArrived.r, cArrived.g, cArrived.b, 1.0)
             local showDest = not (ns.db and ns.db.wayfinder and ns.db.wayfinder.showDestination == false)
             if showDest and self.hudFrame.titleText then
                 self.hudFrame.titleText:Show()
@@ -2736,7 +2756,8 @@ function WayfinderModule:OnUpdate(dt)
                 if lastDistArrived ~= true then
                     lastDistArrived = true
                     lastDistNumber = -1
-                    lastDistFormatted = "|cff00ff00Arrived!|r"
+                    local cArrived = (ns.db and ns.db.wayfinder and ns.db.wayfinder.arrowArrivedColor) or { r = 0.1, g = 1.0, b = 0.2 }
+                    lastDistFormatted = string_format("|cff%02x%02x%02xArrived!|r", math_floor(cArrived.r * 255), math_floor(cArrived.g * 255), math_floor(cArrived.b * 255))
                     self.hudFrame.distText:SetText(lastDistFormatted)
                 end
             else
@@ -3654,6 +3675,14 @@ function WayfinderModule:Initialize()
         ns:RegisterCallback("QUEST_DATA_CHANGED", function()
             if ns.db and ns.db.wayfinder and ns.db.wayfinder.autoTrackActiveQuest and ns.activeQuestID and not currentTarget.isCustom then
                 WayfinderModule:SetQuestTarget(ns.activeQuestID)
+            end
+        end)
+        ns:RegisterCallback("SETTINGS_UPDATED", function()
+            if WayfinderModule.ApplyHUDSettings then
+                WayfinderModule:ApplyHUDSettings()
+            end
+            if WayfinderModule.UpdateFrameVisibility then
+                WayfinderModule:UpdateFrameVisibility()
             end
         end)
     end

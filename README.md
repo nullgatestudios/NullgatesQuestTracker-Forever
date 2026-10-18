@@ -102,8 +102,7 @@ Streamline tedious quest interactions with safety toggles:
 Immediate auditory cues for quest progression:
 - Independent sound alerts for quest completion and objective advancement.
 - Built-in Classic audio presets: Peon *"Work complete!"*, Classic chime, Level Up Fanfare, Raid Warning, Whispers, and Coin clinks.
-- In-menu **[Play Sound]** preview buttons with independent volume sliders (5% to 100%) and sound channel routing (Master, SFX, Ambience).
-- Full support for custom `.wav`, `.ogg`, and `.mp3` audio files placed in `Media/Sounds/`.
+- **Dynamic Custom Sound Support**: Drop any 16-bit 44.1kHz PCM `.wav` audio files into `Media/Sounds/` (e.g. `fart.wav`, `cheer.wav`), register them via the in-game Audio settings manager or `Media/CustomSounds.lua`, and select them directly from the dropdown as `Custom 1 (fart.wav)`, `Custom 2 (cheer.wav)`. The sound dropdown only lists sounds that are actually loaded with zero empty slot clutter. *(Note: Completely restart the WoW client after adding new audio files so the game engine indexes them).*
 
 ### 8. Master Mover & Profile Sync
 Seamless integration with `BleakfibersAddonConfig-Forever`:

@@ -856,8 +856,8 @@ function DataBarsModule:ShowXPTooltip(owner)
         GameTooltip:AddLine("|cffffd100Completed Quest Log XP:|r")
         if #qList > 0 then
             for _, q in ipairs(qList) do
-                local greyNow = (ns.IsQuestGrey and ns.IsQuestGrey(q.level, curLevel))
-                local greyAtNext = (ns.IsQuestGrey and ns.IsQuestGrey(q.level, curLevel + 1))
+                local greyNow = (ns.IsQuestGrey and ns.IsQuestGrey(q.level, curLevel, q.questID))
+                local greyAtNext = (ns.IsQuestGrey and ns.IsQuestGrey(q.level, curLevel + 1, q.questID))
                 local statusTag = ""
                 if not greyNow and greyAtNext then
                     statusTag = " |cffff2020[Grey at Ding!]|r"
@@ -1129,7 +1129,9 @@ function DataBarsModule:UpdateLocationBar(force)
     if db and db.showCoords ~= false and bestMapID and C_Map and C_Map.GetPlayerMapPosition then
         local pos = SafeCall(C_Map.GetPlayerMapPosition, bestMapID, "player")
         if pos and pos.x and pos.y and pos.x > 0 and pos.y > 0 then
-            coordsStr = string_format(" |cffffffff(%.1f, %.1f)|r", pos.x * 100, pos.y * 100)
+            local cCoord = (db and db.coordsColor) or { r = 1.0, g = 1.0, b = 1.0 }
+            local hexCoord = string_format("|cff%02x%02x%02x", math_floor((cCoord.r or 1) * 255), math_floor((cCoord.g or 1) * 255), math_floor((cCoord.b or 1) * 255))
+            coordsStr = string_format(" %s(%.1f, %.1f)|r", hexCoord, pos.x * 100, pos.y * 100)
         end
     end
 

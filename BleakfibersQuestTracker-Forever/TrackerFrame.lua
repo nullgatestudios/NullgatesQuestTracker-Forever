@@ -309,6 +309,7 @@ function Tracker:Initialize()
     -- MouseUp on Header (handles quick menu, alt+settings, and drag drop)
     header:SetScript("OnMouseUp", function(self, button)
         if button == "RightButton" then
+            GameTooltip:Hide()
             if IsAltKeyDown() then
                 if ns.Config then ns.Config:ToggleConfigFrame() end
             elseif ns.Config then
@@ -366,6 +367,7 @@ function Tracker:Initialize()
     if pt then pt:SetTexCoord(0, 56/256, 56/128, 112/128) end
     menuBtn:RegisterForClicks("AnyUp")
     menuBtn:SetScript("OnClick", function(self)
+        GameTooltip:Hide()
         if PlaySound then
             PlaySound((SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPEN) or 850)
         end
