@@ -1,7 +1,24 @@
 local addonName, ns = ...
 
+-- Single options UI: the same tab set is hosted by the standalone window,
+-- the Blizzard Settings panel, and Bleakfiber's Addon Config hub.
+
+local L = ns.L
+local LSM = LibStub("LibSharedMedia-3.0")
+
 local Config = {}
 ns.Config = Config
+
+-- Every widget change funnels into one debounced re-apply of all settings
+local applyPending = false
+local function ScheduleApply()
+    if applyPending then return end
+    applyPending = true
+    C_Timer.After(0.05, function()
+        applyPending = false
+        ns.ApplyAllSettings()
+    end)
+end
 
 -- Dedicated Copy URL Dialog Frame
 local copyDialogFrame
@@ -38,12 +55,12 @@ local function GetOrCreateCopyDialog()
     title:SetPoint("TOPLEFT", copyDialogFrame, "TOPLEFT", 14, -12)
     title:SetPoint("RIGHT", copyDialogFrame, "RIGHT", -30, 0)
     title:SetJustifyH("LEFT")
-    title:SetText("|cff00c0ffBleakfiber's Quest Tracker|r - Copy Wowhead URL")
+    title:SetText("|cff00c0ffBleakfiber's Quest Tracker|r - " .. L["Copy Wowhead URL"])
 
     -- Instruction text
     local note = copyDialogFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     note:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
-    note:SetText("Press |cff00ff00Ctrl+C|r to copy the link, then press |cff00ff00Enter|r or |cff00ff00Escape|r to close:")
+    note:SetText(L["Press Ctrl+C to copy the link, then press Enter or Escape to close:"])
 
     -- Close Button [X]
     local closeBtn = CreateFrame("Button", nil, copyDialogFrame, "UIPanelCloseButton")
@@ -64,7 +81,7 @@ local function GetOrCreateCopyDialog()
     local doneBtn = CreateFrame("Button", nil, copyDialogFrame, "UIPanelButtonTemplate")
     doneBtn:SetSize(80, 22)
     doneBtn:SetPoint("BOTTOMRIGHT", copyDialogFrame, "BOTTOMRIGHT", -14, 10)
-    doneBtn:SetText("Done")
+    doneBtn:SetText(L["Done"])
     doneBtn:SetScript("OnClick", function() copyDialogFrame:Hide() end)
 
     if UISpecialFrames then
@@ -79,7 +96,7 @@ function Config:ShowCopyDialog(url, questTitle)
     if questTitle and questTitle ~= "" then
         dialog.title:SetText("|cff00c0ffBleakfiber's Quest Tracker|r - " .. questTitle)
     else
-        dialog.title:SetText("|cff00c0ffBleakfiber's Quest Tracker|r - Copy Wowhead URL")
+        dialog.title:SetText("|cff00c0ffBleakfiber's Quest Tracker|r - " .. L["Copy Wowhead URL"])
     end
     dialog:Show()
     dialog:Raise()
@@ -163,12 +180,12 @@ function Config:OpenFilterMenu(anchor)
     end
 
     local rows = {
-        { type = "title", text = "|cff00c0ffTracker Options|r" },
+        { type = "title", text = "|cff00c0ff" .. L["Tracker Options"] .. "|r" },
         { type = "sep" },
-        { type = "header", text = "Sort Quests" },
+        { type = "header", text = L["Sort Quests"] },
         {
             type = "radio",
-            text = "Level",
+            text = L["Level"],
             checked = (db.sorting.mode == "level"),
             onClick = function()
                 db.sorting.mode = "level"
@@ -177,7 +194,7 @@ function Config:OpenFilterMenu(anchor)
         },
         {
             type = "radio",
-            text = "Zone",
+            text = L["Zone"],
             checked = (db.sorting.mode == "zone"),
             onClick = function()
                 db.sorting.mode = "zone"
@@ -186,25 +203,35 @@ function Config:OpenFilterMenu(anchor)
         },
     }
 
+    table.insert(rows, { type = "header", text = L["Show Quests"] })
+    local currentFilter = (db.filtering and db.filtering.filterMode) or "all"
+    for _, mode in ipairs({ { "all", L["All Quests"] }, { "zone", L["Current Zone Only"] }, { "watched", L["Watched Only"] } }) do
+        table.insert(rows, {
+            type = "radio",
+            text = mode[2],
+            checked = (currentFilter == mode[1]),
+            onClick = function() Config:SetFilterMode(mode[1]) end,
+        })
+    end
+    table.insert(rows, { type = "header", text = L["Sorting & Display"] })
     table.insert(rows, {
         type = "checkbox",
-        text = "Active Quest on Top",
+        text = L["Active Quest on Top"],
         checked = not (db.sorting and db.sorting.activeOnTop == false),
         onClick = function()
             db.sorting = db.sorting or {}
-            db.sorting.activeOnTop = not (db.sorting.activeOnTop ~= false)
+            db.sorting.activeOnTop = db.sorting.activeOnTop == false
             ns:FireCallback("QUEST_DATA_CHANGED")
         end,
     })
 
     table.insert(rows, {
         type = "checkbox",
-        text = "Left-Click Sets Active",
+        text = L["Left-Click Sets Active"],
         checked = (db.sorting and db.sorting.leftClickSetsActive == true),
         onClick = function()
             db.sorting = db.sorting or {}
-            db.sorting.leftClickSetsActive = not (db.sorting.leftClickSetsActive == true)
-            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+            db.sorting.leftClickSetsActive = db.sorting.leftClickSetsActive ~= true
             if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then
                 ns.StandaloneTracker:UpdateTracker()
             end
@@ -213,7 +240,7 @@ function Config:OpenFilterMenu(anchor)
 
     table.insert(rows, {
         type = "checkbox",
-        text = "Completed to Bottom",
+        text = L["Completed to Bottom"],
         checked = db.sorting and db.sorting.moveCompletedToBottom,
         onClick = function()
             db.sorting = db.sorting or {}
@@ -224,51 +251,51 @@ function Config:OpenFilterMenu(anchor)
 
     table.insert(rows, {
         type = "checkbox",
-        text = "Color by Difficulty",
+        text = L["Color by Difficulty"],
         checked = not (db.fonts and db.fonts.colorDifficulty == false),
         onClick = function()
             db.fonts = db.fonts or {}
-            db.fonts.colorDifficulty = not (db.fonts.colorDifficulty ~= false)
+            db.fonts.colorDifficulty = db.fonts.colorDifficulty == false
             ns:FireCallback("QUEST_DATA_CHANGED")
         end,
     })
 
     table.insert(rows, {
         type = "checkbox",
-        text = "Show Complete Icon (?)",
+        text = L["Show Complete Icon (?)"],
         checked = not (db.headers and db.headers.showCompleteIcon == false),
         onClick = function()
             db.headers = db.headers or {}
-            db.headers.showCompleteIcon = not (db.headers.showCompleteIcon ~= false)
+            db.headers.showCompleteIcon = db.headers.showCompleteIcon == false
             ns:FireCallback("QUEST_DATA_CHANGED")
         end,
     })
 
     table.insert(rows, {
         type = "checkbox",
-        text = "Show Quest Rewards",
+        text = L["Show Quest Rewards"],
         checked = not (db.tooltips and db.tooltips.showRewards == false),
         onClick = function()
             db.tooltips = db.tooltips or {}
-            db.tooltips.showRewards = not (db.tooltips.showRewards ~= false)
+            db.tooltips.showRewards = db.tooltips.showRewards == false
         end,
     })
 
     table.insert(rows, {
         type = "checkbox",
-        text = "Show Party Members",
+        text = L["Show Party Members"],
         checked = not (db.tooltips and db.tooltips.showPartyStatus == false),
         onClick = function()
             db.tooltips = db.tooltips or {}
-            db.tooltips.showPartyStatus = not (db.tooltips.showPartyStatus ~= false)
+            db.tooltips.showPartyStatus = db.tooltips.showPartyStatus == false
         end,
     })
 
     table.insert(rows, { type = "sep" })
-    table.insert(rows, { type = "header", text = "Wayfinder Navigation" })
+    table.insert(rows, { type = "header", text = L["Wayfinder Navigation"] })
     table.insert(rows, {
         type = "checkbox",
-        text = "Show Floating Arrow",
+        text = L["Show Floating Arrow"],
         checked = db.wayfinder and db.wayfinder.enableHUDArrow,
         onClick = function()
             db.wayfinder = db.wayfinder or {}
@@ -278,7 +305,7 @@ function Config:OpenFilterMenu(anchor)
     })
     table.insert(rows, {
         type = "checkbox",
-        text = "Show Inline Mini-Arrow",
+        text = L["Show Inline Mini-Arrow"],
         checked = db.wayfinder and db.wayfinder.enableInlineArrow,
         onClick = function()
             db.wayfinder = db.wayfinder or {}
@@ -289,20 +316,20 @@ function Config:OpenFilterMenu(anchor)
     })
 
     table.insert(rows, { type = "sep" })
-    table.insert(rows, { type = "header", text = "Tracker Actions" })
+    table.insert(rows, { type = "header", text = L["Tracker Actions"] })
     table.insert(rows, {
         type = "checkbox",
-        text = "Show Zone Headers",
+        text = L["Show Zone Headers"],
         checked = db.headers and db.headers.showZoneHeaders ~= false,
         onClick = function()
             db.headers = db.headers or {}
-            db.headers.showZoneHeaders = not (db.headers.showZoneHeaders ~= false)
+            db.headers.showZoneHeaders = db.headers.showZoneHeaders == false
             ns:FireCallback("QUEST_DATA_CHANGED")
         end,
     })
     table.insert(rows, {
         type = "checkbox",
-        text = "Lock Position",
+        text = L["Lock Position"],
         checked = db.isLocked,
         onClick = function()
             ns.Tracker:SetLocked(not db.isLocked)
@@ -310,7 +337,7 @@ function Config:OpenFilterMenu(anchor)
     })
     table.insert(rows, {
         type = "button",
-        text = "Expand All Quests",
+        text = L["Expand All Quests"],
         onClick = function()
             if db then
                 db.collapsedQuests = {}
@@ -321,7 +348,7 @@ function Config:OpenFilterMenu(anchor)
     })
     table.insert(rows, {
         type = "button",
-        text = "Collapse All Quests",
+        text = L["Collapse All Quests"],
         onClick = function()
             if db and ns.StandaloneTracker and ns.StandaloneTracker.GetTrackedQuests then
                 db.collapsedQuests = db.collapsedQuests or {}
@@ -340,7 +367,7 @@ function Config:OpenFilterMenu(anchor)
     if db.headers and db.headers.showZoneHeaders ~= false then
         table.insert(rows, {
             type = "button",
-            text = "Expand All Zones",
+            text = L["Expand All Zones"],
             onClick = function()
                 if db then
                     db.collapsedZones = {}
@@ -351,13 +378,13 @@ function Config:OpenFilterMenu(anchor)
         })
         table.insert(rows, {
             type = "button",
-            text = "Collapse All Zones",
+            text = L["Collapse All Zones"],
             onClick = function()
                 if db and ns.StandaloneTracker and ns.StandaloneTracker.GetTrackedQuests then
                     db.collapsedZones = db.collapsedZones or {}
                     local quests = ns.StandaloneTracker:GetTrackedQuests()
                     for _, q in ipairs(quests) do
-                        local z = q.zone or "Other Quests"
+                        local z = q.zone or L["Other Quests"]
                         db.collapsedZones[z] = true
                     end
                     ns:FireCallback("QUEST_DATA_CHANGED")
@@ -369,10 +396,10 @@ function Config:OpenFilterMenu(anchor)
 
     table.insert(rows, { type = "sep" })
     local currentProfile = (ns.dbObject and ns.dbObject.GetCurrentProfile and ns.dbObject:GetCurrentProfile()) or "Default"
-    table.insert(rows, { type = "header", text = "Profile: " .. currentProfile })
+    table.insert(rows, { type = "header", text = string.format(L["Profile: %s"], currentProfile) })
     table.insert(rows, {
         type = "button",
-        text = "Settings & Appearance...",
+        text = L["Settings & Appearance..."],
         onClick = function()
             menu:Hide()
             Config:ToggleConfigFrame()
@@ -380,17 +407,14 @@ function Config:OpenFilterMenu(anchor)
     })
     table.insert(rows, {
         type = "button",
-        text = "Close",
+        text = L["Close"],
         onClick = function()
             menu:Hide()
         end,
     })
 
-    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
     local fontPath = (ns.StandaloneTracker and ns.StandaloneTracker.fontPath)
-        or (LSM and db.fonts and db.fonts.font and LSM:Fetch("font", db.fonts.font))
-        or STANDARD_TEXT_FONT
-        or "Fonts\\FRIZQT__.TTF"
+        or ns.FetchFont(db.fonts and db.fonts.font)
     local fontSize = 11
 
     local function SafeSetFont(fs, path, size, flags)
@@ -502,7 +526,6 @@ function Config:OpenFilterMenu(anchor)
                     PlaySound((SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON) or 856)
                 end
                 row.onClick()
-                if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
                 menu:Hide()
                 Config:OpenFilterMenu(anchor)
             end)
@@ -521,7 +544,6 @@ function Config:OpenFilterMenu(anchor)
                     PlaySound((SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON) or 856)
                 end
                 row.onClick()
-                if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
             end)
             yOffset = yOffset - 20
         end
@@ -543,103 +565,29 @@ function Config:OpenFilterMenu(anchor)
 end
 Config.OpenQuickMenu = Config.OpenFilterMenu
 
--- Ace3 & LibSharedMedia Config UI
-local ACD = LibStub and LibStub("AceConfigDialog-3.0", true)
-local ACR = LibStub and LibStub("AceConfigRegistry-3.0", true)
-local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-
-local fontFlags = {
-    [""] = "None",
-    ["OUTLINE"] = "Outline",
-    ["THICKOUTLINE"] = "Thick Outline",
-    ["MONOCHROME"] = "Monochrome",
-    ["OUTLINE, MONOCHROME"] = "Outline Monochrome",
-}
-
-local barBorderStyles = {
-    ["flat"] = "Sleek 1px (Modern Flat)",
-    ["tooltip"] = "Blizzard Tooltip (Classic Rounded)",
-    ["dialog"] = "Blizzard Dialog (Classic Window)",
-    ["toast"] = "Blizzard Toast (Soft Alert)",
-    ["none"] = "None (Borderless)",
-}
-
-local function GetAceConfigCompleteSounds()
-    local t = {
-        peon = "Peon: \"Work complete!\"",
-        quest_complete = "Classic Quest Complete",
-        whisper_ping = "Whisper Ping (TellMessage)",
-        coins = "Gold Coin Ding",
-        loot_clink = "Loot Coin Clink",
-        level_up = "Level Up Fanfare",
-        raid_warning = "Raid Warning Chime",
-        ready_check = "Ready Check Chime",
-        pvp_horn = "PvP Queue Horn",
-        beep = "Bleakfiber Beep (beep.wav)",
-        click = "Bleakfiber Click (click.wav)",
-    }
-    local customList = ns.GetCustomSoundList and ns.GetCustomSoundList()
-    if customList and #customList > 0 then
-        for _, item in ipairs(customList) do
-            t[item.key] = item.label
-        end
+function Config:SetFilterMode(mode)
+    local db = ns.db
+    if not db then return end
+    db.filtering.filterMode = mode
+    if ns.Tracker and ns.Tracker.UpdateFilterButtons then
+        ns.Tracker:UpdateFilterButtons()
     end
-    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-    if LSM and LSM.List then
-        local lsmSounds = LSM:List("sound")
-        if type(lsmSounds) == "table" then
-            for _, soundName in ipairs(lsmSounds) do
-                if not t[soundName] then
-                    t[soundName] = soundName
-                end
-            end
-        end
-    end
-    return t
-end
-
-local function GetAceConfigObjectiveSounds()
-    local t = {
-        whisper_ping = "Whisper Ping (TellMessage)",
-        coins = "Gold Coin Ding",
-        loot_clink = "Loot Coin Clink",
-        map_ping = "Mini-Map Ping",
-        item_click = "Subtle Click",
-        beep = "Bleakfiber Beep (beep.wav)",
-        click = "Bleakfiber Click (click.wav)",
-    }
-    local customList = ns.GetCustomSoundList and ns.GetCustomSoundList()
-    if customList and #customList > 0 then
-        for _, item in ipairs(customList) do
-            t[item.key] = item.label
-        end
-    end
-    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-    if LSM and LSM.List then
-        local lsmSounds = LSM:List("sound")
-        if type(lsmSounds) == "table" then
-            for _, soundName in ipairs(lsmSounds) do
-                if not t[soundName] then
-                    t[soundName] = soundName
-                end
-            end
-        end
-    end
-    return t
+    ns:FireCallback("QUEST_DATA_CHANGED")
+    Config:SyncAll()
 end
 
 local function GetStatusbarTextureList()
     local list = {
-        ["Solid"] = "Solid / Flat",
-        ["Blizzard"] = "Blizzard Default Statusbar",
+        { key = "Solid", label = L["Solid / Flat"] },
+        { key = "Blizzard", label = L["Blizzard Default Statusbar"] },
     }
-    if LSM and LSM.List then
-        local lsmTex = LSM:List("statusbar")
-        if type(lsmTex) == "table" then
-            for _, texName in ipairs(lsmTex) do
-                if not list[texName] then
-                    list[texName] = texName
-                end
+    local seen = { Solid = true, Blizzard = true }
+    local names = LSM:List("statusbar")
+    if type(names) == "table" then
+        for _, texName in ipairs(names) do
+            if not seen[texName] then
+                seen[texName] = true
+                list[#list + 1] = { key = texName, label = texName }
             end
         end
     end
@@ -673,15 +621,8 @@ function Config:ApplyModernGlassPreset()
     db.fonts.objectiveSize = 11
     db.fonts.colorDifficulty = true
 
-    if ns.Tracker then
-        ns.Tracker:UpdateBackdrop()
-        ns.Tracker:ApplyHeaderSettings()
-        ns.Tracker:UpdateTypography()
-    end
-    if ns.StandaloneTracker and ns.StandaloneTracker.RequestUpdate then
-        ns.StandaloneTracker:RequestUpdate(true)
-    end
-    if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+    ns.ApplyAllSettings()
+    Config:SyncAll()
 end
 
 function Config:ApplyClassicPreset()
@@ -709,15 +650,8 @@ function Config:ApplyClassicPreset()
     db.fonts.objectiveSize = 11
     db.fonts.colorDifficulty = true
 
-    if ns.Tracker then
-        ns.Tracker:UpdateBackdrop()
-        ns.Tracker:ApplyHeaderSettings()
-        ns.Tracker:UpdateTypography()
-    end
-    if ns.StandaloneTracker and ns.StandaloneTracker.RequestUpdate then
-        ns.StandaloneTracker:RequestUpdate(true)
-    end
-    if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+    ns.ApplyAllSettings()
+    Config:SyncAll()
 end
 
 function Config:ApplyMinimalPreset()
@@ -737,4022 +671,15 @@ function Config:ApplyMinimalPreset()
     db.headers.texture = "none"
     db.headers.zoneHeaderTexture = "none"
 
-    if ns.Tracker then
-        ns.Tracker:UpdateBackdrop()
-        ns.Tracker:ApplyHeaderSettings()
-        ns.Tracker:UpdateTypography()
-    end
-    if ns.StandaloneTracker and ns.StandaloneTracker.RequestUpdate then
-        ns.StandaloneTracker:RequestUpdate(true)
-    end
-    if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-end
-
-local function GetOptionsTable()
-    local db = ns.db
-    if not db then return { type = "group", args = {} } end
-
-    local fontList = (AceGUIWidgetLSMlists and AceGUIWidgetLSMlists.font) 
-        or (LSM and LSM:List("font")) 
-        or { ["Friz Quadrata TT"] = "Friz Quadrata TT" }
-
-    local options = {
-        name = "|cff00c0ffBleakfiber's Quest Tracker|r",
-        type = "group",
-        childGroups = "tab",
-        args = {
-            general = {
-                name = "General",
-                type = "group",
-                order = 1,
-                args = {
-                    desc = {
-                        name = "General tracker behavior, position locking, and automation options.\n",
-                        type = "description",
-                        order = 0,
-                    },
-                    isLocked = {
-                        name = "Lock Tracker Position",
-                        desc = "Prevent moving the tracker by dragging its header.",
-                        type = "toggle",
-                        order = 1,
-                        get = function() return db.isLocked end,
-                        set = function(_, val)
-                            db.isLocked = val
-                            ns.Tracker:SetLocked(val)
-                        end,
-                    },
-                    autoHideEmpty = {
-                        name = "Auto-hide Tracker When Empty",
-                        desc = "Automatically hide the tracker frame completely when you have zero quests in your quest log (disabled while filtering by zone or watched so the header remains accessible).",
-                        type = "toggle",
-                        width = "full",
-                        order = 2,
-                        get = function() return db.filtering and db.filtering.autoHideEmpty end,
-                        set = function(_, val)
-                            db.filtering = db.filtering or {}
-                            db.filtering.autoHideEmpty = val
-                            ns:FireCallback("QUEST_DATA_CHANGED")
-                        end,
-                    },
-                    autoHideInInstances = {
-                        name = "Auto-collapse in Dungeons & Raids",
-                        desc = "Automatically collapse/minimize the tracker inside party dungeons and raid instances.",
-                        type = "toggle",
-                        width = "full",
-                        order = 3,
-                        get = function() return db.filtering and db.filtering.autoHideInInstances end,
-                        set = function(_, val)
-                            db.filtering = db.filtering or {}
-                            db.filtering.autoHideInInstances = val
-                            ns.Tracker:CheckInstanceAutoCollapse()
-                        end,
-                    },
-                    hideInCombat = {
-                        name = "Hide Tracker in Combat",
-                        desc = "Automatically hide the quest tracker while engaged in combat, and restore it when combat ends (disabled by default).",
-                        type = "toggle",
-                        order = 3.5,
-                        get = function() return db.filtering and db.filtering.hideInCombat end,
-                        set = function(_, val)
-                            db.filtering = db.filtering or {}
-                            db.filtering.hideInCombat = val
-                            if ns.Tracker and ns.Tracker.UpdateVisibility then
-                                ns.Tracker:UpdateVisibility()
-                            end
-                        end,
-                    },
-                    filterMode = {
-                        name = "Quest Filter Mode",
-                        desc = "Choose which quests to display in the tracker: All quests, only quests matching your Current Zone, or Watched (shift-clicked) quests.",
-                        type = "select",
-                        order = 4,
-                        values = {
-                            ["all"] = "All Quests",
-                            ["zone"] = "Current Zone Only",
-                            ["watched"] = "Watched (Shift-Clicked) Only",
-                        },
-                        get = function()
-                            return (db.filtering and db.filtering.filterMode) or ((db.filtering and db.filtering.zoneOnly) and "zone" or "all")
-                        end,
-                        set = function(_, val)
-                            db.filtering = db.filtering or {}
-                            db.filtering.filterMode = val
-                            db.filtering.zoneOnly = (val == "zone")
-                            if ns.Tracker and ns.Tracker.UpdateFilterButtons then
-                                ns.Tracker:UpdateFilterButtons()
-                            end
-                            ns:FireCallback("QUEST_DATA_CHANGED")
-                        end,
-                    },
-                    enableCrossZone = {
-                        name = "Enable Cross-Zone Objective Tracking",
-                        desc = "Intelligently display quests in their active objective or turn-in zones even if accepted elsewhere.",
-                        type = "toggle",
-                        width = "full",
-                        order = 4.5,
-                        get = function() return not (db.filtering and db.filtering.enableCrossZone == false) end,
-                        set = function(_, val)
-                            db.filtering = db.filtering or {}
-                            db.filtering.enableCrossZone = val
-                            ns:FireCallback("QUEST_DATA_CHANGED")
-                        end,
-                    },
-                    itemButtonPlacement = {
-                        name = "Quest Item Button Placement",
-                        desc = "Select where usable quest item buttons are displayed:\n• Right Side (Inside Tracker): Inside the quest entry block, aligned to the right.\n• Left Side (Outside Tracker): Outside the tracker frame on the left side.",
-                        type = "select",
-                        width = "full",
-                        order = 4.6,
-                        values = {
-                            ["inside_right"] = "Right Side (Inside Tracker)",
-                            ["outside_left"] = "Left Side (Outside Tracker)",
-                        },
-                        get = function()
-                            local val = (ns.db and ns.db.itemButtonPlacement) or (db and db.itemButtonPlacement) or "inside_right"
-                            if val ~= "inside_right" and val ~= "outside_left" then
-                                val = "inside_right"
-                            end
-                            return val
-                        end,
-                        set = function(_, val)
-                            if ns.db then
-                                ns.db.itemButtonPlacement = val
-                                ns.db.itemButtonPosition = nil
-                            end
-                            if db then
-                                db.itemButtonPlacement = val
-                                db.itemButtonPosition = nil
-                            end
-                            if db and db.itemButtons then
-                                db.itemButtons.position = (val == "outside_left") and "left" or "right"
-                                db.itemButtons.placement = val
-                            end
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                            if ns.Tracker and ns.Tracker.UpdateSettings then
-                                ns.Tracker:UpdateSettings()
-                            elseif ns.StandaloneTracker and ns.StandaloneTracker.RequestUpdate then
-                                ns.StandaloneTracker:RequestUpdate()
-                            end
-                            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateItemButton then
-                                ns.StandaloneTracker:UpdateItemButton()
-                            end
-                        end,
-                    },
-                    itemButtonStrata = {
-                        name = "Quest Item Frame Strata",
-                        desc = "Sets the frame strata for quest item buttons. 'Medium' matches the tracker and bag addons so overlapping windows properly cover the item buttons.",
-                        type = "select",
-                        width = "full",
-                        order = 4.62,
-                        values = {
-                            ["LOW"] = "Low",
-                            ["MEDIUM"] = "Medium (Matches Tracker & Bags)",
-                            ["HIGH"] = "High",
-                            ["DIALOG"] = "Dialog",
-                        },
-                        get = function()
-                            return (db.itemButtonStrata) or "MEDIUM"
-                        end,
-                        set = function(_, val)
-                            db.itemButtonStrata = val
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateItemButtonStrata then
-                                ns.StandaloneTracker:UpdateItemButtonStrata()
-                            end
-                        end,
-                    },
-                    questItemKeybind = {
-                        name = "Quest Item Keybind",
-                        desc = "Click to set a keyboard shortcut to instantly use the active quest item button.",
-                        type = "keybinding",
-                        width = "full",
-                        order = 4.65,
-                        get = function()
-                            local key1 = GetBindingKey("BLEAKFIBER_USE_QUEST_ITEM")
-                            return key1 or ""
-                        end,
-                        set = function(_, key)
-                            if key == "" then
-                                local key1, key2 = GetBindingKey("BLEAKFIBER_USE_QUEST_ITEM")
-                                if key1 then SetBinding(key1) end
-                                if key2 then SetBinding(key2) end
-                            else
-                                local oldKey = GetBindingKey("BLEAKFIBER_USE_QUEST_ITEM")
-                                if oldKey then SetBinding(oldKey) end
-                                SetBinding(key, "BLEAKFIBER_USE_QUEST_ITEM")
-                            end
-                            SaveBindings(GetCurrentBindingSet())
-                        end,
-                    },
-                    toggleTrackerKeybind = {
-                        name = "Toggle Tracker Visibility Keybind",
-                        desc = "Click to set a keyboard shortcut to completely hide or show the entire quest tracker.",
-                        type = "keybinding",
-                        width = "full",
-                        order = 4.67,
-                        get = function()
-                            local key1 = GetBindingKey("BLEAKFIBER_TOGGLE_TRACKER_VISIBILITY")
-                            return key1 or ""
-                        end,
-                        set = function(_, key)
-                            if key == "" then
-                                local key1, key2 = GetBindingKey("BLEAKFIBER_TOGGLE_TRACKER_VISIBILITY")
-                                if key1 then SetBinding(key1) end
-                                if key2 then SetBinding(key2) end
-                            else
-                                local oldKey = GetBindingKey("BLEAKFIBER_TOGGLE_TRACKER_VISIBILITY")
-                                if oldKey then SetBinding(oldKey) end
-                                SetBinding(key, "BLEAKFIBER_TOGGLE_TRACKER_VISIBILITY")
-                            end
-                            SaveBindings(GetCurrentBindingSet())
-                        end,
-                    },
-                    toggleVisibilityBtn = {
-                        name = "Toggle Tracker (Hide/Show)",
-                        desc = "Completely hide or show the entire quest tracker window (/bfq togglehide, /bfqhide, or /bfhide).",
-                        type = "execute",
-                        order = 4.68,
-                        func = function()
-                            if ns.Tracker and ns.Tracker.ToggleVisibility then
-                                ns.Tracker:ToggleVisibility()
-                            end
-                        end,
-                    },
-                    hideDataBarsWithTracker = {
-                        name = "Hide DataBars When Tracker Hidden",
-                        desc = "When enabled, hiding the quest tracker via keybind, button, or slash command also hides all active DataBars (XP Bar, Location Bar, and Quest Timer Bar).",
-                        type = "toggle",
-                        width = "full",
-                        order = 4.69,
-                        get = function() return not (db.databars and db.databars.hideWithTracker == false) end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.hideWithTracker = val
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                            if ns.DataBarsModule and ns.DataBarsModule.RefreshBars then
-                                ns.DataBarsModule:RefreshBars()
-                            end
-                        end,
-                    },
-                    showTimerInObjectives = {
-                        name = "Show Timers in Objective Descriptions",
-                        desc = "Show a live countdown timer directly next to timed quest objectives (e.g. [04:12]). Only appears on quests with an active countdown timer.",
-                        type = "toggle",
-                        width = "full",
-                        order = 4.7,
-                        get = function() return db.showTimerInObjectives ~= false end,
-                        set = function(_, val)
-                            db.showTimerInObjectives = val
-                            if ns.StandaloneTracker and ns.StandaloneTracker.RequestUpdate then
-                                ns.StandaloneTracker:RequestUpdate(true)
-                            end
-                        end,
-                    },
-                    sizingHeader = {
-                        name = "Tracker Dimensions & Sizing",
-                        type = "header",
-                        order = 4.8,
-                    },
-                    width = {
-                        name = "Tracker Width (px)",
-                        desc = "Set exact pixel width of the tracker frame (type px number or use slider).",
-                        type = "range",
-                        min = 180,
-                        max = 600,
-                        step = 5,
-                        bigStep = 10,
-                        order = 4.81,
-                        get = function() return db.width or 280 end,
-                        set = function(_, val)
-                            db.width = math.floor(val + 0.5)
-                            ns.Tracker:UpdateSettings()
-                        end,
-                    },
-                    growCorner = {
-                        name = "Grow Direction & Anchor Corner",
-                        desc = "Sets which corner the tracker anchors to and grows from as quests are added.\n\n• Auto: Anchors to nearest screen corner based on where you drag it.\n• Bottom-Right: Anchors bottom-right and grows UP & LEFT.\n• Bottom-Left: Anchors bottom-left and grows UP & RIGHT.\n• Top-Right: Anchors top-right and grows DOWN & LEFT.\n• Top-Left: Anchors top-left and grows DOWN & RIGHT.",
-                        type = "select",
-                        order = 4.815,
-                        values = {
-                            ["AUTO"] = "Auto (Snap to Nearest Screen Corner)",
-                            ["BOTTOMRIGHT"] = "Bottom-Right (Grows Up & Left)",
-                            ["BOTTOMLEFT"] = "Bottom-Left (Grows Up & Right)",
-                            ["TOPRIGHT"] = "Top-Right (Grows Down & Left)",
-                            ["TOPLEFT"] = "Top-Left (Grows Down & Right)",
-                        },
-                        get = function() return db.growCorner or "AUTO" end,
-                        set = function(_, val)
-                            db.growCorner = val
-                            if ns.Tracker and ns.Tracker.UpdateAnchorCorner then
-                                ns.Tracker:UpdateAnchorCorner(val)
-                            end
-                        end,
-                    },
-                    maxHeight = {
-                        name = "Grow Down Range / Max Height (px)",
-                        desc = "The tracker dynamically auto-grows down to match active quest count. If content height exceeds this value, smooth scrolling begins.",
-                        type = "range",
-                        min = 100,
-                        max = 1200,
-                        step = 10,
-                        bigStep = 25,
-                        width = "full",
-                        order = 4.82,
-                        get = function() return db.maxHeight or 600 end,
-                        set = function(_, val)
-                            db.maxHeight = math.floor(val + 0.5)
-                            ns.Tracker:UpdateSettings()
-                        end,
-                    },
-                    scale = {
-                        name = "Tracker UI Scale",
-                        desc = "Adjust overall visual scale of the tracker frame.",
-                        type = "range",
-                        min = 0.7,
-                        max = 1.5,
-                        step = 0.05,
-                        isPercent = true,
-                        order = 4.83,
-                        get = function() return db.scale or 1.0 end,
-                        set = function(_, val)
-                            db.scale = tonumber(string.format("%.2f", val))
-                            ns.Tracker:UpdateSettings()
-                        end,
-                    },
-                    showOverlay = {
-                        name = "Show Bounds Overlay & Resize Handle",
-                        desc = "Display the on-screen blue bounding box and [Drag to Resize] handle on the tracker.",
-                        type = "toggle",
-                        width = "full",
-                        order = 4.84,
-                        get = function()
-                            return ns.Tracker and ns.Tracker.IsConfigOverlayShown and ns.Tracker:IsConfigOverlayShown()
-                        end,
-                        set = function(_, val)
-                            if val then
-                                ns.Tracker:ShowConfigOverlay()
-                            else
-                                ns.Tracker:HideConfigOverlay()
-                            end
-                        end,
-                    },
-                    sep = {
-                        name = "",
-                        type = "header",
-                        order = 5,
-                    },
-                    onboardingBtn = {
-                        name = "Run Setup Walkthrough",
-                        desc = "Open the interactive first-time setup walkthrough modal (/bfq onboard).",
-                        type = "execute",
-                        order = 5.5,
-                        func = function()
-                            if ns.Onboarding and ns.Onboarding.ShowWizard then
-                                ns.Onboarding:ShowWizard()
-                            end
-                        end,
-                    },
-                    resetPosition = {
-                        name = "Reset Tracker Position",
-                        desc = "Reset the tracker to the default screen position (top-right).",
-                        type = "execute",
-                        order = 6,
-                        func = function()
-                            if ns.Tracker and ns.Tracker.ResetPosition then
-                                ns.Tracker:ResetPosition()
-                            end
-                            ns.Print("Position reset to default.")
-                        end,
-                    },
-                    resetUntrackedQuests = {
-                        name = "Reset Untracked Quests",
-                        desc = "Restores all quests that were hidden from the tracker using the right-click 'Untrack Quest' menu.",
-                        type = "execute",
-                        order = 7,
-                        func = function()
-                            if db.filtering then
-                                db.filtering.untrackedQuests = {}
-                            end
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then
-                                ns.StandaloneTracker:UpdateTracker()
-                            end
-                            ns.Print("All untracked quests have been restored to the tracker.")
-                        end,
-                    },
-                },
-            },
-            appearance = {
-                name = "Appearance",
-                type = "group",
-                order = 2,
-                childGroups = "tab",
-                args = {
-                    background = {
-                        name = "Background",
-                        type = "group",
-                        order = 1,
-                        args = {
-                            desc = {
-                                name = "Configure tracker window background surface textures, colors, and opacity.\n",
-                                type = "description",
-                                order = 0,
-                            },
-                            showBackdrop = {
-                                name = "Show Background & Backdrop",
-                                desc = "Toggle tracker background surface and backdrop visibility on or off.",
-                                type = "toggle",
-                                width = "full",
-                                order = 1,
-                                get = function() return db.backdrop.show end,
-                                set = function(_, val)
-                                    db.backdrop.show = val
-                                    ns.Tracker:UpdateBackdrop()
-                                end,
-                            },
-                            bgTexture = {
-                                name = "Background Surface Texture",
-                                desc = "Select the background surface texture for the tracker window:\n• Solid / Flat: Sleek modern dark backdrop.\n• Blizzard Tooltip Dark: Authentic dark tooltip parchment.\n• Blizzard Marble: Classic World of Warcraft marble stone.\n• Blizzard Rock: Rugged stone background.\n• Blizzard Quest Parchment: Authentic Classic quest parchment with 100% full-bleed rectangular cropping.\n• Blizzard Parchment (Clean): Seamless horizontal parchment from Blizzard achievements.",
-                                type = "select",
-                                width = "full",
-                                order = 2,
-                                disabled = function() return not db.backdrop.show end,
-                                values = {
-                                    ["solid"] = "Solid / Flat",
-                                    ["tooltip"] = "Blizzard Tooltip Dark",
-                                    ["marble"] = "Blizzard Marble",
-                                    ["rock"] = "Blizzard Rock",
-                                    ["parchment"] = "Blizzard Quest Parchment",
-                                    ["parchment_clean"] = "Blizzard Parchment (Clean)",
-                                },
-                                get = function() return db.backdrop.bgTexture or "solid" end,
-                                set = function(_, val)
-                                    local prev = db.backdrop.bgTexture or "solid"
-                                    db.backdrop.bgTexture = val
-                                    local isParchment = (val == "parchment" or val == "parchment_clean")
-                                    local wasParchment = (prev == "parchment" or prev == "parchment_clean")
-                                    if isParchment and not wasParchment then
-                                        db.backdrop.bgColor = { r = 0.96, g = 0.90, b = 0.78, a = 0.90 }
-                                    elseif not isParchment and wasParchment then
-                                        db.backdrop.bgColor = { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
-                                    end
-                                    ns.Tracker:UpdateBackdrop()
-                                    if ns.DataBarsModule and ns.DataBarsModule.RefreshBars then
-                                        ns.DataBarsModule:RefreshBars()
-                                    end
-                                end,
-                            },
-                            bgColor = {
-                                name = "Background Color & Opacity",
-                                desc = "Set tracker background backdrop color and opacity. When Parchment is selected, warm paper colors are automatically applied.",
-                                type = "color",
-                                hasAlpha = true,
-                                width = "full",
-                                order = 3,
-                                disabled = function() return not db.backdrop.show end,
-                                get = function()
-                                    local c = db.backdrop.bgColor or { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
-                                    return c.r, c.g, c.b, c.a
-                                end,
-                                set = function(_, r, g, b, a)
-                                    db.backdrop.bgColor = { r = r, g = g, b = b, a = a }
-                                    ns.Tracker:UpdateBackdrop()
-                                end,
-                            },
-                            bgHexInput = {
-                                name = "Background Hex Code (e.g. #000000)",
-                                desc = "Enter a 6-digit hex color code (such as #000000 for pure black) and press Enter.",
-                                type = "input",
-                                order = 3.2,
-                                disabled = function() return not db.backdrop.show end,
-                                get = function()
-                                    local c = db.backdrop.bgColor or { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
-                                    return string.format("#%02X%02X%02X", math.floor((c.r or 0) * 255 + 0.5), math.floor((c.g or 0) * 255 + 0.5), math.floor((c.b or 0) * 255 + 0.5))
-                                end,
-                                set = function(_, val)
-                                    local raw = (val or ""):gsub("%s+", ""):gsub("^#", "")
-                                    if #raw == 3 then
-                                        raw = raw:sub(1, 1):rep(2) .. raw:sub(2, 2):rep(2) .. raw:sub(3, 3):rep(2)
-                                    end
-                                    if #raw == 6 then
-                                        local rHex = tonumber(raw:sub(1, 2), 16)
-                                        local gHex = tonumber(raw:sub(3, 4), 16)
-                                        local bHex = tonumber(raw:sub(5, 6), 16)
-                                        if rHex and gHex and bHex then
-                                            local curA = (db.backdrop.bgColor and db.backdrop.bgColor.a) or 0.65
-                                            db.backdrop.bgColor = { r = rHex / 255, g = gHex / 255, b = bHex / 255, a = curA }
-                                            ns.Tracker:UpdateBackdrop()
-                                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                                        end
-                                    end
-                                end,
-                            },
-                            pureBlackBg = {
-                                name = "Pure Black (#000000 - High Contrast)",
-                                desc = "Instantly set the background to solid pitch black (#000000) with 100% opacity for maximum contrast and readability.",
-                                type = "execute",
-                                order = 3.5,
-                                disabled = function() return not db.backdrop.show end,
-                                func = function()
-                                    db.backdrop.bgTexture = "solid"
-                                    db.backdrop.bgColor = { r = 0, g = 0, b = 0, a = 1.0 }
-                                    ns.Tracker:UpdateBackdrop()
-                                    if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                                end,
-                            },
-                            resetBgColor = {
-                                name = "Reset Background Color to Default",
-                                desc = "Reset the background color and opacity to default.",
-                                type = "execute",
-                                width = "full",
-                                order = 4,
-                                disabled = function() return not db.backdrop.show end,
-                                func = function()
-                                    if db.backdrop.bgTexture == "parchment" or db.backdrop.bgTexture == "parchment_clean" then
-                                        db.backdrop.bgColor = { r = 0.96, g = 0.90, b = 0.78, a = 0.90 }
-                                    else
-                                        db.backdrop.bgColor = { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
-                                    end
-                                    ns.Tracker:UpdateBackdrop()
-                                end,
-                            },
-                            textureNotes = {
-                                name = "\n|cff00c0ffBackground & Texture Notes:|r\n• |cffffd100Solid / Flat|r: Minimalist dark glassmorphism aesthetic.\n• |cffffd100Blizzard Quest Parchment|r: Authentic Classic quest parchment automatically cropped to 100% full frame coverage.\n• |cffffd100Blizzard Parchment (Clean)|r: Modern seamless achievement parchment backdrop.\n• DataBars (XP Bar, Location Bar, Timer Bar) automatically inherit this texture and color by default unless overridden in the DataBars tab.",
-                                type = "description",
-                                order = 5,
-                            },
-                        },
-                    },
-                    borders = {
-                        name = "Borders & Spacing",
-                        type = "group",
-                        order = 2,
-                        args = {
-                            desc = {
-                                name = "Configure tracker border frame styles, corner rounding, thickness, class coloring, and module docking spacing.\n",
-                                type = "description",
-                                order = 0,
-                            },
-                            borderStyle = {
-                                name = "Border Style",
-                                desc = "Select the border frame style for the tracker window:\n• Sleek 1px: Modern flat border.\n• Blizzard Tooltip: Classic World of Warcraft rounded corner border.\n• Blizzard Dialog: Classic window border.\n• Blizzard Toast: Soft alert window border.\n• Blizzard Thin: Slim tooltip border.\n• None: Clean borderless backdrop.",
-                                type = "select",
-                                width = "full",
-                                order = 1,
-                                values = {
-                                    ["flat"] = "Sleek 1px (Modern Flat)",
-                                    ["tooltip"] = "Blizzard Tooltip (Classic Rounded)",
-                                    ["dialog"] = "Blizzard Dialog (Classic Window)",
-                                    ["toast"] = "Blizzard Toast (Soft Alert)",
-                                    ["thin"] = "Blizzard Thin (Slim Border)",
-                                    ["none"] = "None (Borderless)",
-                                },
-                                get = function() return db.backdrop.borderStyle or "flat" end,
-                                set = function(_, val)
-                                    db.backdrop.borderStyle = val
-                                    if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                                    ns.Tracker:UpdateBackdrop()
-                                    ns.Tracker:ApplyHeaderSettings()
-                                    if ns.StandaloneTracker and ns.StandaloneTracker.RequestUpdate then
-                                        ns.StandaloneTracker:RequestUpdate(true)
-                                    end
-                                end,
-                            },
-                            classColorBorder = {
-                                name = "Class-Colored Border",
-                                desc = "Automatically color the tracker border using your character's class color (e.g. green for Hunter, blue for Shaman).",
-                                type = "toggle",
-                                width = "full",
-                                order = 2,
-                                disabled = function() return db.backdrop.borderStyle == "none" end,
-                                get = function() return db.backdrop.classColorBorder or false end,
-                                set = function(_, val)
-                                    db.backdrop.classColorBorder = val
-                                    if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                                    ns.Tracker:UpdateBackdrop()
-                                    ns.Tracker:ApplyHeaderSettings()
-                                    if ns.StandaloneTracker and ns.StandaloneTracker.RequestUpdate then
-                                        ns.StandaloneTracker:RequestUpdate(true)
-                                    end
-                                end,
-                            },
-                            borderColor = {
-                                name = "Custom Border Color & Opacity",
-                                desc = "Set tracker border color and opacity (used when Class-Colored Border is disabled).",
-                                type = "color",
-                                hasAlpha = true,
-                                width = "full",
-                                order = 3,
-                                disabled = function() return db.backdrop.classColorBorder or db.backdrop.borderStyle == "none" end,
-                                get = function()
-                                    local c = db.backdrop.borderColor or { r = 0.15, g = 0.15, b = 0.15, a = 0.9 }
-                                    return c.r, c.g, c.b, c.a
-                                end,
-                                set = function(_, r, g, b, a)
-                                    db.backdrop.borderColor = { r = r, g = g, b = b, a = a }
-                                    if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                                    ns.Tracker:UpdateBackdrop()
-                                    ns.Tracker:ApplyHeaderSettings()
-                                    if ns.StandaloneTracker and ns.StandaloneTracker.RequestUpdate then
-                                        ns.StandaloneTracker:RequestUpdate(true)
-                                    end
-                                end,
-                            },
-                            borderWidth = {
-                                name = "Border Thickness (px)",
-                                desc = "Set the pixel thickness of the flat border (0 for no border, up to 5px).",
-                                type = "range",
-                                min = 0,
-                                max = 5,
-                                step = 1,
-                                bigStep = 1,
-                                width = "full",
-                                order = 4,
-                                hidden = function() return (db.backdrop.borderStyle and db.backdrop.borderStyle ~= "flat") end,
-                                get = function()
-                                    if db.backdrop and db.backdrop.borderWidth ~= nil then
-                                        return db.backdrop.borderWidth
-                                    end
-                                    return (db.backdrop and db.backdrop.edgeSize) or 1
-                                end,
-                                set = function(_, val)
-                                    db.backdrop.borderWidth = val
-                                    db.backdrop.edgeSize = val
-                                    if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                                    ns.Tracker:UpdateBackdrop()
-                                    if ns.DataBarsModule and ns.DataBarsModule.RefreshBars then
-                                        ns.DataBarsModule:RefreshBars()
-                                    end
-                                end,
-                            },
-                            edgeSize = {
-                                name = "Corner & Border Sizing (px)",
-                                desc = "Adjust edge and corner size in pixels for classic rounded borders (default: 16px).",
-                                type = "range",
-                                width = "full",
-                                min = 8,
-                                max = 24,
-                                step = 1,
-                                order = 5,
-                                hidden = function() return (not db.backdrop.borderStyle or db.backdrop.borderStyle == "flat" or db.backdrop.borderStyle == "none") end,
-                                get = function() return db.backdrop.edgeSize or 16 end,
-                                set = function(_, val)
-                                    db.backdrop.edgeSize = val
-                                    if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                                    ns.Tracker:UpdateBackdrop()
-                                end,
-                            },
-                            dockSpacing = {
-                                name = "DataBar Docking Spacing (px)",
-                                desc = "Adjust the pixel spacing between the quest tracker frame and docked DataBars (XP bar, Location bar, Quest Timer bar), as well as between stacked bars. Range: 0 (seamless edge-to-edge docking) to 5px.",
-                                type = "range",
-                                min = 0,
-                                max = 5,
-                                step = 1,
-                                bigStep = 1,
-                                width = "full",
-                                order = 6,
-                                get = function() return (db.databars and db.databars.dockSpacing) or 0 end,
-                                set = function(_, val)
-                                    db.databars = db.databars or {}
-                                    db.databars.dockSpacing = val
-                                    if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                                    if ns.DataBarsModule then ns.DataBarsModule:UpdateAllDocking() end
-                                end,
-                            },
-                        },
-                    },
-                    sizing = {
-                        name = "Window Sizing",
-                        type = "group",
-                        order = 3,
-                        args = {
-                            desc = {
-                                name = "Configure tracker frame dimensions, auto-growth height range, and display scaling.\n",
-                                type = "description",
-                                order = 0,
-                            },
-                            width = {
-                                name = "Tracker Width (px)",
-                                desc = "Set exact pixel width of the tracker frame (type px number or use slider).",
-                                type = "range",
-                                min = 180,
-                                max = 600,
-                                step = 5,
-                                bigStep = 10,
-                                width = "full",
-                                order = 1,
-                                get = function() return db.width or 280 end,
-                                set = function(_, val)
-                                    db.width = math.floor(val + 0.5)
-                                    ns.Tracker:UpdateSettings()
-                                end,
-                            },
-                            maxHeight = {
-                                name = "Grow Down Range / Max Height (px)",
-                                desc = "The tracker dynamically auto-grows down to match active quest count. If content height exceeds this value, smooth scrolling begins.",
-                                type = "range",
-                                min = 100,
-                                max = 1200,
-                                step = 10,
-                                bigStep = 25,
-                                width = "full",
-                                order = 2,
-                                get = function() return db.maxHeight or 600 end,
-                                set = function(_, val)
-                                    db.maxHeight = math.floor(val + 0.5)
-                                    ns.Tracker:UpdateSettings()
-                                end,
-                            },
-                            scale = {
-                                name = "Tracker UI Scale",
-                                desc = "Adjust overall visual scale of the tracker frame.",
-                                type = "range",
-                                min = 0.7,
-                                max = 1.5,
-                                step = 0.05,
-                                isPercent = true,
-                                width = "full",
-                                order = 3,
-                                get = function() return db.scale or 1.0 end,
-                                set = function(_, val)
-                                    db.scale = tonumber(string.format("%.2f", val))
-                                    ns.Tracker:UpdateSettings()
-                                end,
-                            },
-                            showOverlay = {
-                                name = "Show Bounds Overlay & Resize Handle",
-                                desc = "Display the on-screen blue bounding box and [Drag to Resize] handle on the tracker.",
-                                type = "toggle",
-                                width = "full",
-                                order = 4,
-                                get = function()
-                                    return ns.Tracker and ns.Tracker.IsConfigOverlayShown and ns.Tracker:IsConfigOverlayShown()
-                                end,
-                                set = function(_, val)
-                                    if val then
-                                        ns.Tracker:ShowConfigOverlay()
-                                    else
-                                        ns.Tracker:HideConfigOverlay()
-                                    end
-                                end,
-                            },
-                            sizingNote = {
-                                name = "|cff00c0ffAuto-Growth Active:|r Content dynamically auto-resizes the tracker frame, only capping and scrolling when content exceeds the Grow Down Range.",
-                                type = "description",
-                                order = 5,
-                            },
-                        },
-                    },
-                    headers = {
-                        name = "Headers & Sections",
-                        type = "group",
-                        order = 4,
-                        args = {
-                            desc = {
-                                name = "Configure tracker header bar textures, colors, counter formatting, buttons, and collapsible zone headers.\n",
-                                type = "description",
-                                order = 0,
-                            },
-                    mainHeader = {
-                        name = "Tracker Header Bar",
-                        type = "group",
-                        inline = true,
-                        order = 1,
-                        args = {
-                            texture = {
-                                name = "Background Texture",
-                                desc = "Select the background texture for the tracker header.",
-                                type = "select",
-                                order = 1,
-                                values = {
-                                    ["none"] = "None",
-                                    ["flat"] = "Flat Bar",
-                                    ["gradient"] = "Gradient Bar",
-                                    ["blizzard"] = "Blizzard Objective Header",
-                                },
-                                get = function() return db.headers and db.headers.texture or "flat" end,
-                                set = function(_, val)
-                                    db.headers = db.headers or {}
-                                    db.headers.texture = val
-                                    ns.Tracker:ApplyHeaderSettings()
-                                end,
-                            },
-                            textureColor = {
-                                name = "Background Color",
-                                desc = "Sets the color and opacity of the header background texture.",
-                                type = "color",
-                                hasAlpha = true,
-                                order = 2,
-                                disabled = function()
-                                    return ((db.headers and db.headers.texture == "none") or (db.headers and db.headers.textureColorShare))
-                                end,
-                                get = function()
-                                    local c = (db.headers and db.headers.textureColor) or { r = 0.05, g = 0.08, b = 0.12, a = 0.85 }
-                                    return c.r, c.g, c.b, c.a
-                                end,
-                                set = function(_, r, g, b, a)
-                                    db.headers = db.headers or {}
-                                    db.headers.textureColor = { r = r, g = g, b = b, a = a }
-                                    ns.Tracker:ApplyHeaderSettings()
-                                end,
-                            },
-                            textureColorShare = {
-                                name = "Use Border Color",
-                                desc = "Share the header texture color with the tracker frame's border color.",
-                                type = "toggle",
-                                order = 3,
-                                disabled = function()
-                                    return (db.headers and db.headers.texture == "none")
-                                end,
-                                get = function() return db.headers and db.headers.textureColorShare end,
-                                set = function(_, val)
-                                    db.headers = db.headers or {}
-                                    db.headers.textureColorShare = val
-                                    ns.Tracker:ApplyHeaderSettings()
-                                end,
-                            },
-                            sepText = {
-                                name = "",
-                                type = "header",
-                                order = 4,
-                            },
-                            textColor = {
-                                name = "Header Text Color",
-                                desc = "Sets the color of the header title text. (Defaults to your Class Color)",
-                                type = "color",
-                                order = 5,
-                                disabled = function()
-                                    return db.headers and db.headers.textColorShare
-                                end,
-                                get = function()
-                                    local c = (db.headers and db.headers.textColor) or (ns.GetClassColor and ns.GetClassColor()) or { r = 0.0, g = 0.75, b = 1.0 }
-                                    return c.r, c.g, c.b
-                                end,
-                                set = function(_, r, g, b)
-                                    db.headers = db.headers or {}
-                                    db.headers.textColor = { r = r, g = g, b = b }
-                                    ns.Tracker:ApplyHeaderSettings()
-                                end,
-                            },
-                            resetTextColor = {
-                                name = "Reset to Class Color",
-                                desc = "Reset the header text color back to your class color default.",
-                                type = "execute",
-                                order = 5.5,
-                                disabled = function()
-                                    return (db.headers and db.headers.textColorShare) or (db.headers and db.headers.textColor == nil)
-                                end,
-                                func = function()
-                                    if db.headers then
-                                        db.headers.textColor = nil
-                                    end
-                                    ns.Tracker:ApplyHeaderSettings()
-                                end,
-                            },
-                            textColorShare = {
-                                name = "Use Border Color",
-                                desc = "Share the header text color with the tracker frame's border color.",
-                                type = "toggle",
-                                order = 6,
-                                get = function() return db.headers and db.headers.textColorShare end,
-                                set = function(_, val)
-                                    db.headers = db.headers or {}
-                                    db.headers.textColorShare = val
-                                    ns.Tracker:ApplyHeaderSettings()
-                                end,
-                            },
-                            sepButtons = {
-                                name = "",
-                                type = "header",
-                                order = 7,
-                            },
-                            buttonColor = {
-                                name = "Header Buttons Color",
-                                desc = "Sets the color of all tracker header buttons ([Log], [Zone], [All], [...], [-]). (Defaults to your Class Color)",
-                                type = "color",
-                                order = 8,
-                                disabled = function()
-                                    return db.headers and db.headers.buttonColorShare
-                                end,
-                                get = function()
-                                    local c = (db.headers and db.headers.buttonColor) or (ns.GetClassColor and ns.GetClassColor()) or { r = 0.0, g = 0.75, b = 1.0 }
-                                    return c.r, c.g, c.b
-                                end,
-                                set = function(_, r, g, b)
-                                    db.headers = db.headers or {}
-                                    db.headers.buttonColor = { r = r, g = g, b = b }
-                                    ns.Tracker:ApplyHeaderSettings()
-                                end,
-                            },
-                            resetButtonColor = {
-                                name = "Reset to Class Color",
-                                desc = "Reset the header buttons color back to your class color default.",
-                                type = "execute",
-                                order = 8.5,
-                                disabled = function()
-                                    return (db.headers and db.headers.buttonColorShare) or (db.headers and db.headers.buttonColor == nil)
-                                end,
-                                func = function()
-                                    if db.headers then
-                                        db.headers.buttonColor = nil
-                                    end
-                                    ns.Tracker:ApplyHeaderSettings()
-                                end,
-                            },
-                            buttonColorShare = {
-                                name = "Use Border Color",
-                                desc = "Share the header button colors with the tracker frame's border color.",
-                                type = "toggle",
-                                order = 9,
-                                get = function() return db.headers and db.headers.buttonColorShare end,
-                                set = function(_, val)
-                                    db.headers = db.headers or {}
-                                    db.headers.buttonColorShare = val
-                                    ns.Tracker:ApplyHeaderSettings()
-                                end,
-                            },
-                            sepFormats = {
-                                name = "",
-                                type = "header",
-                                order = 10,
-                            },
-                            countFormat = {
-                                name = "Quest Counter Format",
-                                desc = "Format of the quest capacity counter displayed in the header.",
-                                type = "select",
-                                order = 11,
-                                values = {
-                                    ["none"] = "None",
-                                    ["short"] = "(5/40) - Short",
-                                    ["full"] = "(5/40 Quests) - Full",
-                                },
-                                get = function() return db.headers and db.headers.countFormat or "short" end,
-                                set = function(_, val)
-                                    db.headers = db.headers or {}
-                                    db.headers.countFormat = val
-                                    if ns.StandaloneTracker then ns.StandaloneTracker:UpdateTracker() end
-                                end,
-                            },
-                            collapsedText = {
-                                name = "Collapsed Tracker Text",
-                                desc = "What text to display on the tracker header when collapsed.",
-                                type = "select",
-                                order = 12,
-                                values = {
-                                    ["none"] = "None (Minimal [+])",
-                                    ["counter"] = "Counter Only",
-                                    ["title"] = "Title & Counter",
-                                },
-                                get = function() return db.headers and db.headers.collapsedText or "counter" end,
-                                set = function(_, val)
-                                    db.headers = db.headers or {}
-                                    db.headers.collapsedText = val
-                                    if ns.Tracker.isCollapsed then
-                                        ns.Tracker:ApplyHeaderSettings()
-                                    end
-                                end,
-                            },
-                            sepToggles = {
-                                name = "Header Buttons Visibility",
-                                type = "header",
-                                order = 13,
-                            },
-                            showQuestLogBtn = {
-                                name = "Show Quest Log Button [Log]",
-                                desc = "Display the [Log] button on the header to quickly open or close your Quest Log.",
-                                type = "toggle",
-                                width = "full",
-                                order = 14,
-                                get = function() return not (db.headers and db.headers.showQuestLogBtn == false) end,
-                                set = function(_, val)
-                                    db.headers = db.headers or {}
-                                    db.headers.showQuestLogBtn = val
-                                    ns.Tracker:ApplyHeaderSettings()
-                                end,
-                            },
-                            showZoneBtn = {
-                                name = "Show Zone Filter Button [Zone]",
-                                desc = "Display the [Zone] filter toggle button on the header.",
-                                type = "toggle",
-                                width = "full",
-                                order = 15,
-                                get = function() return not (db.headers and db.headers.showZoneBtn == false) end,
-                                set = function(_, val)
-                                    db.headers = db.headers or {}
-                                    db.headers.showZoneBtn = val
-                                    ns.Tracker:ApplyHeaderSettings()
-                                end,
-                            },
-                            showAllBtn = {
-                                name = "Show All Quests Filter Button [All]",
-                                desc = "Display the [All] filter toggle button on the header.",
-                                type = "toggle",
-                                width = "full",
-                                order = 16,
-                                get = function() return not (db.headers and db.headers.showAllBtn == false) end,
-                                set = function(_, val)
-                                    db.headers = db.headers or {}
-                                    db.headers.showAllBtn = val
-                                    ns.Tracker:ApplyHeaderSettings()
-                                end,
-                            },
-                            showMenuBtn = {
-                                name = "Show Quick Menu Button [...]",
-                                desc = "Display the [...] quick options menu button on the header.",
-                                type = "toggle",
-                                width = "full",
-                                order = 17,
-                                get = function() return not (db.headers and db.headers.showMenuBtn == false) end,
-                                set = function(_, val)
-                                    db.headers = db.headers or {}
-                                    db.headers.showMenuBtn = val
-                                    ns.Tracker:ApplyHeaderSettings()
-                                end,
-                            },
-                            showCollapseBtn = {
-                                name = "Show Collapse Button [-]",
-                                desc = "Display the [-]/[+] button to collapse or expand the tracker.",
-                                type = "toggle",
-                                width = "full",
-                                order = 18,
-                                get = function() return not (db.headers and db.headers.showCollapseBtn == false) end,
-                                set = function(_, val)
-                                    db.headers = db.headers or {}
-                                    db.headers.showCollapseBtn = val
-                                    ns.Tracker:ApplyHeaderSettings()
-                                end,
-                            },
-                        },
-                    },
-                    zoneHeaders = {
-                        name = "Zone / Section Headers",
-                        type = "group",
-                        inline = true,
-                        order = 2,
-                        args = {
-                            showZoneHeaders = {
-                                name = "Group Quests by Zone",
-                                desc = "Organize quests under collapsible zone headers (e.g. [-] Durotar (3)).",
-                                type = "toggle",
-                                width = "full",
-                                order = 1,
-                                get = function() return not (db.headers and db.headers.showZoneHeaders == false) end,
-                                set = function(_, val)
-                                    db.headers = db.headers or {}
-                                    db.headers.showZoneHeaders = val
-                                    ns:FireCallback("QUEST_DATA_CHANGED")
-                                end,
-                            },
-                            showZoneCount = {
-                                name = "Show Quest Count in Zone Header",
-                                desc = "Display the number of active quests in each zone header (e.g. (3)).",
-                                type = "toggle",
-                                width = "full",
-                                order = 2,
-                                disabled = function() return db.headers and db.headers.showZoneHeaders == false end,
-                                get = function() return not (db.headers and db.headers.showZoneCount == false) end,
-                                set = function(_, val)
-                                    db.headers = db.headers or {}
-                                    db.headers.showZoneCount = val
-                                    ns:FireCallback("QUEST_DATA_CHANGED")
-                                end,
-                            },
-                            zoneHeaderTexture = {
-                                name = "Zone Header Texture",
-                                desc = "Select the background texture for zone headers.",
-                                type = "select",
-                                order = 3,
-                                disabled = function() return db.headers and db.headers.showZoneHeaders == false end,
-                                values = {
-                                    ["none"] = "None",
-                                    ["flat"] = "Flat Bar",
-                                    ["gradient"] = "Gradient Bar",
-                                    ["blizzard"] = "Blizzard Header",
-                                },
-                                get = function() return db.headers and db.headers.zoneHeaderTexture or "gradient" end,
-                                set = function(_, val)
-                                    db.headers = db.headers or {}
-                                    db.headers.zoneHeaderTexture = val
-                                    ns:FireCallback("QUEST_DATA_CHANGED")
-                                end,
-                            },
-                            zoneHeaderColor = {
-                                name = "Zone Header Color",
-                                desc = "Sets the color of zone headers.",
-                                type = "color",
-                                order = 4,
-                                disabled = function()
-                                    return (db.headers and (db.headers.showZoneHeaders == false or db.headers.zoneHeaderColorShare))
-                                end,
-                                get = function()
-                                    local c = (db.headers and db.headers.zoneHeaderColor) or { r = 1.0, g = 0.82, b = 0.0 }
-                                    return c.r, c.g, c.b
-                                end,
-                                set = function(_, r, g, b)
-                                    db.headers = db.headers or {}
-                                    db.headers.zoneHeaderColor = { r = r, g = g, b = b, a = 1.0 }
-                                    ns:FireCallback("QUEST_DATA_CHANGED")
-                                end,
-                            },
-                            zoneHeaderColorShare = {
-                                name = "Use Border Color",
-                                desc = "Share the zone header color with the tracker frame's border color.",
-                                type = "toggle",
-                                order = 5,
-                                disabled = function() return db.headers and db.headers.showZoneHeaders == false end,
-                                get = function() return db.headers and db.headers.zoneHeaderColorShare end,
-                                set = function(_, val)
-                                    db.headers = db.headers or {}
-                                    db.headers.zoneHeaderColorShare = val
-                                    ns:FireCallback("QUEST_DATA_CHANGED")
-                                end,
-                            },
-                            zoneCollapseIcon = {
-                                name = "Collapse Indicator Shape",
-                                desc = "Select the icon or shape shown next to zone header names to indicate collapse/expand status.",
-                                type = "select",
-                                order = 5.5,
-                                disabled = function() return db.headers and db.headers.showZoneHeaders == false end,
-                                values = {
-                                    ["arrow"] = "Triangle / Arrow",
-                                    ["plusminus"] = "Plus / Minus ([-] / [+])",
-                                    ["none"] = "None (Hide Indicator)",
-                                },
-                                get = function() return (db.headers and db.headers.zoneCollapseIcon) or "arrow" end,
-                                set = function(_, val)
-                                    db.headers = db.headers or {}
-                                    db.headers.zoneCollapseIcon = val
-                                    ns:FireCallback("QUEST_DATA_CHANGED")
-                                end,
-                            },
-                            zoneCollapseIconColor = {
-                                name = "Indicator Shape Color",
-                                desc = "Custom color for the collapse indicator shape (defaults to zone header text color if unlinked).",
-                                type = "color",
-                                hasAlpha = true,
-                                order = 5.6,
-                                disabled = function() return db.headers and (db.headers.showZoneHeaders == false or db.headers.zoneCollapseIcon == "none") end,
-                                get = function()
-                                    local c = (db.headers and db.headers.zoneCollapseIconColor) or (db.headers and db.headers.zoneTextColor) or (db.headers and db.headers.zoneHeaderColor) or { r = 1.0, g = 0.82, b = 0.0, a = 1.0 }
-                                    return c.r, c.g, c.b, c.a or 1.0
-                                end,
-                                set = function(_, r, g, b, a)
-                                    db.headers = db.headers or {}
-                                    db.headers.zoneCollapseIconColor = { r = r, g = g, b = b, a = a or 1.0 }
-                                    ns:FireCallback("QUEST_DATA_CHANGED")
-                                end,
-                            },
-                            sepActions = {
-                                name = "",
-                                type = "header",
-                                order = 6,
-                            },
-                            expandAllZones = {
-                                name = "Expand All Zones",
-                                desc = "Expand all collapsed zone sections.",
-                                type = "execute",
-                                order = 7,
-                                disabled = function() return db.headers and db.headers.showZoneHeaders == false end,
-                                func = function()
-                                    db.collapsedZones = {}
-                                    ns:FireCallback("QUEST_DATA_CHANGED")
-                                end,
-                            },
-                            collapseAllZones = {
-                                name = "Collapse All Zones",
-                                desc = "Collapse all zone sections.",
-                                type = "execute",
-                                order = 8,
-                                disabled = function() return db.headers and db.headers.showZoneHeaders == false end,
-                                func = function()
-                                    if ns.StandaloneTracker and ns.StandaloneTracker.GetTrackedQuests then
-                                        db.collapsedZones = db.collapsedZones or {}
-                                        local quests = ns.StandaloneTracker:GetTrackedQuests()
-                                        for _, q in ipairs(quests) do
-                                            local z = q.zone or "Other Quests"
-                                            db.collapsedZones[z] = true
-                                        end
-                                        ns:FireCallback("QUEST_DATA_CHANGED")
-                                    end
-                                end
-                            },
-                        },
-                    },
-                    questHeaders = {
-                        name = "Quest Titles & Headers",
-                        type = "group",
-                        inline = true,
-                        order = 3,
-                        args = {
-                            colorDifficulty = {
-                                name = "Color Quest Headers by Difficulty",
-                                desc = "Color quest headers and titles according to their difficulty relative to your level (Red, Orange, Yellow, Green, Gray).",
-                                type = "toggle",
-                                width = "full",
-                                order = 1,
-                                get = function() return db.fonts and db.fonts.colorDifficulty ~= false end,
-                                set = function(_, val)
-                                    db.fonts = db.fonts or {}
-                                    db.fonts.colorDifficulty = val
-                                    ns:FireCallback("QUEST_DATA_CHANGED")
-                                end,
-                            },
-                            showCompleteIcon = {
-                                name = "Show Complete Icon (?) on Finished Quests",
-                                desc = "Display the Blizzard gold question mark (?) in front of quests that are ready for turn-in.",
-                                type = "toggle",
-                                width = "full",
-                                order = 2,
-                                get = function() return not (db.headers and db.headers.showCompleteIcon == false) end,
-                                set = function(_, val)
-                                    db.headers = db.headers or {}
-                                    db.headers.showCompleteIcon = val
-                                    ns:FireCallback("QUEST_DATA_CHANGED")
-                                end,
-                            },
-                            completedQuestBg = {
-                                name = "Completed Quest Background Tint",
-                                desc = "Display a subtle background tint behind quests that are ready for turn-in.",
-                                type = "toggle",
-                                width = "full",
-                                order = 2.1,
-                                get = function() return not (db.fonts and db.fonts.completedQuestBg == false) end,
-                                set = function(_, val)
-                                    db.fonts = db.fonts or {}
-                                    db.fonts.completedQuestBg = val
-                                    ns:FireCallback("QUEST_DATA_CHANGED")
-                                end,
-                            },
-                            completedQuestBgColor = {
-                                name = "Completed Background Tint Color",
-                                desc = "Color and opacity for the completed quest background tint.",
-                                type = "color",
-                                hasAlpha = true,
-                                order = 2.2,
-                                disabled = function() return db.fonts and db.fonts.completedQuestBg == false end,
-                                get = function()
-                                    local c = (db.fonts and db.fonts.completedQuestBgColor) or { r = 0.00, g = 0.80, b = 0.20, a = 0.14 }
-                                    return c.r, c.g, c.b, c.a or 0.14
-                                end,
-                                set = function(_, r, g, b, a)
-                                    db.fonts = db.fonts or {}
-                                    db.fonts.completedQuestBgColor = { r = r, g = g, b = b, a = a or 0.14 }
-                                    ns:FireCallback("QUEST_DATA_CHANGED")
-                                end,
-                            },
-                            completedTitleColorMode = {
-                                name = "Completed Quest Title Color",
-                                desc = "Choose how completed quest titles are colored (maintain level difficulty color, match turn-in green, or custom color).",
-                                type = "select",
-                                order = 2.3,
-                                values = {
-                                    ["difficulty"] = "Keep Level Difficulty Color",
-                                    ["turnin"] = "Turn-In Green",
-                                    ["custom"] = "Custom Color",
-                                },
-                                get = function() return (db.fonts and db.fonts.completedTitleColorMode) or "difficulty" end,
-                                set = function(_, val)
-                                    db.fonts = db.fonts or {}
-                                    db.fonts.completedTitleColorMode = val
-                                    ns:FireCallback("QUEST_DATA_CHANGED")
-                                end,
-                            },
-                            completedTitleCustomColor = {
-                                name = "Custom Completed Title Color",
-                                desc = "Custom title color for completed quests when 'Completed Quest Title Color' is set to Custom Color.",
-                                type = "color",
-                                order = 2.4,
-                                disabled = function() return not (db.fonts and db.fonts.completedTitleColorMode == "custom") end,
-                                get = function()
-                                    local c = (db.fonts and db.fonts.completedTitleCustomColor) or { r = 0.00, g = 1.00, b = 0.00 }
-                                    return c.r, c.g, c.b
-                                end,
-                                set = function(_, r, g, b)
-                                    db.fonts = db.fonts or {}
-                                    db.fonts.completedTitleCustomColor = { r = r, g = g, b = b }
-                                    ns:FireCallback("QUEST_DATA_CHANGED")
-                                end,
-                            },
-                            questHoverColor = {
-                                name = "Quest Hover Highlight Color",
-                                desc = "Mouseover highlight color and opacity when hovering over a quest row.",
-                                type = "color",
-                                hasAlpha = true,
-                                order = 2.5,
-                                get = function()
-                                    local c = (db.fonts and db.fonts.questHoverColor) or { r = 1.00, g = 1.00, b = 1.00, a = 0.08 }
-                                    return c.r, c.g, c.b, c.a or 0.08
-                                end,
-                                set = function(_, r, g, b, a)
-                                    db.fonts = db.fonts or {}
-                                    db.fonts.questHoverColor = { r = r, g = g, b = b, a = a or 0.08 }
-                                    if ns.StandaloneTracker and ns.StandaloneTracker.ApplyHighlightColors then ns.StandaloneTracker:ApplyHighlightColors() end
-                                end,
-                            },
-                            zoneHoverColor = {
-                                name = "Zone Hover Highlight Color",
-                                desc = "Mouseover highlight color and opacity when hovering over a zone header.",
-                                type = "color",
-                                hasAlpha = true,
-                                order = 2.6,
-                                get = function()
-                                    local c = (db.fonts and db.fonts.zoneHoverColor) or { r = 1.00, g = 0.82, b = 0.00, a = 0.12 }
-                                    return c.r, c.g, c.b, c.a or 0.12
-                                end,
-                                set = function(_, r, g, b, a)
-                                    db.fonts = db.fonts or {}
-                                    db.fonts.zoneHoverColor = { r = r, g = g, b = b, a = a or 0.12 }
-                                    if ns.StandaloneTracker and ns.StandaloneTracker.ApplyHighlightColors then ns.StandaloneTracker:ApplyHighlightColors() end
-                                end,
-                            },
-                            showQuestRewards = {
-                                name = "Show Quest Rewards in Tooltip",
-                                desc = "Show detailed quest rewards (XP, money, choice and guaranteed item rewards with quality links) when hovering over a quest title.",
-                                type = "toggle",
-                                width = "full",
-                                order = 3,
-                                get = function() return not (db.tooltips and db.tooltips.showRewards == false) end,
-                                set = function(_, val)
-                                    db.tooltips = db.tooltips or {}
-                                    db.tooltips.showRewards = val
-                                end,
-                            },
-                            showXpPercent = {
-                                name = "Show XP % Towards Current Level",
-                                desc = "Display what percentage of your current level the quest XP reward grants (e.g. 18.5% of lvl 24). Automatically hidden at maximum level.",
-                                type = "toggle",
-                                width = "full",
-                                order = 3.1,
-                                disabled = function() return db.tooltips and db.tooltips.showRewards == false end,
-                                get = function() return not (db.tooltips and db.tooltips.showXpPercent == false) end,
-                                set = function(_, val)
-                                    db.tooltips = db.tooltips or {}
-                                    db.tooltips.showXpPercent = val
-                                end,
-                            },
-                            showUsableGear = {
-                                name = "Highlight Class-Usable Gear Rewards",
-                                desc = "Add a green [Usable] tag to weapons and armor wearable by your class, and dim unusable equipment with a gray [Unusable] tag.",
-                                type = "toggle",
-                                width = "full",
-                                order = 3.2,
-                                disabled = function() return db.tooltips and db.tooltips.showRewards == false end,
-                                get = function() return not (db.tooltips and db.tooltips.showUsableGear == false) end,
-                                set = function(_, val)
-                                    db.tooltips = db.tooltips or {}
-                                    db.tooltips.showUsableGear = val
-                                end,
-                            },
-                            showBestSell = {
-                                name = "Highlight Most Valuable Choice Reward (Best Sell)",
-                                desc = "For quests with multiple reward choices (Choose One), highlight the item with the highest vendor resale price with a gold coin icon and price tag.",
-                                type = "toggle",
-                                width = "full",
-                                order = 3.3,
-                                disabled = function() return db.tooltips and db.tooltips.showRewards == false end,
-                                get = function() return not (db.tooltips and db.tooltips.showBestSell == false) end,
-                                set = function(_, val)
-                                    db.tooltips = db.tooltips or {}
-                                    db.tooltips.showBestSell = val
-                                end,
-                            },
-                            showPartyStatus = {
-                                name = "Show Party Members on Quest",
-                                desc = "Show which party members are currently on the quest when hovering over a quest in the tracker.",
-                                type = "toggle",
-                                width = "full",
-                                order = 3.4,
-                                get = function() return not (db.tooltips and db.tooltips.showPartyStatus == false) end,
-                                set = function(_, val)
-                                    db.tooltips = db.tooltips or {}
-                                    db.tooltips.showPartyStatus = val
-                                end,
-                            },
-                            showMissingParty = {
-                                name = "Show Missing Party Members",
-                                desc = "Display group members who do not currently have the quest, noting if the quest can be shared with them.",
-                                type = "toggle",
-                                width = "full",
-                                order = 3.5,
-                                disabled = function() return db.tooltips and db.tooltips.showPartyStatus == false end,
-                                get = function() return not (db.tooltips and db.tooltips.showMissingParty == false) end,
-                                set = function(_, val)
-                                    db.tooltips = db.tooltips or {}
-                                    db.tooltips.showMissingParty = val
-                                end,
-                            },
-                            classColorParty = {
-                                name = "Class Color Party Names",
-                                desc = "Format party member names in tooltips using their character class colors.",
-                                type = "toggle",
-                                width = "full",
-                                order = 3.6,
-                                disabled = function() return db.tooltips and db.tooltips.showPartyStatus == false end,
-                                get = function() return not (db.tooltips and db.tooltips.classColorParty == false) end,
-                                set = function(_, val)
-                                    db.tooltips = db.tooltips or {}
-                                    db.tooltips.classColorParty = val
-                                end,
-                            },
-                            showPartyBadge = {
-                                name = "Show Party Count Badge on Tracker",
-                                desc = "Appends a group count badge with party icon next to quest titles in the tracker when party members share the quest.",
-                                type = "toggle",
-                                width = "full",
-                                order = 3.7,
-                                get = function() return db.tooltips and db.tooltips.showPartyBadge == true end,
-                                set = function(_, val)
-                                    db.tooltips = db.tooltips or {}
-                                    db.tooltips.showPartyBadge = val
-                                    ns:FireCallback("QUEST_DATA_CHANGED")
-                                end,
-                            },
-                        },
-                    },
-                },
-                        },
-                    typography = {
-                        name = "Fonts & Typography",
-                        type = "group",
-                        order = 5,
-                        args = {
-                            desc = {
-                                name = "Customize font family (via SharedMedia), title and objective sizes, outlines, and text shadows.\n",
-                                type = "description",
-                                order = 0,
-                            },
-                    headerFont = {
-                        name = "Header & Title Font",
-                        desc = "Select the font typeface for tracker headers, zone headers, and quest titles (Default: Nata Sans Bold).",
-                        type = "select",
-                        dialogControl = "LSM30_Font",
-                        values = fontList,
-                        order = 1,
-                        get = function()
-                            return db.fonts.headerFont or db.fonts.font or "Nata Sans Bold"
-                        end,
-                        set = function(_, val)
-                            db.fonts.headerFont = val
-                            db.fonts.font = val
-                            ns.Tracker:UpdateTypography()
-                            if ns.FlushDBToGlobals then
-                                ns.FlushDBToGlobals()
-                            end
-                        end,
-                    },
-                    objectiveFont = {
-                        name = "Description & Objective Font",
-                        desc = "Select the font typeface for quest objectives, descriptions, and party progress (Default: Nata Sans Regular).",
-                        type = "select",
-                        width = "full",
-                        dialogControl = "LSM30_Font",
-                        values = fontList,
-                        order = 1.5,
-                        get = function()
-                            return db.fonts.objectiveFont or "Nata Sans Regular"
-                        end,
-                        set = function(_, val)
-                            db.fonts.objectiveFont = val
-                            ns.Tracker:UpdateTypography()
-                            if ns.FlushDBToGlobals then
-                                ns.FlushDBToGlobals()
-                            end
-                        end,
-                    },
-                    headerSize = {
-                        name = "Quest Title Size (px)",
-                        desc = "Font size in pixels for quest title headers.",
-                        type = "range",
-                        min = 9,
-                        max = 24,
-                        step = 1,
-                        order = 2,
-                        get = function() return db.fonts.headerSize or 13 end,
-                        set = function(_, val)
-                            db.fonts.headerSize = val
-                            ns.Tracker:UpdateTypography()
-                        end,
-                    },
-                    zoneHeaderSize = {
-                        name = "Zone Header Size (px)",
-                        desc = "Font size in pixels for collapsible zone headers (e.g. Westfall (3)).",
-                        type = "range",
-                        min = 9,
-                        max = 22,
-                        step = 1,
-                        order = 2.5,
-                        get = function() return db.fonts.zoneHeaderSize or 12 end,
-                        set = function(_, val)
-                            db.fonts.zoneHeaderSize = val
-                            ns.Tracker:UpdateTypography()
-                        end,
-                    },
-                    objectiveSize = {
-                        name = "Objective Text Size (px)",
-                        desc = "Font size in pixels for quest objective lines.",
-                        type = "range",
-                        min = 8,
-                        max = 20,
-                        step = 1,
-                        order = 3,
-                        get = function() return db.fonts.objectiveSize or 11 end,
-                        set = function(_, val)
-                            db.fonts.objectiveSize = val
-                            ns.Tracker:UpdateTypography()
-                        end,
-                    },
-                    menuScale = {
-                        name = "Menu & Dropdown Scale",
-                        desc = "Adjust the display scale of the right-click quest actions menu and header Tracker Options quick menu (80% - 160%).",
-                        type = "range",
-                        min = 0.8,
-                        max = 1.6,
-                        step = 0.05,
-                        order = 3.5,
-                        get = function() return (db.fonts and db.fonts.menuScale) or 1.0 end,
-                        set = function(_, val)
-                            db.fonts = db.fonts or {}
-                            db.fonts.menuScale = val
-                            if quickMenuPopup then
-                                quickMenuPopup:SetScale(val)
-                            end
-                            if DropDownList1 and DropDownList1:IsShown() then
-                                DropDownList1:SetScale(val)
-                            end
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                        end,
-                    },
-                    headerOutline = {
-                        name = "Header & Title Outline",
-                        desc = "Select the outline style applied to quest titles, zone headers, and the tracker header.",
-                        type = "select",
-                        values = fontFlags,
-                        order = 4,
-                        get = function() return db.fonts.headerOutline or "OUTLINE" end,
-                        set = function(_, val)
-                            db.fonts.headerOutline = val
-                            ns.Tracker:UpdateTypography()
-                        end,
-                    },
-                    objectiveOutline = {
-                        name = "Objective Text Outline",
-                        desc = "Select the outline style applied to quest objective lines, counts, and descriptions.",
-                        type = "select",
-                        values = fontFlags,
-                        order = 4.5,
-                        get = function() return db.fonts.objectiveOutline or "" end,
-                        set = function(_, val)
-                            db.fonts.objectiveOutline = val
-                            ns.Tracker:UpdateTypography()
-                        end,
-                    },
-                    enableTextShadow = {
-                        name = "Enable Text Drop Shadow",
-                        desc = "Render a soft, subtle drop shadow behind all tracker text for enhanced readability against transparent backdrops.",
-                        type = "toggle",
-                        order = 4.8,
-                        get = function() return db.fonts.enableTextShadow ~= false end,
-                        set = function(_, val)
-                            db.fonts.enableTextShadow = val
-                            ns.Tracker:UpdateTypography()
-                        end,
-                    },
-                    colorDifficulty = {
-                        name = "Color Quest Headers by Difficulty",
-                        desc = "Color quest headers and titles according to their difficulty relative to your level (Red, Orange, Yellow, Green, Gray).",
-                        type = "toggle",
-                        width = "full",
-                        order = 5,
-                        get = function() return db.fonts.colorDifficulty ~= false end,
-                        set = function(_, val)
-                            db.fonts.colorDifficulty = val
-                            ns:FireCallback("QUEST_DATA_CHANGED")
-                        end,
-                    },
-                    activeQuestIcon = {
-                        name = "Active Quest Marker Icon",
-                        desc = "Choose the icon displayed next to the active quest in the tracker. Hidden when inline wayfinder navigation arrows are active.",
-                        type = "select",
-                        width = "full",
-                        order = 6,
-                        hidden = function()
-                            local isWayfinderActive = (not ns.IsModuleEnabled or ns.IsModuleEnabled("wayfinder"))
-                            return isWayfinderActive and db.wayfinder and db.wayfinder.enableInlineArrow
-                        end,
-                        values = {
-                            ["star"] = "Gold Star (Blizzard)",
-                            ["arrow"] = "Gold Arrow",
-                            ["blizz"] = "Blizzard Quest Icon",
-                            ["pointer"] = "Cyan Pointer (>)",
-                            ["none"] = "None",
-                        },
-                        get = function() return db.activeQuestIcon or "star" end,
-                        set = function(_, val)
-                            db.activeQuestIcon = val
-                            ns:FireCallback("QUEST_DATA_CHANGED")
-                        end,
-                    },
-                },
-                        },
-                    presets = {
-                        name = "Visual Presets",
-                        type = "group",
-                        order = 6,
-                        args = {
-                            desc = {
-                                name = "Apply one-click visual themes to instantly configure borders, backdrops, typography, and headers.\n",
-                                type = "description",
-                                order = 0,
-                            },
-                            glassPreset = {
-                                name = "Modern Dark Glass (Default)",
-                                desc = "Clean 1px flat border, sleek semi-transparent dark backdrop, modern typography.",
-                                type = "execute",
-                                order = 1,
-                                func = function()
-                                    Config:ApplyModernGlassPreset()
-                                    ns.Print("Applied Modern Dark Glass preset.")
-                                end,
-                            },
-                            classicPreset = {
-                                name = "Classic WoW Plus",
-                                desc = "Classic World of Warcraft parchment tooltip border with gold headers and high contrast.",
-                                type = "execute",
-                                order = 2,
-                                func = function()
-                                    Config:ApplyClassicPreset()
-                                    ns.Print("Applied Classic WoW Plus preset.")
-                                end,
-                            },
-                            minimalPreset = {
-                                name = "Ultra Minimalist",
-                                desc = "Borderless flat backdrop with compact typography for maximum screen space.",
-                                type = "execute",
-                                order = 3,
-                                func = function()
-                                    Config:ApplyMinimalPreset()
-                                    ns.Print("Applied Ultra Minimalist preset.")
-                                end,
-                            },
-                        },
-                    },
-                },
-            },
-            sorting = {
-                name = "Sorting",
-                type = "group",
-                order = 3,
-                args = {
-                    desc = {
-                        name = "Choose how active quests are ordered inside the tracker.\n",
-                        type = "description",
-                        order = 0,
-                    },
-                    mode = {
-                        name = "Default Sorting Mode",
-                        type = "select",
-                        order = 1,
-                        values = {
-                            ["level"] = "By Quest Level",
-                            ["zone"] = "By Zone",
-                        },
-                        get = function() return db.sorting.mode or "level" end,
-                        set = function(_, val)
-                            db.sorting.mode = val
-                            ns:FireCallback("QUEST_DATA_CHANGED")
-                        end,
-                    },
-                    activeOnTop = {
-                        name = "Pin Active Quest to Top",
-                        desc = "Keep the active quest (★) pinned to the very top of the tracker regardless of sort order or level, ensuring it never scrolls off screen.",
-                        type = "toggle",
-                        width = "full",
-                        order = 1.5,
-                        get = function() return not (db.sorting and db.sorting.activeOnTop == false) end,
-                        set = function(_, val)
-                            db.sorting = db.sorting or {}
-                            db.sorting.activeOnTop = val
-                            ns:FireCallback("QUEST_DATA_CHANGED")
-                        end,
-                    },
-                    leftClickSetsActive = {
-                        name = "Left-Click Sets Active Quest (Move to Top)",
-                        desc = "When disabled (default), left-clicking any quest expands or collapses it in place without changing its position. When enabled, left-clicking an inactive quest promotes it to the active quest and moves it to the top.",
-                        type = "toggle",
-                        width = "full",
-                        order = 1.6,
-                        get = function() return db.sorting and db.sorting.leftClickSetsActive == true end,
-                        set = function(_, val)
-                            db.sorting = db.sorting or {}
-                            db.sorting.leftClickSetsActive = val
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then
-                                ns.StandaloneTracker:UpdateTracker()
-                            end
-                        end,
-                    },
-                    alignQuestTitles = {
-                        name = "Align Quest Titles (Uniform Column)",
-                        desc = "Align all quest titles into a neat, uniform column regardless of whether an active tracking arrow or completion icon is present. Prevents jagged row offsets.",
-                        type = "toggle",
-                        width = "full",
-                        order = 1.7,
-                        get = function() return not (db.sorting and db.sorting.alignQuestTitles == false) end,
-                        set = function(_, val)
-                            db.sorting = db.sorting or {}
-                            db.sorting.alignQuestTitles = val
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then
-                                ns.StandaloneTracker:UpdateTracker()
-                            end
-                        end,
-                    },
-                    moveCompletedToBottom = {
-                        name = "Move Completed Quests to Bottom",
-                        desc = "Place quests that are ready for turn-in at the bottom of their zone and tracker so active objectives remain visible at the top.",
-                        type = "toggle",
-                        width = "full",
-                        order = 2,
-                        get = function() return db.sorting.moveCompletedToBottom end,
-                        set = function(_, val)
-                            db.sorting.moveCompletedToBottom = val
-                            ns:FireCallback("QUEST_DATA_CHANGED")
-                        end,
-                    },
-                    showGroupTags = {
-                        name = "Show Elite / Group Badges",
-                        desc = "Display badges like [11+] for group/elite quests, [20D] for dungeon quests, and [60R] for raid quests.",
-                        type = "toggle",
-                        width = "full",
-                        order = 3,
-                        get = function() return db.sorting.showGroupTags ~= false end,
-                        set = function(_, val)
-                            db.sorting.showGroupTags = val
-                            ns:FireCallback("QUEST_DATA_CHANGED")
-                        end,
-                    },
-                },
-            },
-            modules = {
-                name = "Modules",
-                type = "group",
-                order = 4,
-                args = {
-                    desc = {
-                        name = "Enable or disable standalone modules in real time. When a module is turned off, its events, timers, and UI frames are immediately disabled without requiring a /reload.\n",
-                        type = "description",
-                        order = 0,
-                    },
-                    enableWayfinder = {
-                        name = "Wayfinder Navigation Module",
-                        desc = "3D floating HUD waypoint arrow, inline tracker mini arrows, and distance readouts.",
-                        type = "toggle",
-                        width = "full",
-                        order = 1,
-                        get = function() return ns.IsModuleEnabled("wayfinder") end,
-                        set = function(_, val)
-                            ns.SetModuleEnabled("wayfinder", val)
-                        end,
-                    },
-                    enableDataBars = {
-                        name = "DataBars Suite Module",
-                        desc = "Standalone Experience / Reputation progress bar, Location & precision coordinates header bar, and timed quest bar.",
-                        type = "toggle",
-                        width = "full",
-                        order = 2,
-                        get = function() return ns.IsModuleEnabled("databars") end,
-                        set = function(_, val)
-                            ns.SetModuleEnabled("databars", val)
-                        end,
-                    },
-                    enableQuestAutomation = {
-                        name = "Quest Automation Module",
-                        desc = "Automated quest accepting, auto-sharing with party members, and smart turn-in completion.",
-                        type = "toggle",
-                        width = "full",
-                        order = 3,
-                        get = function() return ns.IsModuleEnabled("questAutomation") end,
-                        set = function(_, val)
-                            ns.SetModuleEnabled("questAutomation", val)
-                        end,
-                    },
-                    enableQoL = {
-                        name = "Quality of Life (QoL) Module",
-                        desc = "Instant Fast Auto Loot, automatic grey/junk selling at vendors, and merchant equipment repair.",
-                        type = "toggle",
-                        width = "full",
-                        order = 4,
-                        get = function() return ns.IsModuleEnabled("qol") end,
-                        set = function(_, val)
-                            ns.SetModuleEnabled("qol", val)
-                        end,
-                    },
-                },
-            },
-            questAutomation = {
-                name = "Quest Automation",
-                type = "group",
-                order = 7,
-                hidden = function() return not ns.IsModuleEnabled("questAutomation") end,
-                args = {
-                    desc = {
-                        name = "Configure automated quest interaction options. Holding Shift temporarily pauses automation while interacting with questgivers.\n",
-                        type = "description",
-                        order = 0,
-                    },
-                    autoAcceptNPC = {
-                        name = "Auto-Accept NPC Quests",
-                        desc = "Automatically accept quests offered by friendly NPCs.",
-                        type = "toggle",
-                        width = "full",
-                        order = 1,
-                        get = function() return db.questAutomation and db.questAutomation.autoAcceptNPC end,
-                        set = function(_, val)
-                            db.questAutomation = db.questAutomation or {}
-                            db.questAutomation.autoAcceptNPC = val
-                            if db.social then db.social.autoAcceptNPC = val end
-                        end,
-                    },
-                    autoAcceptShared = {
-                        name = "Auto-Accept Shared Quests",
-                        desc = "Automatically accept quests shared by party or raid members.",
-                        type = "toggle",
-                        width = "full",
-                        order = 2,
-                        get = function() return db.questAutomation and db.questAutomation.autoAcceptShared end,
-                        set = function(_, val)
-                            db.questAutomation = db.questAutomation or {}
-                            db.questAutomation.autoAcceptShared = val
-                            if db.social then db.social.autoAcceptShared = val end
-                        end,
-                    },
-                    autoTurnIn = {
-                        name = "Auto Turn-In Quests (1 or Less Choice)",
-                        desc = "Automatically complete and turn in ready quests. Only triggers on quests with 1 or 0 reward choices (quests offering multiple choices remain open so you can select your reward upgrade).",
-                        type = "toggle",
-                        width = "full",
-                        order = 3,
-                        get = function() return db.questAutomation and db.questAutomation.autoTurnIn end,
-                        set = function(_, val)
-                            db.questAutomation = db.questAutomation or {}
-                            db.questAutomation.autoTurnIn = val
-                            if db.social then db.social.autoTurnIn = val end
-                        end,
-                    },
-                    autoShare = {
-                        name = "Auto-Share Quests",
-                        desc = "Automatically share newly accepted quests with your party when grouped.",
-                        type = "toggle",
-                        width = "full",
-                        order = 4,
-                        get = function() return db.questAutomation and db.questAutomation.autoShare end,
-                        set = function(_, val)
-                            db.questAutomation = db.questAutomation or {}
-                            db.questAutomation.autoShare = val
-                            if db.social then db.social.autoShare = val end
-                        end,
-                    },
-                    shiftBypass = {
-                        name = "Shift-Key Bypass",
-                        desc = "Holding Shift temporarily pauses automation while talking to questgivers.",
-                        type = "toggle",
-                        width = "full",
-                        order = 5,
-                        get = function() return db.questAutomation and db.questAutomation.shiftBypass ~= false end,
-                        set = function(_, val)
-                            db.questAutomation = db.questAutomation or {}
-                            db.questAutomation.shiftBypass = val
-                            if db.social then db.social.shiftBypass = val end
-                        end,
-                    },
-                },
-            },
-            qol = {
-                name = "Quality of Life",
-                type = "group",
-                order = 8,
-                hidden = function() return not ns.IsModuleEnabled("qol") end,
-                args = {
-                    desc = {
-                        name = "Streamline everyday gameplay with fast looting, automated vendor sales, and merchant equipment repairs.\n",
-                        type = "description",
-                        order = 0,
-                    },
-                    fastAutoLoot = {
-                        name = "Fast Auto Loot",
-                        desc = "Instantly and automatically loot all items from corpses and containers without delay.",
-                        type = "toggle",
-                        width = "full",
-                        order = 1,
-                        get = function()
-                            local curDB = (ns.dbObject and ns.dbObject.profile) or ns.db
-                            return curDB and curDB.qol and curDB.qol.fastAutoLoot ~= false
-                        end,
-                        set = function(_, val)
-                            local curDB = (ns.dbObject and ns.dbObject.profile) or ns.db
-                            if curDB then
-                                curDB.qol = curDB.qol or {}
-                                curDB.qol.fastAutoLoot = val
-                                if curDB.social then curDB.social.fastAutoLoot = val end
-                            end
-                            if ns.QoLModule and ns.QoLModule.UpdateLootEvents then
-                                ns.QoLModule:UpdateLootEvents()
-                            end
-                        end,
-                    },
-                    autoVendorGreys = {
-                        name = "Auto-Vendor Grey / Junk Items",
-                        desc = "Automatically sell all poor-quality (grey) junk items upon opening a merchant window.",
-                        type = "toggle",
-                        width = "full",
-                        order = 2,
-                        get = function()
-                            local curDB = (ns.dbObject and ns.dbObject.profile) or ns.db
-                            return curDB and curDB.qol and (curDB.qol.autoVendorGreys == true or curDB.qol.autoSellJunk == true)
-                        end,
-                        set = function(_, val)
-                            local curDB = (ns.dbObject and ns.dbObject.profile) or ns.db
-                            if curDB then
-                                curDB.qol = curDB.qol or {}
-                                curDB.qol.autoVendorGreys = val
-                                curDB.qol.autoSellJunk = val
-                                if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                            end
-                        end,
-                    },
-                    autoRepair = {
-                        name = "Auto-Repair Equipment",
-                        desc = "Automatically repair all damaged gear when visiting a repair merchant.",
-                        type = "toggle",
-                        width = "full",
-                        order = 3,
-                        get = function()
-                            local curDB = (ns.dbObject and ns.dbObject.profile) or ns.db
-                            return curDB and curDB.qol and curDB.qol.autoRepair == true
-                        end,
-                        set = function(_, val)
-                            local curDB = (ns.dbObject and ns.dbObject.profile) or ns.db
-                            if curDB then
-                                curDB.qol = curDB.qol or {}
-                                curDB.qol.autoRepair = val
-                            end
-                        end,
-                    },
-                    useGuildRepair = {
-                        name = "Use Guild Bank for Repairs",
-                        desc = "Attempt to use Guild Bank repair allowances if available, falling back to personal funds if unavailable.",
-                        type = "toggle",
-                        width = "full",
-                        order = 4,
-                        disabled = function()
-                            local curDB = (ns.dbObject and ns.dbObject.profile) or ns.db
-                            return not (curDB and curDB.qol and curDB.qol.autoRepair)
-                        end,
-                        get = function()
-                            local curDB = (ns.dbObject and ns.dbObject.profile) or ns.db
-                            return curDB and curDB.qol and curDB.qol.useGuildRepair == true
-                        end,
-                        set = function(_, val)
-                            local curDB = (ns.dbObject and ns.dbObject.profile) or ns.db
-                            if curDB then
-                                curDB.qol = curDB.qol or {}
-                                curDB.qol.useGuildRepair = val
-                            end
-                        end,
-                    },
-                    shiftBypass = {
-                        name = "Shift-Key Bypass",
-                        desc = "Hold Shift while opening a merchant window to temporarily pause auto-selling and auto-repairing.",
-                        type = "toggle",
-                        width = "full",
-                        order = 5,
-                        get = function()
-                            local curDB = (ns.dbObject and ns.dbObject.profile) or ns.db
-                            return curDB and curDB.qol and curDB.qol.shiftBypass ~= false
-                        end,
-                        set = function(_, val)
-                            local curDB = (ns.dbObject and ns.dbObject.profile) or ns.db
-                            if curDB then
-                                curDB.qol = curDB.qol or {}
-                                curDB.qol.shiftBypass = val
-                            end
-                        end,
-                    },
-                },
-            },
-            social = {
-                name = "Social & Audio",
-                type = "group",
-                order = 9,
-                args = {
-                    desc = {
-                        name = "Configure party chat quest announcements and audible alerts.\n",
-                        type = "description",
-                        order = 0,
-                    },
-                    announceToParty = {
-                        name = "Announce to Party Chat",
-                        desc = "Master toggle to send quest milestone messages to party chat when grouped.",
-                        type = "toggle",
-                        width = "full",
-                        order = 8,
-                        get = function() return db.social and db.social.announceToParty end,
-                        set = function(_, val)
-                            db.social = db.social or {}
-                            db.social.announceToParty = val
-                        end,
-                    },
-                    announceQuestComplete = {
-                        name = "Announce Quest Complete",
-                        desc = "Send a message to party chat when a quest is fully finished and ready for turn-in (e.g. [BFQ] The People's Militia (Complete)).",
-                        type = "toggle",
-                        width = "full",
-                        order = 8.1,
-                        disabled = function() return not (db.social and db.social.announceToParty) end,
-                        get = function() return not (db.social and db.social.announceQuestComplete == false) end,
-                        set = function(_, val)
-                            db.social = db.social or {}
-                            db.social.announceQuestComplete = val
-                        end,
-                    },
-                    announceObjectiveComplete = {
-                        name = "Announce Objective Complete",
-                        desc = "Send a message to party chat when an individual objective completes (e.g. [BFQ] The People's Militia: 15 Defias Traitors slain (Complete)).",
-                        type = "toggle",
-                        width = "full",
-                        order = 8.2,
-                        disabled = function() return not (db.social and db.social.announceToParty) end,
-                        get = function() return not (db.social and db.social.announceObjectiveComplete == false) end,
-                        set = function(_, val)
-                            db.social = db.social or {}
-                            db.social.announceObjectiveComplete = val
-                        end,
-                    },
-                    announceObjectiveProgress = {
-                        name = "Announce Objective Progress (N/X)",
-                        desc = "Send incremental objective progress updates to party chat (e.g. [BFQ] The People's Militia: Defias Traitors 5/15).",
-                        type = "toggle",
-                        width = "full",
-                        order = 8.3,
-                        disabled = function() return not (db.social and db.social.announceToParty) end,
-                        get = function() return db.social and db.social.announceObjectiveProgress == true end,
-                        set = function(_, val)
-                            db.social = db.social or {}
-                            db.social.announceObjectiveProgress = val
-                        end,
-                    },
-                    headerSound = {
-                        name = "Audio Alerts",
-                        type = "header",
-                        order = 10,
-                    },
-                    enableCompleteSound = {
-                        name = "Enable Quest Completion Sound",
-                        desc = "Play a sound effect whenever a quest is completed and ready for turn-in.",
-                        type = "toggle",
-                        width = "full",
-                        order = 11,
-                        get = function() return not db.sound or db.sound.enableCompleteSound ~= false end,
-                        set = function(_, val)
-                            db.sound = db.sound or {}
-                            db.sound.enableCompleteSound = val
-                        end,
-                    },
-                    soundChoice = {
-                        name = "Quest Complete Sound",
-                        desc = "Select which sound effect to play when a quest is ready for turn-in.",
-                        type = "select",
-                        order = 12,
-                        values = GetAceConfigCompleteSounds,
-                        get = function() return (db.sound and db.sound.soundChoice) or "peon" end,
-                        set = function(_, val)
-                            db.sound = db.sound or {}
-                            db.sound.soundChoice = val
-                            db.sound.useCustomCompleteSound = false
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                            if ns.SocialModule and ns.SocialModule.PlayPreviewSound then
-                                ns.SocialModule:PlayPreviewSound(val)
-                            end
-                        end,
-                    },
-                    completeSoundVolume = {
-                        name = "Complete Sound Volume",
-                        desc = "Adjust playback volume for quest completion audio alerts (5% to 100%).",
-                        type = "range",
-                        min = 5,
-                        max = 100,
-                        step = 5,
-                        order = 13,
-                        get = function() return (db.sound and db.sound.completeSoundVolume) or 100 end,
-                        set = function(_, val)
-                            db.sound = db.sound or {}
-                            db.sound.completeSoundVolume = val
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                            if ns.SocialModule and ns.SocialModule.PlayPreviewSound then
-                                ns.SocialModule:PlayPreviewSound(nil, nil, val)
-                            end
-                        end,
-                    },
-                    completeSoundChannel = {
-                        name = "Complete Sound Channel",
-                        desc = "Select audio channel for completion sound playback.",
-                        type = "select",
-                        order = 14,
-                        values = {
-                            Master = "Master Channel",
-                            SFX = "Sound Effects (SFX)",
-                            Ambience = "Ambience Channel",
-                        },
-                        get = function() return (db.sound and db.sound.completeSoundChannel) or "Master" end,
-                        set = function(_, val)
-                            db.sound = db.sound or {}
-                            db.sound.completeSoundChannel = val
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                        end,
-                    },
-                    previewBtn = {
-                        name = "Preview Complete Sound",
-                        desc = "Play the currently selected quest completion sound effect at the configured volume.",
-                        type = "execute",
-                        order = 15,
-                        func = function()
-                            if ns.SocialModule and ns.SocialModule.PlayPreviewSound then
-                                local c = (db.sound and db.sound.soundChoice) or "peon"
-                                local ch = (db.sound and db.sound.completeSoundChannel) or "Master"
-                                local vol = (db.sound and db.sound.completeSoundVolume) or 100
-                                ns.SocialModule:PlayPreviewSound(c, ch, vol)
-                            end
-                        end,
-                    },
-                    enableObjectiveSound = {
-                        name = "Enable Objective Progress Sound",
-                        desc = "Play a subtle sound effect when an objective makes progress or an objective requirement is met (e.g. looting 3/4 Raptor Horns).",
-                        type = "toggle",
-                        width = "full",
-                        order = 20,
-                        get = function() return not db.sound or db.sound.enableObjectiveSound ~= false end,
-                        set = function(_, val)
-                            db.sound = db.sound or {}
-                            db.sound.enableObjectiveSound = val
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                        end,
-                    },
-                    objectiveSoundChoice = {
-                        name = "Objective Progress Sound (Subtle)",
-                        desc = "Select which subtle sound effect to play when an objective progresses.",
-                        type = "select",
-                        width = "full",
-                        order = 21,
-                        values = GetAceConfigObjectiveSounds,
-                        get = function() return (db.sound and db.sound.objectiveSoundChoice) or "whisper_ping" end,
-                        set = function(_, val)
-                            db.sound = db.sound or {}
-                            db.sound.objectiveSoundChoice = val
-                            db.sound.useCustomObjectiveSound = false
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                            if ns.SocialModule and ns.SocialModule.PlayPreviewObjectiveSound then
-                                ns.SocialModule:PlayPreviewObjectiveSound(val)
-                            end
-                        end,
-                    },
-                    objectiveSoundVolume = {
-                        name = "Objective Sound Volume",
-                        desc = "Adjust playback volume for objective progress audio alerts (5% to 100%).",
-                        type = "range",
-                        min = 5,
-                        max = 100,
-                        step = 5,
-                        order = 22,
-                        get = function() return (db.sound and db.sound.objectiveSoundVolume) or 100 end,
-                        set = function(_, val)
-                            db.sound = db.sound or {}
-                            db.sound.objectiveSoundVolume = val
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                            if ns.SocialModule and ns.SocialModule.PlayPreviewObjectiveSound then
-                                ns.SocialModule:PlayPreviewObjectiveSound(nil, nil, val)
-                            end
-                        end,
-                    },
-                    objectiveSoundChannel = {
-                        name = "Objective Sound Channel",
-                        desc = "Select audio channel for objective progress sound playback.",
-                        type = "select",
-                        order = 23,
-                        values = {
-                            Master = "Master Channel",
-                            SFX = "Sound Effects (SFX)",
-                            Ambience = "Ambience Channel",
-                        },
-                        get = function() return (db.sound and db.sound.objectiveSoundChannel) or "Master" end,
-                        set = function(_, val)
-                            db.sound = db.sound or {}
-                            db.sound.objectiveSoundChannel = val
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                        end,
-                    },
-                    previewObjectiveBtn = {
-                        name = "Preview Objective Sound",
-                        desc = "Play the currently selected objective progress sound effect at the configured volume.",
-                        type = "execute",
-                        order = 24,
-                        func = function()
-                            if ns.SocialModule and ns.SocialModule.PlayPreviewObjectiveSound then
-                                local c = (db.sound and db.sound.objectiveSoundChoice) or "whisper_ping"
-                                local ch = (db.sound and db.sound.objectiveSoundChannel) or "Master"
-                                local vol = (db.sound and db.sound.objectiveSoundVolume) or 100
-                                ns.SocialModule:PlayPreviewObjectiveSound(c, ch, vol)
-                            end
-                        end,
-                    },
-                    customSoundHeader = {
-                        name = "Custom Audio Files",
-                        type = "header",
-                        order = 30,
-                    },
-                    customSoundDesc = {
-                        name = "You can use any custom .wav sound file! Place your audio files into:\n|cffffd100Interface\\AddOns\\BleakfibersQuestTracker-Forever\\Media\\Sounds\\|r\n|cffaaaaaa(Note: The WoW client must be completely restarted after adding new files to disk so the engine indexes them)|r\n\nAdd your filename below (e.g. |cfffffffffart.wav|r) or list it in |cffffffffMedia\\CustomSounds.lua|r. Loaded custom sounds will appear directly in the sound dropdowns above as |cffffd100Custom 1 (fart.wav)|r, etc.",
-                        type = "description",
-                        order = 31,
-                    },
-                    newCustomSound = {
-                        name = "Add Sound Filename",
-                        desc = "Enter the filename of a sound placed in Media\\Sounds\\ (e.g. fart.wav or cheer.wav).",
-                        type = "input",
-                        width = "double",
-                        order = 32,
-                        get = function() return Config.tempNewSoundName or "" end,
-                        set = function(_, val) Config.tempNewSoundName = val end,
-                    },
-                    addCustomSoundBtn = {
-                        name = "Add Sound",
-                        desc = "Register this sound file so it appears in the Quest Complete and Objective Progress dropdowns.",
-                        type = "execute",
-                        order = 33,
-                        func = function()
-                            local fname = Config.tempNewSoundName
-                            if fname and fname:match("%S") then
-                                local ok, res = ns.AddCustomSound(fname)
-                                if ok then
-                                    Config.tempNewSoundName = ""
-                                    local ACR = LibStub and LibStub("AceConfigRegistry-3.0", true)
-                                    if ACR then ACR:NotifyChange("BleakfiberQuestTracker") end
-                                elseif res and DEFAULT_CHAT_FRAME then
-                                    DEFAULT_CHAT_FRAME:AddMessage("|cff00c0ff[BQT]|r |cffff2020Error:|r " .. res)
-                                end
-                            end
-                        end,
-                    },
-                    manageHeader = {
-                        name = "Manage Registered Custom Sounds",
-                        type = "header",
-                        order = 34,
-                        hidden = function()
-                            local list = ns.GetCustomSoundList and ns.GetCustomSoundList()
-                            return not list or #list == 0
-                        end,
-                    },
-                    manageSelect = {
-                        name = "Select Custom Sound",
-                        desc = "Choose a registered custom sound to preview or remove.",
-                        type = "select",
-                        order = 35,
-                        width = "double",
-                        hidden = function()
-                            local list = ns.GetCustomSoundList and ns.GetCustomSoundList()
-                            return not list or #list == 0
-                        end,
-                        values = function()
-                            local t = {}
-                            local list = ns.GetCustomSoundList and ns.GetCustomSoundList()
-                            if list then
-                                for _, item in ipairs(list) do
-                                    t[item.file] = item.label .. (item.origin == "file" and " [CustomSounds.lua]" or "")
-                                end
-                            end
-                            return t
-                        end,
-                        get = function()
-                            if Config.selectedManageSound then
-                                return Config.selectedManageSound
-                            end
-                            local list = ns.GetCustomSoundList and ns.GetCustomSoundList()
-                            if list and list[1] then
-                                Config.selectedManageSound = list[1].file
-                                return list[1].file
-                            end
-                            return ""
-                        end,
-                        set = function(_, val)
-                            Config.selectedManageSound = val
-                        end,
-                    },
-                    previewManageBtn = {
-                        name = "Preview",
-                        desc = "Play this custom sound file.",
-                        type = "execute",
-                        order = 36,
-                        hidden = function()
-                            local list = ns.GetCustomSoundList and ns.GetCustomSoundList()
-                            return not list or #list == 0
-                        end,
-                        func = function()
-                            local file = Config.selectedManageSound
-                            if not file then
-                                local list = ns.GetCustomSoundList and ns.GetCustomSoundList()
-                                if list and list[1] then file = list[1].file end
-                            end
-                            if file and ns.SocialModule and ns.SocialModule.PlaySoundKey then
-                                ns.SocialModule:PlaySoundKey("custom:" .. file)
-                            end
-                        end,
-                    },
-                    removeManageBtn = {
-                        name = "Remove",
-                        desc = "Remove this sound from your registered custom sounds list (Note: sounds defined in CustomSounds.lua must be removed from that file).",
-                        type = "execute",
-                        order = 37,
-                        hidden = function()
-                            local list = ns.GetCustomSoundList and ns.GetCustomSoundList()
-                            return not list or #list == 0
-                        end,
-                        func = function()
-                            local file = Config.selectedManageSound
-                            if not file then
-                                local list = ns.GetCustomSoundList and ns.GetCustomSoundList()
-                                if list and list[1] then file = list[1].file end
-                            end
-                            if file then
-                                ns.RemoveCustomSound(file)
-                                Config.selectedManageSound = nil
-                                local ACR = LibStub and LibStub("AceConfigRegistry-3.0", true)
-                                if ACR then ACR:NotifyChange("BleakfiberQuestTracker") end
-                            end
-                        end,
-                    },
-                },
-            },
-            wayfinder = {
-                name = "Wayfinder",
-                type = "group",
-                order = 7,
-                hidden = function() return not ns.IsModuleEnabled("wayfinder") end,
-                args = {
-                    desc = {
-                        name = "Configure Wayfinder waypoint navigation, floating HUD arrow, and tracker inline directional mini-arrows.\n",
-                        type = "description",
-                        order = 0,
-                    },
-                    hudHeader = {
-                        name = "Floating HUD Waypoint Arrow",
-                        type = "header",
-                        order = 1,
-                    },
-                    enableHUDArrow = {
-                        name = "Enable Floating HUD Arrow",
-                        desc = "Show a standalone 360° rotating navigation waypoint arrow that points directly to your destination.",
-                        type = "toggle",
-                        order = 2,
-                        width = "double",
-                        get = function() return db.wayfinder and db.wayfinder.enableHUDArrow end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.enableHUDArrow = val
-                            if ns.WayfinderModule then ns.WayfinderModule:RefreshState() end
-                        end,
-                    },
-                    locked = {
-                        name = "Lock Arrow Position",
-                        desc = "Prevent dragging and moving the floating HUD arrow.",
-                        type = "toggle",
-                        order = 3,
-                        get = function() return db.wayfinder and db.wayfinder.locked end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.locked = val
-                        end,
-                    },
-                    hideInCombat = {
-                        name = "Hide Arrow in Combat",
-                        desc = "Automatically hide the floating navigation arrow while in combat to prevent screen distraction (default: On).",
-                        type = "toggle",
-                        order = 3.5,
-                        get = function() return not (db.wayfinder and db.wayfinder.hideInCombat == false) end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.hideInCombat = val
-                            if ns.WayfinderModule then ns.WayfinderModule:UpdateFrameVisibility() end
-                        end,
-                    },
-                    arrowScale = {
-                        name = "Arrow Scale",
-                        desc = "Set the display scale of the floating HUD arrow.",
-                        type = "range",
-                        order = 4,
-                        min = 0.5,
-                        max = 1.8,
-                        step = 0.05,
-                        isPercent = true,
-                        get = function() return (db.wayfinder and db.wayfinder.arrowScale) or 1.0 end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.arrowScale = val
-                            if ns.WayfinderModule then ns.WayfinderModule:ApplyHUDSettings() end
-                        end,
-                    },
-                    textDistance = {
-                        name = "HUD Text Spacing",
-                        desc = "Set the vertical distance between the floating HUD navigation arrow and destination/distance text (5px - 50px).",
-                        type = "range",
-                        order = 4.5,
-                        min = 5,
-                        max = 50,
-                        step = 1,
-                        get = function() return (db.wayfinder and db.wayfinder.textDistance) or 12 end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.textDistance = val
-                            if ns.WayfinderModule and ns.WayfinderModule.UpdateHUDTextAnchors then
-                                ns.WayfinderModule:UpdateHUDTextAnchors()
-                            end
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                        end,
-                    },
-                    showBackdrop = {
-                        name = "Show Backdrop Circle",
-                        desc = "Display a semi-transparent circular backdrop behind the floating HUD navigation arrow (default: Off).",
-                        type = "toggle",
-                        order = 5,
-                        get = function() return db.wayfinder and db.wayfinder.showBackdrop == true end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.showBackdrop = val
-                            if ns.WayfinderModule then ns.WayfinderModule:ApplyHUDSettings() end
-                        end,
-                    },
-                    arrowStyle = {
-                        name = "Arrow Style",
-                        desc = "Choose the visual design of the Wayfinder navigation arrow.",
-                        type = "select",
-                        order = 6,
-                        values = {
-                            ["auto"] = "Auto (2D Modern Minimalist)",
-                            ["minimal"] = "2D Modern Minimalist Wedge",
-                            ["3d_modern"] = "3D Perspective (Modern)",
-                            ["3d_classic"] = "3D Perspective (Classic)",
-                            ["classic"] = "2D Classic Guide Arrow",
-                        },
-                        get = function() return (db.wayfinder and db.wayfinder.arrowStyle) or "auto" end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.arrowStyle = val
-                            if ns.WayfinderModule then ns.WayfinderModule:ApplyHUDSettings() end
-                            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then
-                                ns.StandaloneTracker:UpdateTracker()
-                            end
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                        end,
-                    },
-                    showDestination = {
-                        name = "Show Destination Name",
-                        desc = "Display the destination quest, custom waypoint, or flight destination name above the distance readout.",
-                        type = "toggle",
-                        order = 6.1,
-                        get = function() return not (db.wayfinder and db.wayfinder.showDestination == false) end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.showDestination = val
-                            if ns.WayfinderModule then
-                                ns.WayfinderModule:ApplyHUDSettings()
-                                if ns.WayfinderModule.ForceImmediateUpdate then
-                                    ns.WayfinderModule:ForceImmediateUpdate()
-                                end
-                            end
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                        end,
-                    },
-                    hudTitleFormat = {
-                        name = "Destination Name Format",
-                        desc = "Choose what information is displayed above the distance readout on the floating navigation arrow.",
-                        type = "select",
-                        order = 6.15,
-                        values = {
-                            ["zone"] = "Zone Location (e.g. Westfall)",
-                            ["quest"] = "Quest Title (e.g. The People's Militia)",
-                            ["both"] = "Zone & Quest Title (e.g. Westfall - The People's Militia)",
-                        },
-                        get = function() return (db.wayfinder and db.wayfinder.hudTitleFormat) or "zone" end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.hudTitleFormat = val
-                            if ns.WayfinderModule then
-                                ns.WayfinderModule:ApplyHUDSettings()
-                                if ns.WayfinderModule.ForceImmediateUpdate then
-                                    ns.WayfinderModule:ForceImmediateUpdate()
-                                end
-                            end
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                        end,
-                    },
-                    hudTitleFontSize = {
-                        name = "Destination Text Size (px)",
-                        desc = "Font size in pixels for the destination name displayed above the distance readout.",
-                        type = "range",
-                        min = 8,
-                        max = 18,
-                        step = 1,
-                        order = 6.2,
-                        get = function() return (db.wayfinder and db.wayfinder.hudTitleFontSize) or 11 end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.hudTitleFontSize = val
-                            if ns.WayfinderModule then ns.WayfinderModule:ApplyHUDSettings() end
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                        end,
-                    },
-                    hudTitleFontOutline = {
-                        name = "Destination Text Outline",
-                        desc = "Outline style applied to the destination name above the distance readout.",
-                        type = "select",
-                        values = fontFlags,
-                        order = 6.3,
-                        get = function() return (db.wayfinder and db.wayfinder.hudTitleFontOutline) or "OUTLINE" end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.hudTitleFontOutline = val
-                            if ns.WayfinderModule then ns.WayfinderModule:ApplyHUDSettings() end
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                        end,
-                    },
-                    hudFontSize = {
-                        name = "Distance Text Size (px)",
-                        desc = "Font size in pixels for the floating HUD arrow distance readout.",
-                        type = "range",
-                        min = 8,
-                        max = 18,
-                        step = 1,
-                        order = 6.4,
-                        get = function() return (db.wayfinder and db.wayfinder.hudFontSize) or 11 end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.hudFontSize = val
-                            if ns.WayfinderModule then ns.WayfinderModule:ApplyHUDSettings() end
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                        end,
-                    },
-                    hudFontOutline = {
-                        name = "Distance Text Outline",
-                        desc = "Outline style applied to the floating HUD arrow distance readout.",
-                        type = "select",
-                        values = fontFlags,
-                        order = 6.5,
-                        get = function() return (db.wayfinder and db.wayfinder.hudFontOutline) or "OUTLINE" end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.hudFontOutline = val
-                            if ns.WayfinderModule then ns.WayfinderModule:ApplyHUDSettings() end
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                        end,
-                    },
-                    resetHUDPos = {
-                        name = "Reset Arrow Position",
-                        desc = "Reset the floating HUD arrow back to its default position above center screen.",
-                        type = "execute",
-                        order = 7,
-                        func = function()
-                            if ns.WayfinderModule and ns.WayfinderModule.hudFrame then
-                                ns.WayfinderModule.hudFrame:ClearAllPoints()
-                                ns.WayfinderModule.hudFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 160)
-                                if db.wayfinder then
-                                    db.wayfinder.hudPosition = { point = "CENTER", x = 0, y = 160 }
-                                    if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                                end
-                            end
-                        end,
-                    },
-                    previewArrow = {
-                        name = "Preview / Move Arrow",
-                        desc = "Temporarily toggle the navigation arrow on screen so you can test size, appearance, and drag it to a new location even when no waypoint is active.",
-                        type = "execute",
-                        order = 7.5,
-                        func = function()
-                            if ns.WayfinderModule then
-                                ns.WayfinderModule:TogglePreviewMode()
-                            end
-                        end,
-                    },
-                    trackerHeader = {
-                        name = "Tracker Inline Mini-Arrow",
-                        type = "header",
-                        order = 10,
-                    },
-                    enableInlineArrow = {
-                        name = "Enable Inline Tracker Mini-Arrow",
-                        desc = "Show a compact rotating directional arrow directly inside the quest tracker next to the Active Quest (★) title.",
-                        type = "toggle",
-                        order = 11,
-                        width = "double",
-                        get = function() return db.wayfinder and db.wayfinder.enableInlineArrow end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.enableInlineArrow = val
-                            if ns.WayfinderModule then ns.WayfinderModule:RefreshState() end
-                            ns:FireCallback("QUEST_DATA_CHANGED")
-                        end,
-                    },
-                    inlineArrowSize = {
-                        name = "Inline Arrow Size",
-                        desc = "Adjust the size (in pixels) of the rotating arrow embedded inside the quest tracker header (default: 22px).",
-                        type = "range",
-                        order = 12,
-                        min = 14,
-                        max = 32,
-                        step = 1,
-                        get = function() return (db.wayfinder and db.wayfinder.inlineArrowSize) or 22 end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.inlineArrowSize = val
-                            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then
-                                ns.StandaloneTracker:UpdateTracker()
-                            end
-                        end,
-                    },
-                    inlineArrowPosition = {
-                        name = "Inline Arrow Position",
-                        desc = "Choose where the rotating mini-arrow appears relative to the active quest title.",
-                        type = "select",
-                        order = 13,
-                        values = {
-                            ["left"] = "Left (In Front of Title)",
-                            ["right"] = "Right (Tracker Margin)",
-                        },
-                        get = function() return (db.wayfinder and db.wayfinder.inlineArrowPosition) or "left" end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.inlineArrowPosition = val
-                            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then
-                                ns.StandaloneTracker:UpdateTracker()
-                            end
-                        end,
-                    },
-                    behaviorHeader = {
-                        name = "Navigation & Arrival Settings",
-                        type = "header",
-                        order = 20,
-                    },
-                    autoTrackActiveQuest = {
-                        name = "Auto-Track Active Quest",
-                        desc = "Automatically point the Wayfinder arrow toward whichever quest is selected as the Active Quest (★) or SuperTracked.",
-                        type = "toggle",
-                        order = 21,
-                        width = "double",
-                        get = function() return not (db.wayfinder and db.wayfinder.autoTrackActiveQuest == false) end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.autoTrackActiveQuest = val
-                            if ns.WayfinderModule then ns.WayfinderModule:RefreshState() end
-                        end,
-                    },
-                    showDistance = {
-                        name = "Show Distance Readout",
-                        desc = "Display exact distance (e.g. 142 yd or 130 m) below the floating navigation arrow.",
-                        type = "toggle",
-                        order = 22,
-                        get = function() return not (db.wayfinder and db.wayfinder.showDistance == false) end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.showDistance = val
-                            if ns.WayfinderModule then
-                                ns.WayfinderModule:ApplyHUDSettings()
-                                if ns.WayfinderModule.ForceImmediateUpdate then
-                                    ns.WayfinderModule:ForceImmediateUpdate()
-                                end
-                            end
-                        end,
-                    },
-                    distanceUnit = {
-                        name = "Distance Unit System",
-                        desc = "Choose between Imperial (Yards & Miles) or Metric (Meters & Kilometers) for all Wayfinder navigation readouts.",
-                        type = "select",
-                        order = 22.3,
-                        values = {
-                            ["imperial"] = "Imperial (Yards / Miles)",
-                            ["metric"] = "Metric (Meters / Kilometers)",
-                        },
-                        get = function() return (db.wayfinder and db.wayfinder.distanceUnit) or "imperial" end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.distanceUnit = val
-                            if ns.WayfinderModule then
-                                ns.WayfinderModule:ApplyHUDSettings()
-                                if ns.WayfinderModule.ForceImmediateUpdate then
-                                    ns.WayfinderModule:ForceImmediateUpdate()
-                                end
-                            end
-                        end,
-                    },
-                    showETA = {
-                        name = "Show Estimated Time of Arrival (ETA)",
-                        desc = "Display a dynamic ETA countdown timer (e.g. 1m 24s) below the navigation arrow based on your current movement velocity.",
-                        type = "toggle",
-                        width = "full",
-                        order = 22.5,
-                        get = function() return db.wayfinder and db.wayfinder.showETA == true end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.showETA = val
-                        end,
-                    },
-                    showMapPins = {
-                        name = "Show World Map Waypoint Pins",
-                        desc = "Display visual pin markers on your World Map for custom waypoints.",
-                        type = "toggle",
-                        width = "full",
-                        order = 22.6,
-                        get = function() return not (db.wayfinder and db.wayfinder.showMapPins == false) end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.showMapPins = val
-                            if ns.WayfinderModule and ns.WayfinderModule.RefreshMapPins then
-                                ns.WayfinderModule:RefreshMapPins()
-                            end
-                        end,
-                    },
-                    showCoordinates = {
-                        name = "Show Player & Cursor Coordinates",
-                        desc = "Display live player and cursor map coordinates on the World Map footer.",
-                        type = "toggle",
-                        width = "full",
-                        order = 22.7,
-                        get = function() return db.wayfinder and db.wayfinder.showCoordinates == true end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.showCoordinates = val
-                            if ns.WayfinderModule and ns.WayfinderModule.UpdateCoordinatesDisplay then
-                                ns.WayfinderModule:UpdateCoordinatesDisplay()
-                            end
-                        end,
-                    },
-                    playArrivalSound = {
-                        name = "Play Arrival Sound",
-                        desc = "Play a subtle audio chime when you arrive within the arrival threshold.",
-                        type = "toggle",
-                        order = 23,
-                        get = function() return not (db.wayfinder and db.wayfinder.playArrivalSound == false) end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.playArrivalSound = val
-                        end,
-                    },
-                    arrivalThreshold = {
-                        name = "Arrival Distance (Yards)",
-                        desc = "How close you must be to the objective before the arrow triggers 'Arrived!'.",
-                        type = "range",
-                        order = 24,
-                        min = 5,
-                        max = 50,
-                        step = 1,
-                        get = function() return (db.wayfinder and db.wayfinder.arrivalThreshold) or 15 end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.arrivalThreshold = val
-                        end,
-                    },
-                    arrivalClearDelay = {
-                        name = "Arrival Auto-Clear Delay (Seconds)",
-                        desc = "How many seconds the arrow will display 'Arrived!' before automatically clearing the reached waypoint or turn-in destination (default: 5 seconds). Set to 0 to disable auto-clearing and keep the reached waypoint on screen.",
-                        type = "range",
-                        width = "full",
-                        order = 25,
-                        min = 0,
-                        max = 30,
-                        step = 1,
-                        get = function()
-                            local val = db.wayfinder and db.wayfinder.arrivalClearDelay
-                            return (val ~= nil) and val or 5
-                        end,
-                        set = function(_, val)
-                            db.wayfinder = db.wayfinder or {}
-                            db.wayfinder.arrivalClearDelay = val
-                        end,
-                    },
-                    commandsHeader = {
-                        name = "Custom Waypoint Commands",
-                        type = "header",
-                        order = 30,
-                    },
-                    cmdDesc = {
-                        name = "You can manually create waypoints anytime using standard slash commands:\n" ..
-                                "• |cffffd100/way <x> <y>|r - Place a waypoint at coordinates (e.g. |cffffffff/way 45.2 60.1|r)\n" ..
-                                "• |cffffd100/way <x> <y> <label>|r - Place a labeled waypoint (e.g. |cffffffff/way 45.2 60.1 Rare Chest|r)\n" ..
-                                "• |cffffd100/way <zone> <x> <y>|r - Place a waypoint in another zone (e.g. |cffffffff/way Elwynn Forest 42.5 61.8|r)\n" ..
-                                "• |cffffd100/cway|r - Point the arrow to the closest active waypoint\n" ..
-                                "• |cffffd100/way list|r - List all active custom waypoints in chat\n" ..
-                                "• |cffffd100/way reset|r - Clear all custom waypoints\n",
-                        type = "description",
-                        order = 31,
-                    },
-                    pointClosestBtn = {
-                        name = "Point to Closest Waypoint (/cway)",
-                        desc = "Direct the arrow to the closest active custom waypoint.",
-                        type = "execute",
-                        width = "full",
-                        order = 32,
-                        func = function()
-                            if ns.WayfinderModule then
-                                ns.WayfinderModule:SetClosestWaypoint()
-                            end
-                        end,
-                    },
-                    clearAllWaypointsBtn = {
-                        name = "Clear All Custom Waypoints",
-                        desc = "Remove all manually created custom waypoints.",
-                        type = "execute",
-                        width = "full",
-                        order = 33,
-                        func = function()
-                            if ns.WayfinderModule then
-                                ns.WayfinderModule:ClearAllCustomWaypoints()
-                            end
-                        end,
-                    },
-                },
-            },
-            databars = {
-                name = "DataBars",
-                type = "group",
-                order = 8,
-                hidden = function() return not ns.IsModuleEnabled("databars") end,
-                args = {
-                    desc = {
-                        name = "Configure the Experience & Completed Quest Log Progress Bar and the Location & Precision Coordinates Header Bar.\n",
-                        type = "description",
-                        order = 0,
-                    },
-                    hideInCombat = {
-                        name = "Hide DataBars in Combat",
-                        desc = "Automatically hide the Experience Bar and Location Bar while engaged in combat, and restore them when combat ends (disabled by default).",
-                        type = "toggle",
-                        width = "full",
-                        order = 0.5,
-                        get = function() return db.databars and db.databars.hideInCombat end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.hideInCombat = val
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    hideWithTracker = {
-                        name = "Hide DataBars When Tracker Hidden",
-                        desc = "Automatically hide all DataBars (XP Bar, Location Bar, and Quest Timer Bar) whenever the quest tracker is hidden via keybind, button, or slash command (enabled by default).",
-                        type = "toggle",
-                        width = "full",
-                        order = 0.55,
-                        get = function() return not (db.databars and db.databars.hideWithTracker == false) end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.hideWithTracker = val
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    useTrackerAppearance = {
-                        name = "Inherit Tracker Frame Appearance",
-                        desc = "When enabled, DataBars automatically share the tracker frame's background surface texture, background color & opacity, border style, corner sizing, border color, and class coloring. Turn off to configure bar appearance independently.",
-                        type = "toggle",
-                        width = "full",
-                        order = 0.6,
-                        get = function() return not (db.databars and db.databars.useTrackerAppearance == false) end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.useTrackerAppearance = val
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    dockSpacing = {
-                        name = "Docked Module Spacing",
-                        desc = "Adjust the spacing (in pixels) between the quest tracker frame and docked DataBars (XP bar, Location bar, Quest Timer bar), as well as between stacked bars. Range: 0 (seamless edge-to-edge docking) to 5px.",
-                        type = "range",
-                        min = 0,
-                        max = 5,
-                        step = 1,
-                        bigStep = 1,
-                        order = 0.7,
-                        get = function() return (db.databars and db.databars.dockSpacing) or 0 end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.dockSpacing = val
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateAllDocking() end
-                        end,
-                    },
-
-                    -- XP Bar Section
-                    xpHeader = {
-                        name = "Experience & Quest Log Progress Bar",
-                        type = "header",
-                        order = 1,
-                    },
-                    enableXPBar = {
-                        name = "Enable XP & Quest Log Progress Bar",
-                        desc = "Show a lightweight, modular XP progress bar that visualizes player XP, rested bonus, and completed quest turn-in XP.",
-                        type = "toggle",
-                        width = "full",
-                        order = 2,
-                        get = function() return db.databars and db.databars.enableXPBar end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.enableXPBar = val
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    xpDockMode = {
-                        name = "XP Bar Docking Position",
-                        desc = "Choose where to dock the XP Progress Bar:\n• Re-skin Default Bar: Replaces Blizzard's XP bar at the bottom center of your screen.\n• Dock to Tracker Bottom: Dynamically size-snaps to the bottom of the quest tracker container.\n• Free Floating: Movable anywhere on screen.",
-                        type = "select",
-                        order = 3,
-                        values = {
-                            ["default_bar"] = "Re-skin Default Bar (Screen Bottom)",
-                            ["tracker_bottom"] = "Dock to Tracker Bottom (Auto-Snap)",
-                            ["free"] = "Free Floating (Movable)",
-                        },
-                        get = function() return (db.databars and db.databars.xpDockMode) or "default_bar" end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.xpDockMode = val
-                            if ns.DataBarsModule then
-                                ns.DataBarsModule:UpdateXPDocking()
-                                ns.DataBarsModule:UpdateXPBar()
-                            end
-                        end,
-                    },
-                    hideBlizzardXPBar = {
-                        name = "Hide Blizzard Default XP Bar",
-                        desc = "Automatically hide Blizzard's default status tracking bar (StatusTrackingBarManager / MainStatusTrackingBarContainer). Live toggle without requiring /reload.",
-                        type = "toggle",
-                        width = "full",
-                        order = 4,
-                        get = function() return not (db.databars and (db.databars.hideBlizzardXPBar == false or db.databars.replaceBlizzardXP == false)) end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.hideBlizzardXPBar = val
-                            db.databars.replaceBlizzardXP = val
-                            if ns.DataBarsModule then ns.DataBarsModule:SuppressBlizzardXP(val) end
-                        end,
-                    },
-                    showCompletedQuestXP = {
-                        name = "Show Completed Quest XP (Ghost Bar)",
-                        desc = "Display a stacked overlay bar indicating how much XP you will gain when turning in all currently completed quests in your log.",
-                        type = "toggle",
-                        width = "full",
-                        order = 5,
-                        get = function() return not (db.databars and db.databars.showCompletedQuestXP == false) end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.showCompletedQuestXP = val
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateXPBar() end
-                        end,
-                    },
-                    showAllQuestXP = {
-                        name = "Show All Quests XP (Ghost Bar)",
-                        desc = "Display a stacked overlay bar indicating total XP from all active quests in your log (both in-progress and completed), filling up as you quest and level.",
-                        type = "toggle",
-                        width = "full",
-                        order = 5.5,
-                        get = function() return (db.databars and db.databars.showAllQuestXP == true) end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.showAllQuestXP = val
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateXPBar() end
-                        end,
-                    },
-                    hideQuestXPText = {
-                        name = "Hide Quest XP Text on Bar (Ghost Bars)",
-                        desc = "Hide bonus quest XP readouts (+Done and +All) from the XP progress bar. The visual ghost bars will still be drawn on the bar, and full quest XP details remain accessible on the tooltip.",
-                        type = "toggle",
-                        width = "full",
-                        order = 5.6,
-                        get = function() return (db.databars and db.databars.hideQuestXPText == true) end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.hideQuestXPText = val
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateXPBar() end
-                        end,
-                    },
-                    showDingReadyText = {
-                        name = "Show [Ding Ready!] Alert",
-                        desc = "Display an eye-catching [Ding Ready!] indicator when your completed quest turn-ins exceed the XP required to reach the next level.",
-                        type = "toggle",
-                        width = "full",
-                        order = 6,
-                        get = function() return not (db.databars and db.databars.showDingReadyText == false) end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.showDingReadyText = val
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateXPBar() end
-                        end,
-                    },
-                    showRestedXP = {
-                        name = "Show Rested XP Overlay",
-                        desc = "Show a rested XP bonus segment on the bar.",
-                        type = "toggle",
-                        order = 7,
-                        get = function() return not (db.databars and db.databars.showRestedXP == false) end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.showRestedXP = val
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateXPBar() end
-                        end,
-                    },
-                    showReputationAtMax = {
-                        name = "Show Watched Reputation at Max Level",
-                        desc = "Automatically switch the bar to display your watched faction reputation standing and progress when you reach maximum character level.",
-                        type = "toggle",
-                        width = "full",
-                        order = 8,
-                        get = function() return not (db.databars and db.databars.showReputationAtMax == false) end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.showReputationAtMax = val
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateXPBar() end
-                        end,
-                    },
-                    xpHeight = {
-                        name = "Bar Height",
-                        desc = "Height of the XP progress bar in pixels (default: 14px).",
-                        type = "range",
-                        order = 9,
-                        min = 8,
-                        max = 32,
-                        step = 1,
-                        get = function() return (db.databars and db.databars.xpHeight) or 14 end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.xpHeight = val
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateXPDocking() end
-                        end,
-                    },
-                    xpWidth = {
-                        name = "Bar Width (Default / Free Mode)",
-                        desc = "Width of the XP progress bar when placed at screen bottom or in free floating mode (default: 512px). When docked to the tracker bottom, width automatically snaps to the tracker width.",
-                        type = "range",
-                        width = "full",
-                        order = 10,
-                        min = 180,
-                        max = 900,
-                        step = 10,
-                        get = function() return (db.databars and db.databars.xpWidth) or 512 end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.xpWidth = val
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateXPDocking() end
-                        end,
-                    },
-                    xpTextFormat = {
-                        name = "Text Display Format",
-                        desc = "Choose how the XP text is formatted across the bar.",
-                        type = "select",
-                        order = 11,
-                        values = {
-                            ["smart"] = "Smart (Current / Max (Pct%) + Quest XP)",
-                            ["cur_max"] = "Current / Max",
-                            ["cur_pct"] = "Percentage (Pct%) Only",
-                            ["remain"] = "XP Remaining to Level",
-                            ["none"] = "Hide Text (Clean Bar)",
-                        },
-                        get = function() return (db.databars and db.databars.xpTextFormat) or "smart" end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.xpTextFormat = val
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateXPBar() end
-                        end,
-                    },
-                    xpFontSize = {
-                        name = "XP Text Size (px)",
-                        desc = "Font size in pixels for the XP progress bar text readout.",
-                        type = "range",
-                        min = 8,
-                        max = 18,
-                        step = 1,
-                        order = 11.1,
-                        get = function() return (db.databars and db.databars.xpFontSize) or 11 end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.xpFontSize = val
-                            if ns.DataBarsModule then ns.DataBarsModule:ApplyTypography() end
-                        end,
-                    },
-                    xpFontOutline = {
-                        name = "XP Text Outline",
-                        desc = "Outline style applied to the XP progress bar text readout.",
-                        type = "select",
-                        values = fontFlags,
-                        order = 11.2,
-                        get = function() return (db.databars and db.databars.xpFontOutline) or "OUTLINE" end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.xpFontOutline = val
-                            if ns.DataBarsModule then ns.DataBarsModule:ApplyTypography() end
-                        end,
-                    },
-                    resetXPPos = {
-                        name = "Reset Free XP Bar Position",
-                        desc = "Reset the free floating XP bar back to its default screen position.",
-                        type = "execute",
-                        order = 12,
-                        func = function()
-                            if db.databars then db.databars.xpFreePosition = nil end
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateXPDocking() end
-                        end,
-                    },
-
-                    -- XP Bar Colors
-                    xpColorHeader = {
-                        name = "XP Bar Colors",
-                        type = "header",
-                        order = 13,
-                    },
-                    xpColor = {
-                        name = "Player XP Bar Color",
-                        desc = "Color of the main player experience progress bar (default: Purple).",
-                        type = "color",
-                        hasAlpha = true,
-                        order = 14,
-                        get = function()
-                            local curDB = (ns.dbObject and ns.dbObject.profile and ns.dbObject.profile.databars) or (ns.db and ns.db.databars)
-                            local c = (curDB and curDB.xpColor) or { r = 0.58, g = 0.00, b = 0.83, a = 1.00 }
-                            return c.r, c.g, c.b, c.a or 1.00
-                        end,
-                        set = function(_, r, g, b, a)
-                            local curDB = (ns.dbObject and ns.dbObject.profile and ns.dbObject.profile.databars) or (ns.db and ns.db.databars)
-                            if not curDB then
-                                if ns.db then ns.db.databars = {} curDB = ns.db.databars end
-                            end
-                            if curDB then
-                                curDB.xpColor = { r = r, g = g, b = b, a = a }
-                            end
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateXPBar() end
-                        end,
-                    },
-                    restedColor = {
-                        name = "Rested XP Color",
-                        desc = "Color of the rested bonus XP segment (default: Blue).",
-                        type = "color",
-                        hasAlpha = true,
-                        order = 15,
-                        get = function()
-                            local curDB = (ns.dbObject and ns.dbObject.profile and ns.dbObject.profile.databars) or (ns.db and ns.db.databars)
-                            local c = (curDB and curDB.restedColor) or { r = 0.00, g = 0.44, b = 0.88, a = 1.00 }
-                            return c.r, c.g, c.b, c.a or 1.00
-                        end,
-                        set = function(_, r, g, b, a)
-                            local curDB = (ns.dbObject and ns.dbObject.profile and ns.dbObject.profile.databars) or (ns.db and ns.db.databars)
-                            if not curDB then
-                                if ns.db then ns.db.databars = {} curDB = ns.db.databars end
-                            end
-                            if curDB then
-                                curDB.restedColor = { r = r, g = g, b = b, a = a }
-                            end
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateXPBar() end
-                        end,
-                    },
-                    questXPColor = {
-                        name = "Completed Quest XP Color",
-                        desc = "Color of the completed quest turn-in ghost bar (default: Green).",
-                        type = "color",
-                        hasAlpha = true,
-                        order = 16,
-                        get = function()
-                            local curDB = (ns.dbObject and ns.dbObject.profile and ns.dbObject.profile.databars) or (ns.db and ns.db.databars)
-                            local c = (curDB and curDB.questXPColor) or { r = 0.15, g = 0.80, b = 0.45, a = 1.00 }
-                            return c.r, c.g, c.b, c.a or 1.00
-                        end,
-                        set = function(_, r, g, b, a)
-                            local curDB = (ns.dbObject and ns.dbObject.profile and ns.dbObject.profile.databars) or (ns.db and ns.db.databars)
-                            if not curDB then
-                                if ns.db then ns.db.databars = {} curDB = ns.db.databars end
-                            end
-                            if curDB then
-                                curDB.questXPColor = { r = r, g = g, b = b, a = a }
-                            end
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateXPBar() end
-                        end,
-                    },
-                    allQuestXPColor = {
-                        name = "All Quests XP Color",
-                        desc = "Color of the all active quests ghost bar (default: Darker Green 80% opacity).",
-                        type = "color",
-                        hasAlpha = true,
-                        order = 16.5,
-                        get = function()
-                            local curDB = (ns.dbObject and ns.dbObject.profile and ns.dbObject.profile.databars) or (ns.db and ns.db.databars)
-                            local c = (curDB and curDB.allQuestXPColor) or { r = 0.12, g = 0.45, b = 0.25, a = 0.80 }
-                            return c.r, c.g, c.b, c.a or 0.80
-                        end,
-                        set = function(_, r, g, b, a)
-                            local curDB = (ns.dbObject and ns.dbObject.profile and ns.dbObject.profile.databars) or (ns.db and ns.db.databars)
-                            if not curDB then
-                                if ns.db then ns.db.databars = {} curDB = ns.db.databars end
-                            end
-                            if curDB then
-                                curDB.allQuestXPColor = { r = r, g = g, b = b, a = a }
-                            end
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateXPBar() end
-                        end,
-                    },
-                    dingReadyColor = {
-                        name = "Ding Ready Alert Color",
-                        desc = "Color of the quest XP bar when turn-ins exceed level requirement (default: Gold).",
-                        type = "color",
-                        hasAlpha = true,
-                        order = 17,
-                        get = function()
-                            local curDB = (ns.dbObject and ns.dbObject.profile and ns.dbObject.profile.databars) or (ns.db and ns.db.databars)
-                            local c = (curDB and curDB.dingReadyColor) or { r = 1.00, g = 0.82, b = 0.00, a = 1.00 }
-                            return c.r, c.g, c.b, c.a or 1.00
-                        end,
-                        set = function(_, r, g, b, a)
-                            local curDB = (ns.dbObject and ns.dbObject.profile and ns.dbObject.profile.databars) or (ns.db and ns.db.databars)
-                            if not curDB then
-                                if ns.db then ns.db.databars = {} curDB = ns.db.databars end
-                            end
-                            if curDB then
-                                curDB.dingReadyColor = { r = r, g = g, b = b, a = a }
-                            end
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateXPBar() end
-                        end,
-                    },
-                    resetXPColors = {
-                        name = "Reset XP Colors to Default",
-                        desc = "Reset all XP bar colors back to defaults (Purple XP, Blue Rested, Lighter Green Completed Quests, Darker Green All Quests, Gold Ding Ready).",
-                        type = "execute",
-                        order = 18,
-                        func = function()
-                            local curDB = (ns.dbObject and ns.dbObject.profile and ns.dbObject.profile.databars) or (ns.db and ns.db.databars)
-                            if not curDB then
-                                if ns.db then ns.db.databars = {} curDB = ns.db.databars end
-                            end
-                            if curDB then
-                                curDB.xpBgColor = { r = 0.00, g = 0.00, b = 0.00, a = 0.00 }
-                                curDB.xpColor = { r = 0.58, g = 0.00, b = 0.83, a = 1.00 }
-                                curDB.restedColor = { r = 0.00, g = 0.44, b = 0.88, a = 1.00 }
-                                curDB.questXPColor = { r = 0.25, g = 0.85, b = 0.45, a = 0.65 }
-                                curDB.allQuestXPColor = { r = 0.12, g = 0.45, b = 0.25, a = 0.80 }
-                                curDB.dingReadyColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 }
-                            end
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateXPBar() end
-                            print("|cff00c0ff[Bleakfiber Tracker]|r XP bar colors have been reset to defaults.")
-                        end,
-                    },
-                    xpBorderStyle = {
-                        name = "XP Bar Border Style",
-                        desc = "Select border frame style for the XP progress bar (Inherited from tracker frame when Inherit Tracker Frame Appearance is enabled).",
-                        type = "select",
-                        order = 18.1,
-                        disabled = function() return not (db.databars and db.databars.useTrackerAppearance == false) end,
-                        values = barBorderStyles,
-                        get = function()
-                            if not (db.databars and db.databars.useTrackerAppearance == false) then
-                                return (db.backdrop and db.backdrop.borderStyle) or "flat"
-                            end
-                            return (db.databars and db.databars.xpBorderStyle) or "flat"
-                        end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.xpBorderStyle = val
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    xpBarTexture = {
-                        name = "XP Statusbar Texture",
-                        desc = "Select texture pattern for the XP progress bar.",
-                        type = "select",
-                        order = 18.2,
-                        values = GetStatusbarTextureList,
-                        get = function() return (db.databars and db.databars.xpBarTexture) or "Solid" end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.xpBarTexture = val
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    xpBgTexture = {
-                        name = "XP Base / Background Texture",
-                        desc = "Select the background surface texture behind the XP progress bar (Inherited from tracker frame when Inherit Tracker Frame Appearance is enabled).",
-                        type = "select",
-                        order = 18.25,
-                        disabled = function() return not (db.databars and db.databars.useTrackerAppearance == false) end,
-                        values = {
-                            ["solid"] = "Solid / Flat",
-                            ["tooltip"] = "Blizzard Tooltip Dark",
-                            ["marble"] = "Blizzard Marble",
-                            ["rock"] = "Blizzard Rock",
-                            ["parchment"] = "Blizzard Quest Parchment",
-                            ["parchment_clean"] = "Blizzard Parchment (Clean)",
-                        },
-                        get = function()
-                            if not (db.databars and db.databars.useTrackerAppearance == false) then
-                                return (db.backdrop and db.backdrop.bgTexture) or "solid"
-                            end
-                            return (db.databars and db.databars.xpBgTexture) or "solid"
-                        end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            local prev = db.databars.xpBgTexture or "solid"
-                            db.databars.xpBgTexture = val
-                            local isParchment = (val == "parchment" or val == "parchment_clean")
-                            local wasParchment = (prev == "parchment" or prev == "parchment_clean")
-                            if isParchment and not wasParchment then
-                                db.databars.xpBgColor = { r = 0.96, g = 0.90, b = 0.78, a = 0.90 }
-                            elseif not isParchment and wasParchment then
-                                db.databars.xpBgColor = { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
-                            end
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    xpBgColor = {
-                        name = "XP Base / Background Color & Opacity",
-                        desc = "Set the background backdrop color and opacity behind the XP bar (Inherited from tracker frame when Inherit Tracker Frame Appearance is enabled).",
-                        type = "color",
-                        hasAlpha = true,
-                        order = 18.3,
-                        disabled = function() return not (db.databars and db.databars.useTrackerAppearance == false) end,
-                        get = function()
-                            if not (db.databars and db.databars.useTrackerAppearance == false) then
-                                local c = (db.backdrop and db.backdrop.bgColor) or { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
-                                return c.r, c.g, c.b, c.a or 0.65
-                            end
-                            local c = (db.databars and db.databars.xpBgColor) or { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
-                            return c.r, c.g, c.b, c.a or 0.65
-                        end,
-                        set = function(_, r, g, b, a)
-                            db.databars = db.databars or {}
-                            db.databars.xpBgColor = { r = r, g = g, b = b, a = a }
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    xpBorderColor = {
-                        name = "XP Border Color & Opacity",
-                        desc = "Set the border color and opacity around the XP bar (Inherited from tracker frame when Inherit Tracker Frame Appearance is enabled).",
-                        type = "color",
-                        hasAlpha = true,
-                        order = 18.4,
-                        disabled = function() return not (db.databars and db.databars.useTrackerAppearance == false) or (db.databars and db.databars.xpBorderStyle == "none") end,
-                        get = function()
-                            if not (db.databars and db.databars.useTrackerAppearance == false) then
-                                if db.backdrop and db.backdrop.classColorBorder and ns.GetClassColor then
-                                    local cc = ns.GetClassColor()
-                                    if cc then
-                                        return cc.r, cc.g, cc.b, (db.backdrop.borderColor and db.backdrop.borderColor.a) or 0.90
-                                    end
-                                end
-                                local c = (db.backdrop and db.backdrop.borderColor) or { r = 0.15, g = 0.15, b = 0.15, a = 0.90 }
-                                return c.r, c.g, c.b, c.a or 0.90
-                            end
-                            local c = (db.databars and db.databars.xpBorderColor) or { r = 0.12, g = 0.12, b = 0.16, a = 0.95 }
-                            return c.r, c.g, c.b, c.a or 0.95
-                        end,
-                        set = function(_, r, g, b, a)
-                            db.databars = db.databars or {}
-                            db.databars.xpBorderColor = { r = r, g = g, b = b, a = a }
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-
-                    -- Location Bar Section
-                    locHeader = {
-                        name = "Location & Precision Coordinates Header Bar",
-                        type = "header",
-                        order = 20,
-                    },
-                    enableLocationBar = {
-                        name = "Enable Location Header Bar",
-                        desc = "Display a clean, stylized header bar showing your current Zone, Subzone, territory PvP status color, and live coordinates.",
-                        type = "toggle",
-                        width = "full",
-                        order = 21,
-                        get = function() return db.databars and db.databars.enableLocationBar end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.enableLocationBar = val
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    locDockMode = {
-                        name = "Location Bar Docking Position",
-                        desc = "Choose where to dock the Location Bar:\n• Dock to Tracker Top: Dynamically size-snaps above the quest tracker header.\n• Dock to Minimap Top: Centers directly above the minimap cluster.\n• Free Floating: Movable anywhere on screen.",
-                        type = "select",
-                        width = "full",
-                        order = 22,
-                        values = {
-                            ["tracker_top"] = "Dock to Tracker Top (Auto-Snap)",
-                            ["minimap_top"] = "Dock to Minimap Top",
-                            ["free"] = "Free Floating (Movable)",
-                        },
-                        get = function() return (db.databars and db.databars.locDockMode) or "tracker_top" end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.locDockMode = val
-                            if ns.DataBarsModule then
-                                ns.DataBarsModule:UpdateLocationDocking()
-                                ns.DataBarsModule:UpdateLocationBar()
-                            end
-                        end,
-                    },
-                    hideMinimapHeader = {
-                        name = "Hide Default Minimap Zone Header",
-                        desc = "Hide Blizzard's default minimap zone header text and border (MinimapCluster.ZoneTextButton / BorderTop) when Location Bar is enabled.",
-                        type = "toggle",
-                        width = "full",
-                        order = 23,
-                        get = function() return not (db.databars and db.databars.hideMinimapHeader == false) end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.hideMinimapHeader = val
-                            if ns.DataBarsModule then
-                                ns.DataBarsModule:ApplyMinimapHeaderSuppression(val)
-                            end
-                        end,
-                    },
-                    colorTerritory = {
-                        name = "Color Zone by PvP Territory",
-                        desc = "Color the zone text based on territory type: Friendly (Green), Sanctuary (Cyan), Contested (Gold), Hostile (Red).",
-                        type = "toggle",
-                        width = "full",
-                        order = 24,
-                        get = function() return not (db.databars and db.databars.colorTerritory == false) end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.colorTerritory = val
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateLocationBar(true) end
-                        end,
-                    },
-                    showCoords = {
-                        name = "Show Player Coordinates",
-                        desc = "Show high-precision player coordinates (XX.X, YY.Y) in the location header.",
-                        type = "toggle",
-                        order = 25,
-                        get = function() return not (db.databars and db.databars.showCoords == false) end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.showCoords = val
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateLocationBar(true) end
-                        end,
-                    },
-                    showSubzone = {
-                        name = "Show Subzone Text",
-                        desc = "Display specific subzone/area name next to the zone name.",
-                        type = "toggle",
-                        order = 26,
-                        get = function() return not (db.databars and db.databars.showSubzone == false) end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.showSubzone = val
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateLocationBar(true) end
-                        end,
-                    },
-                    locFormat = {
-                        name = "Location Text Format",
-                        desc = "Choose how zone and subzone names are formatted:\n  Subzone When Available: Shows subzone when in a landmark, or zone when in the wild.\n  Smart Auto-Fit: Displays both if they fit, or collapses to specific subzone/zone when cramped to prevent overflowing.\n  Zone Only: Always displays the parent zone name.\n  Both: Always shows Zone • Subzone (truncates with ... if too wide).",
-                        type = "select",
-                        order = 26.5,
-                        values = {
-                            ["subzone_only"] = "Subzone When Available (Recommended)",
-                            ["smart"] = "Smart Auto-Fit",
-                            ["zone_only"] = "Zone Only",
-                            ["both"] = "Both (Zone • Subzone)",
-                        },
-                        get = function() return (db.databars and db.databars.locFormat) or "subzone_only" end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.locFormat = val
-                            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateLocationBar(true) end
-                        end,
-                    },
-                    locHeight = {
-                        name = "Location Bar Height",
-                        desc = "Height of the location header bar in pixels (default: 22px).",
-                        type = "range",
-                        order = 27,
-                        min = 16,
-                        max = 36,
-                        step = 1,
-                        get = function() return (db.databars and db.databars.locHeight) or 22 end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.locHeight = val
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateLocationDocking() end
-                        end,
-                    },
-                    locFontSize = {
-                        name = "Location Text Size (px)",
-                        desc = "Font size in pixels for the Location Bar text readout.",
-                        type = "range",
-                        min = 8,
-                        max = 18,
-                        step = 1,
-                        order = 27.1,
-                        get = function() return (db.databars and db.databars.locFontSize) or 11 end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.locFontSize = val
-                            if ns.DataBarsModule then ns.DataBarsModule:ApplyTypography() end
-                        end,
-                    },
-                    locFontOutline = {
-                        name = "Location Text Outline",
-                        desc = "Outline style applied to the Location Bar text readout.",
-                        type = "select",
-                        values = fontFlags,
-                        order = 27.2,
-                        get = function() return (db.databars and db.databars.locFontOutline) or "OUTLINE" end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.locFontOutline = val
-                            if ns.DataBarsModule then ns.DataBarsModule:ApplyTypography() end
-                        end,
-                    },
-                    resetLocPos = {
-                        name = "Reset Free Location Bar Position",
-                        desc = "Reset the free floating Location Bar back to its default position.",
-                        type = "execute",
-                        width = "full",
-                        order = 28,
-                        func = function()
-                            if db.databars then db.databars.locFreePosition = nil end
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateLocationDocking() end
-                        end,
-                    },
-                    locBorderStyle = {
-                        name = "Location Bar Border Style",
-                        desc = "Select border frame style for the Location Bar (Inherited from tracker frame when Inherit Tracker Frame Appearance is enabled).",
-                        type = "select",
-                        order = 28.1,
-                        disabled = function() return not (db.databars and db.databars.useTrackerAppearance == false) end,
-                        values = barBorderStyles,
-                        get = function()
-                            if not (db.databars and db.databars.useTrackerAppearance == false) then
-                                return (db.backdrop and db.backdrop.borderStyle) or "flat"
-                            end
-                            return (db.databars and db.databars.locBorderStyle) or "flat"
-                        end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.locBorderStyle = val
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    locBgTexture = {
-                        name = "Location Background Texture",
-                        desc = "Select the background surface texture behind the Location Bar (Inherited from tracker frame when Inherit Tracker Frame Appearance is enabled).",
-                        type = "select",
-                        order = 28.15,
-                        disabled = function() return not (db.databars and db.databars.useTrackerAppearance == false) end,
-                        values = {
-                            ["solid"] = "Solid / Flat",
-                            ["tooltip"] = "Blizzard Tooltip Dark",
-                            ["marble"] = "Blizzard Marble",
-                            ["rock"] = "Blizzard Rock",
-                            ["parchment"] = "Blizzard Quest Parchment",
-                            ["parchment_clean"] = "Blizzard Parchment (Clean)",
-                        },
-                        get = function()
-                            if not (db.databars and db.databars.useTrackerAppearance == false) then
-                                return (db.backdrop and db.backdrop.bgTexture) or "solid"
-                            end
-                            return (db.databars and db.databars.locBgTexture) or "solid"
-                        end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            local prev = db.databars.locBgTexture or "solid"
-                            db.databars.locBgTexture = val
-                            local isParchment = (val == "parchment" or val == "parchment_clean")
-                            local wasParchment = (prev == "parchment" or prev == "parchment_clean")
-                            if isParchment and not wasParchment then
-                                db.databars.locBgColor = { r = 0.96, g = 0.90, b = 0.78, a = 0.90 }
-                            elseif not isParchment and wasParchment then
-                                db.databars.locBgColor = { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
-                            end
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    locBgColor = {
-                        name = "Location Background Color & Opacity",
-                        desc = "Set the background backdrop color and opacity behind the Location Bar (Inherited from tracker frame when Inherit Tracker Frame Appearance is enabled).",
-                        type = "color",
-                        hasAlpha = true,
-                        order = 28.2,
-                        disabled = function() return not (db.databars and db.databars.useTrackerAppearance == false) end,
-                        get = function()
-                            if not (db.databars and db.databars.useTrackerAppearance == false) then
-                                local c = (db.backdrop and db.backdrop.bgColor) or { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
-                                return c.r, c.g, c.b, c.a or 0.65
-                            end
-                            local c = (db.databars and db.databars.locBgColor) or { r = 0.06, g = 0.08, b = 0.12, a = 0.90 }
-                            return c.r, c.g, c.b, c.a or 0.90
-                        end,
-                        set = function(_, r, g, b, a)
-                            db.databars = db.databars or {}
-                            db.databars.locBgColor = { r = r, g = g, b = b, a = a }
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    locBorderColor = {
-                        name = "Location Border Color & Opacity",
-                        desc = "Set the border color and opacity around the Location Bar (Inherited from tracker frame when Inherit Tracker Frame Appearance is enabled).",
-                        type = "color",
-                        hasAlpha = true,
-                        order = 28.3,
-                        disabled = function() return not (db.databars and db.databars.useTrackerAppearance == false) or (db.databars and db.databars.locBorderStyle == "none") end,
-                        get = function()
-                            if not (db.databars and db.databars.useTrackerAppearance == false) then
-                                if db.backdrop and db.backdrop.classColorBorder and ns.GetClassColor then
-                                    local cc = ns.GetClassColor()
-                                    if cc then
-                                        return cc.r, cc.g, cc.b, (db.backdrop.borderColor and db.backdrop.borderColor.a) or 0.90
-                                    end
-                                end
-                                local c = (db.backdrop and db.backdrop.borderColor) or { r = 0.15, g = 0.15, b = 0.15, a = 0.90 }
-                                return c.r, c.g, c.b, c.a or 0.90
-                            end
-                            local c = (db.databars and db.databars.locBorderColor) or { r = 0.15, g = 0.55, b = 0.95, a = 0.85 }
-                            return c.r, c.g, c.b, c.a or 0.85
-                        end,
-                        set = function(_, r, g, b, a)
-                            db.databars = db.databars or {}
-                            db.databars.locBorderColor = { r = r, g = g, b = b, a = a }
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    locCustomTextColor = {
-                        name = "Override PvP Territory Text Color",
-                        desc = "Use a custom static text color instead of dynamically coloring zone text by PvP territory status.",
-                        type = "toggle",
-                        width = "full",
-                        order = 28.4,
-                        get = function() return db.databars and db.databars.locCustomTextColor == true end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.locCustomTextColor = val
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateLocationBar(true) end
-                        end,
-                    },
-                    locTextColor = {
-                        name = "Custom Location Text Color",
-                        desc = "Custom text color for the location and zone name.",
-                        type = "color",
-                        order = 28.5,
-                        disabled = function() return not (db.databars and db.databars.locCustomTextColor) end,
-                        get = function()
-                            local c = (db.databars and db.databars.locTextColor) or { r = 1.00, g = 0.82, b = 0.00 }
-                            return c.r, c.g, c.b
-                        end,
-                        set = function(_, r, g, b)
-                            db.databars = db.databars or {}
-                            db.databars.locTextColor = { r = r, g = g, b = b, a = 1.00 }
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateLocationBar(true) end
-                        end,
-                    },
-
-                    -- Quest Timer Bar Section
-                    timerHeader = {
-                        name = "Quest Timer DataBar (Timed Quests)",
-                        type = "header",
-                        order = 30,
-                    },
-                    enableTimerBar = {
-                        name = "Enable Quest Timer Bar",
-                        desc = "Display a standalone status bar showing time remaining for active timed quests (e.g. Dun Morogh's 5-minute Hot Mug run). Automatically hides when no timed quest is active.",
-                        type = "toggle",
-                        width = "full",
-                        order = 31,
-                        get = function() return not (db.databars and db.databars.enableTimerBar == false) end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.enableTimerBar = val
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    timerDockMode = {
-                        name = "Timer Bar Docking Position",
-                        desc = "Choose where to dock the Quest Timer Bar:\n• Dock to Tracker Top: Snaps above tracker header.\n• Dock to Tracker Bottom: Snaps below tracker.\n• Free Floating: Movable anywhere on screen.",
-                        type = "select",
-                        order = 32,
-                        values = {
-                            ["tracker_top"] = "Dock to Tracker Top",
-                            ["tracker_bottom"] = "Dock to Tracker Bottom",
-                            ["free"] = "Free Floating (Movable)",
-                        },
-                        get = function() return (db.databars and db.databars.timerDockMode) or "tracker_top" end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.timerDockMode = val
-                            if ns.DataBarsModule then
-                                ns.DataBarsModule:UpdateTimerDocking()
-                                ns.DataBarsModule:UpdateTimerBar()
-                            end
-                        end,
-                    },
-                    timerShowTitle = {
-                        name = "Show Quest Title on Timer Bar",
-                        desc = "Display the quest name alongside the countdown timer (e.g. 'A Hot Mug: 04:12').",
-                        type = "toggle",
-                        width = "full",
-                        order = 33,
-                        get = function() return not (db.databars and db.databars.timerShowTitle == false) end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.timerShowTitle = val
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateTimerBar() end
-                        end,
-                    },
-                    timerHeight = {
-                        name = "Timer Bar Height (px)",
-                        desc = "Height of the timer bar in pixels (default: 22px).",
-                        type = "range",
-                        order = 34,
-                        min = 16,
-                        max = 36,
-                        step = 1,
-                        get = function() return (db.databars and db.databars.timerHeight) or 22 end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.timerHeight = val
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateTimerDocking() end
-                        end,
-                    },
-                    timerWidth = {
-                        name = "Timer Bar Width (px)",
-                        desc = "Width of the timer bar in pixels when in free floating mode (default: 220px).",
-                        type = "range",
-                        order = 35,
-                        min = 140,
-                        max = 400,
-                        step = 5,
-                        get = function() return (db.databars and db.databars.timerWidth) or 220 end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.timerWidth = val
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateTimerDocking() end
-                        end,
-                    },
-                    timerFontSize = {
-                        name = "Timer Text Size (px)",
-                        desc = "Font size in pixels for the Timer Bar countdown text.",
-                        type = "range",
-                        min = 8,
-                        max = 18,
-                        step = 1,
-                        order = 36,
-                        get = function() return (db.databars and db.databars.timerFontSize) or 11 end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.timerFontSize = val
-                            if ns.DataBarsModule then ns.DataBarsModule:ApplyTypography() end
-                        end,
-                    },
-                    timerFontOutline = {
-                        name = "Timer Text Outline",
-                        desc = "Outline style applied to the Timer Bar text readout.",
-                        type = "select",
-                        values = fontFlags,
-                        order = 37,
-                        get = function() return (db.databars and db.databars.timerFontOutline) or "OUTLINE" end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.timerFontOutline = val
-                            if ns.DataBarsModule then ns.DataBarsModule:ApplyTypography() end
-                        end,
-                    },
-                    timerBorderStyle = {
-                        name = "Timer Bar Border Style",
-                        desc = "Select border frame style for the Quest Timer Bar (Inherited from tracker frame when Inherit Tracker Frame Appearance is enabled).",
-                        type = "select",
-                        order = 37.1,
-                        disabled = function() return not (db.databars and db.databars.useTrackerAppearance == false) end,
-                        values = barBorderStyles,
-                        get = function()
-                            if not (db.databars and db.databars.useTrackerAppearance == false) then
-                                return (db.backdrop and db.backdrop.borderStyle) or "flat"
-                            end
-                            return (db.databars and db.databars.timerBorderStyle) or "flat"
-                        end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.timerBorderStyle = val
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    timerBarTexture = {
-                        name = "Timer Statusbar Texture",
-                        desc = "Select texture pattern for the Quest Timer progress bar.",
-                        type = "select",
-                        order = 37.2,
-                        values = GetStatusbarTextureList,
-                        get = function() return (db.databars and db.databars.timerBarTexture) or "Solid" end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            db.databars.timerBarTexture = val
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    timerColor = {
-                        name = "Timer Bar Fill Color & Opacity",
-                        desc = "Set the default fill color and opacity for the timer status bar (during non-critical time remaining).",
-                        type = "color",
-                        hasAlpha = true,
-                        order = 37.3,
-                        get = function()
-                            local c = (db.databars and db.databars.timerColor) or { r = 1.00, g = 0.82, b = 0.00, a = 0.50 }
-                            return c.r, c.g, c.b, c.a or 0.50
-                        end,
-                        set = function(_, r, g, b, a)
-                            db.databars = db.databars or {}
-                            db.databars.timerColor = { r = r, g = g, b = b, a = a }
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateTimerBar(true) end
-                        end,
-                    },
-                    timerBgTexture = {
-                        name = "Timer Bar Background Texture",
-                        desc = "Select the background surface texture behind the Quest Timer Bar (Inherited from tracker frame when Inherit Tracker Frame Appearance is enabled).",
-                        type = "select",
-                        order = 37.35,
-                        disabled = function() return not (db.databars and db.databars.useTrackerAppearance == false) end,
-                        values = {
-                            ["solid"] = "Solid / Flat",
-                            ["tooltip"] = "Blizzard Tooltip Dark",
-                            ["marble"] = "Blizzard Marble",
-                            ["rock"] = "Blizzard Rock",
-                            ["parchment"] = "Blizzard Quest Parchment",
-                            ["parchment_clean"] = "Blizzard Parchment (Clean)",
-                        },
-                        get = function()
-                            if not (db.databars and db.databars.useTrackerAppearance == false) then
-                                return (db.backdrop and db.backdrop.bgTexture) or "solid"
-                            end
-                            return (db.databars and db.databars.timerBgTexture) or "solid"
-                        end,
-                        set = function(_, val)
-                            db.databars = db.databars or {}
-                            local prev = db.databars.timerBgTexture or "solid"
-                            db.databars.timerBgTexture = val
-                            local isParchment = (val == "parchment" or val == "parchment_clean")
-                            local wasParchment = (prev == "parchment" or prev == "parchment_clean")
-                            if isParchment and not wasParchment then
-                                db.databars.timerBgColor = { r = 0.96, g = 0.90, b = 0.78, a = 0.90 }
-                            elseif not isParchment and wasParchment then
-                                db.databars.timerBgColor = { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
-                            end
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    timerBgColor = {
-                        name = "Timer Background Color & Opacity",
-                        desc = "Set the background backdrop color and opacity behind the Timer Bar (Inherited from tracker frame when Inherit Tracker Frame Appearance is enabled).",
-                        type = "color",
-                        hasAlpha = true,
-                        order = 37.4,
-                        disabled = function() return not (db.databars and db.databars.useTrackerAppearance == false) end,
-                        get = function()
-                            if not (db.databars and db.databars.useTrackerAppearance == false) then
-                                local c = (db.backdrop and db.backdrop.bgColor) or { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
-                                return c.r, c.g, c.b, c.a or 0.65
-                            end
-                            local c = (db.databars and db.databars.timerBgColor) or { r = 0.06, g = 0.08, b = 0.12, a = 0.90 }
-                            return c.r, c.g, c.b, c.a or 0.90
-                        end,
-                        set = function(_, r, g, b, a)
-                            db.databars = db.databars or {}
-                            db.databars.timerBgColor = { r = r, g = g, b = b, a = a }
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    timerBorderColor = {
-                        name = "Timer Border Color & Opacity",
-                        desc = "Set the border color and opacity around the Timer Bar (Inherited from tracker frame when Inherit Tracker Frame Appearance is enabled).",
-                        type = "color",
-                        hasAlpha = true,
-                        order = 37.5,
-                        disabled = function() return not (db.databars and db.databars.useTrackerAppearance == false) or (db.databars and db.databars.timerBorderStyle == "none") end,
-                        get = function()
-                            if not (db.databars and db.databars.useTrackerAppearance == false) then
-                                if db.backdrop and db.backdrop.classColorBorder and ns.GetClassColor then
-                                    local cc = ns.GetClassColor()
-                                    if cc then
-                                        return cc.r, cc.g, cc.b, (db.backdrop.borderColor and db.backdrop.borderColor.a) or 0.85
-                                    end
-                                end
-                                local c = (db.backdrop and db.backdrop.borderColor) or { r = 1.00, g = 0.82, b = 0.00, a = 0.85 }
-                                return c.r, c.g, c.b, c.a or 0.85
-                            end
-                            local c = (db.databars and db.databars.timerBorderColor) or { r = 1.00, g = 0.82, b = 0.00, a = 0.85 }
-                            return c.r, c.g, c.b, c.a or 0.85
-                        end,
-                        set = function(_, r, g, b, a)
-                            db.databars = db.databars or {}
-                            db.databars.timerBorderColor = { r = r, g = g, b = b, a = a }
-                            if ns.DataBarsModule then ns.DataBarsModule:RefreshBars() end
-                        end,
-                    },
-                    previewTimer = {
-                        name = "Preview / Move Timer Bar",
-                        desc = "Temporarily toggle preview mode for the Quest Timer Bar so you can adjust its position even when no timed quest is active.",
-                        type = "execute",
-                        order = 38,
-                        func = function()
-                            if ns.DataBarsModule then
-                                ns.DataBarsModule.timerPreviewMode = not ns.DataBarsModule.timerPreviewMode
-                                ns.DataBarsModule:RefreshBars()
-                            end
-                        end,
-                    },
-                    resetTimerPos = {
-                        name = "Reset Timer Bar Position",
-                        desc = "Reset the free floating Timer Bar back to its default position.",
-                        type = "execute",
-                        order = 39,
-                        func = function()
-                            if db.databars then db.databars.timerFreePosition = nil end
-                            if ns.DataBarsModule then ns.DataBarsModule:UpdateTimerDocking() end
-                        end,
-                    },
-                },
-            },
-        },
-    }
-
-    local AceDBOptions = LibStub and LibStub("AceDBOptions-3.0", true)
-    if AceDBOptions and ns.dbObject then
-        options.args.profiles = AceDBOptions:GetOptionsTable(ns.dbObject)
-        options.args.profiles.order = 10
-    end
-
-    -- Universal persistence wrapper: guarantee that ANY setting modified across
-    -- the entire options tree immediately invokes ns.FlushDBToGlobals()
-    local function WrapSettersWithFlush(group)
-        if not group or type(group) ~= "table" or not group.args then return end
-        for _, arg in pairs(group.args) do
-            if type(arg) == "table" then
-                if arg.type == "group" then
-                    WrapSettersWithFlush(arg)
-                elseif type(arg.set) == "function" then
-                    local origSet = arg.set
-                    arg.set = function(...)
-                        local res = origSet(...)
-                        if ns.FlushDBToGlobals then
-                            ns.FlushDBToGlobals()
-                        end
-                        return res
-                    end
-                end
-            end
-        end
-    end
-    WrapSettersWithFlush(options)
-
-    return options
-end
-
-function Config:InitializeOptions()
-    if self.initialized then return end
-    self.initialized = true
-
-    if ACR and ACD then
-        ACR:RegisterOptionsTable("BleakfiberQuestTracker", GetOptionsTable)
-        self.optionsFrame, self.categoryID = ACD:AddToBlizOptions("BleakfiberQuestTracker", "Bleakfiber's Quest Tracker")
-
-        local AceDBOptions = LibStub and LibStub("AceDBOptions-3.0", true)
-        if AceDBOptions and ns.dbObject then
-            local profileOptions = AceDBOptions:GetOptionsTable(ns.dbObject)
-            ACR:RegisterOptionsTable("BleakfiberQuestTracker_Profiles", profileOptions)
-            ACD:AddToBlizOptions("BleakfiberQuestTracker_Profiles", "Profiles", "Bleakfiber's Quest Tracker")
-        end
-
-        local function OnConfigClosed()
-            if ns.Tracker and ns.Tracker.HideConfigOverlay then
-                ns.Tracker:HideConfigOverlay()
-            end
-        end
-
-        if self.optionsFrame and self.optionsFrame.HookScript then
-            self.optionsFrame:HookScript("OnHide", OnConfigClosed)
-        end
-        if InterfaceOptionsFrame and InterfaceOptionsFrame.HookScript then
-            InterfaceOptionsFrame:HookScript("OnHide", OnConfigClosed)
-        end
-        if SettingsPanel and SettingsPanel.HookScript then
-            SettingsPanel:HookScript("OnHide", OnConfigClosed)
-        end
-    end
+    ns.ApplyAllSettings()
+    Config:SyncAll()
 end
 
 -- ---------------------------------------------------------------------------
 -- Master Config Addon Integration & Dark Slate / Gold Standalone Theme
 -- ---------------------------------------------------------------------------
 
-local BACKDROP_TEMPLATE = BackdropTemplateMixin and "BackdropTemplate" or nil
+local BACKDROP_TEMPLATE = "BackdropTemplate"
 
 local MAIN_WINDOW_BACKDROP = {
     bgFile = "Interface\\Buttons\\WHITE8X8",
@@ -4833,6 +760,7 @@ local function SetupAutoScroll(scrollFrame, scrollChild)
 end
 
 local function CreateSectionHeader(parent, text, xOfs, yOfs)
+    text = L[text]
     local header = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     header:SetPoint("TOPLEFT", parent, "TOPLEFT", xOfs or 16, yOfs or -10)
     header:SetText(text)
@@ -4848,6 +776,8 @@ local function CreateSectionHeader(parent, text, xOfs, yOfs)
 end
 
 local function CreateStyledCheckbox(parent, labelText, tooltipText, getFunc, setFunc)
+    labelText = L[labelText]
+    tooltipText = tooltipText and L[tooltipText]
     local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
     cb:SetSize(22, 22)
 
@@ -4872,9 +802,7 @@ local function CreateStyledCheckbox(parent, labelText, tooltipText, getFunc, set
         local checked = self:GetChecked()
         PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or 856)
         if setFunc then setFunc(checked) end
-        if ns.Tracker and ns.Tracker.UpdateSettings then ns.Tracker:UpdateSettings() end
-        if ns.FireCallback then ns:FireCallback("SETTINGS_UPDATED") end
-        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+        ScheduleApply()
     end)
 
     cb.Sync = function()
@@ -4885,6 +813,8 @@ local function CreateStyledCheckbox(parent, labelText, tooltipText, getFunc, set
 end
 
 local function CreateStyledSlider(parent, name, labelText, tooltipText, minVal, maxVal, step, getFunc, setFunc, formatStr)
+    labelText = L[labelText]
+    tooltipText = tooltipText and L[tooltipText]
     local slider = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
     slider:SetWidth(190)
     slider:SetHeight(16)
@@ -4931,9 +861,7 @@ local function CreateStyledSlider(parent, name, labelText, tooltipText, minVal, 
         UpdateValText(val)
         if self._isSyncing then return end
         if setFunc then setFunc(val) end
-        if ns.Tracker and ns.Tracker.UpdateSettings then ns.Tracker:UpdateSettings() end
-        if ns.FireCallback then ns:FireCallback("SETTINGS_UPDATED") end
-        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+        ScheduleApply()
     end)
 
     if tooltipText then
@@ -4960,6 +888,8 @@ local function CreateStyledSlider(parent, name, labelText, tooltipText, minVal, 
 end
 
 local function CreateStyledButton(parent, text, width, height, onClick, tooltipText)
+    text = L[text]
+    tooltipText = tooltipText and L[tooltipText]
     local btn = CreateFrame("Button", nil, parent, BACKDROP_TEMPLATE)
     btn:SetSize(width or 120, height or 22)
     btn:SetBackdrop(INSET_BACKDROP)
@@ -5001,6 +931,8 @@ local function CreateStyledButton(parent, text, width, height, onClick, tooltipT
 end
 
 local function CreateStyledColorPickerWithHex(parent, labelText, width, height, getColorFunc, setColorFunc, tooltipText, syncListRef)
+    labelText = labelText and L[labelText]
+    tooltipText = tooltipText and L[tooltipText]
     local container = CreateFrame("Frame", nil, parent)
     container:SetSize(width or 190, height or 22)
 
@@ -5028,7 +960,7 @@ local function CreateStyledColorPickerWithHex(parent, labelText, width, height, 
     btnLabel:SetPoint("RIGHT", swatchBtn, "RIGHT", -4, 0)
     btnLabel:SetJustifyH("LEFT")
     btnLabel:SetWordWrap(false)
-    btnLabel:SetText(labelText or "Bg Color")
+    btnLabel:SetText(labelText or L["Background Color"])
 
     -- Right part: Direct Hex EditBox (#000000)
     local hexBoxFrame = CreateFrame("Frame", nil, container, BACKDROP_TEMPLATE)
@@ -5046,10 +978,10 @@ local function CreateStyledColorPickerWithHex(parent, labelText, width, height, 
     hexEdit:SetJustifyH("CENTER")
 
     local function SyncVisuals()
-        local r, g, b, a = 0.05, 0.05, 0.05, 0.65
+        local r, g, b = 0.05, 0.05, 0.05
         if getColorFunc then
-            local cr, cg, cb, ca = getColorFunc()
-            if cr ~= nil then r, g, b, a = cr, cg, cb, ca or 0.65 end
+            local cr, cg, cb = getColorFunc()
+            if cr ~= nil then r, g, b = cr, cg, cb end
         end
         swatchTex:SetColorTexture(r, g, b, 1)
         if not hexEdit:HasFocus() then
@@ -5067,14 +999,7 @@ local function CreateStyledColorPickerWithHex(parent, labelText, width, height, 
                 if w ~= container and w.Sync then w.Sync() end
             end
         end
-        if ns.Tracker and ns.Tracker.UpdateBackdrop then ns.Tracker:UpdateBackdrop() end
-        if ns.Tracker and ns.Tracker.UpdateSettings then ns.Tracker:UpdateSettings() end
-        if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
-        if ns.DataBarsModule and ns.DataBarsModule.RefreshBars then ns.DataBarsModule:RefreshBars() end
-        if ns.WayfinderModule and ns.WayfinderModule.ApplyHUDSettings then ns.WayfinderModule:ApplyHUDSettings() end
-        if ns.WayfinderModule and ns.WayfinderModule.ForceImmediateUpdate then ns.WayfinderModule:ForceImmediateUpdate() end
-        if ns.FireCallback then ns:FireCallback("SETTINGS_UPDATED") end
-        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+        ScheduleApply()
     end
 
     hexEdit:SetScript("OnEnterPressed", function(self)
@@ -5105,8 +1030,8 @@ local function CreateStyledColorPickerWithHex(parent, labelText, width, height, 
     hexEdit:SetScript("OnEnter", function(self)
         hexBoxFrame:SetBackdropBorderColor(unpack(COLORS.goldBorder))
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("Direct Hex Color Input", COLORS.goldText[1], COLORS.goldText[2], COLORS.goldText[3])
-        GameTooltip:AddLine("Type any 6-digit hex color code (such as #000000 for pure pitch black) and press Enter.", COLORS.whiteText[1], COLORS.whiteText[2], COLORS.whiteText[3], true)
+        GameTooltip:AddLine(L["Direct Hex Color Input"], COLORS.goldText[1], COLORS.goldText[2], COLORS.goldText[3])
+        GameTooltip:AddLine(L["Type any 6-digit hex color code (such as #000000 for pure pitch black) and press Enter."], COLORS.whiteText[1], COLORS.whiteText[2], COLORS.whiteText[3], true)
         GameTooltip:Show()
     end)
     hexEdit:SetScript("OnLeave", function()
@@ -5120,7 +1045,7 @@ local function CreateStyledColorPickerWithHex(parent, labelText, width, height, 
         btnLabel:SetTextColor(COLORS.goldText[1], COLORS.goldText[2], COLORS.goldText[3])
         if tooltipText then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine(labelText or "Background Color", COLORS.goldText[1], COLORS.goldText[2], COLORS.goldText[3])
+            GameTooltip:AddLine(labelText or L["Background Color"], COLORS.goldText[1], COLORS.goldText[2], COLORS.goldText[3])
             GameTooltip:AddLine(tooltipText, COLORS.whiteText[1], COLORS.whiteText[2], COLORS.whiteText[3], true)
             GameTooltip:Show()
         end
@@ -5196,11 +1121,18 @@ local function CreateStyledColorPickerWithHex(parent, labelText, width, height, 
     end)
 
     container.Sync = SyncVisuals
+    container.SetEnabled = function(_, enabled)
+        swatchBtn:SetEnabled(enabled)
+        hexEdit:SetEnabled(enabled)
+        container:SetAlpha(enabled and 1 or 0.4)
+    end
     SyncVisuals()
     return container
 end
 
 local function CreateStyledKeybindButton(parent, bindingName, labelPrefix, width, height, tooltipText)
+    labelPrefix = L[labelPrefix or "Keybind"]
+    tooltipText = tooltipText and L[tooltipText]
     local btn = CreateFrame("Button", nil, parent, BACKDROP_TEMPLATE)
     btn:SetSize(width or 190, height or 22)
     btn:SetBackdrop(INSET_BACKDROP)
@@ -5219,14 +1151,14 @@ local function CreateStyledKeybindButton(parent, bindingName, labelPrefix, width
 
     local function UpdateKeyText()
         if isBinding then
-            label:SetText("|cffffd100Press Key (ESC to Clear)...|r")
+            label:SetText("|cffffd100" .. L["Press Key (ESC to Clear)..."] .. "|r")
             return
         end
         local key = GetBindingKey and GetBindingKey(bindingName)
         if key and key ~= "" then
-            label:SetText(string.format("%s: |cff00ff00[%s]|r", labelPrefix or "Keybind", key))
+            label:SetText(string.format("%s: |cff00ff00[%s]|r", labelPrefix, key))
         else
-            label:SetText(string.format("%s: |cff888888[None]|r", labelPrefix or "Keybind"))
+            label:SetText(string.format("%s: |cff888888[%s]|r", labelPrefix, L["None"]))
         end
     end
 
@@ -5239,6 +1171,10 @@ local function CreateStyledKeybindButton(parent, bindingName, labelPrefix, width
 
     btn:SetScript("OnClick", function(self, button)
         PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or 856)
+        if InCombatLockdown() then
+            ns.Notify(L["Key bindings cannot be changed in combat."])
+            return
+        end
         if isBinding then
             if button == "RightButton" then
                 StopBindingMode()
@@ -5301,9 +1237,9 @@ local function CreateStyledKeybindButton(parent, bindingName, labelPrefix, width
         self:SetBackdropBorderColor(unpack(COLORS.goldBorder))
         if tooltipText then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine(labelPrefix or "Keybind", COLORS.goldText[1], COLORS.goldText[2], COLORS.goldText[3])
+            GameTooltip:AddLine(labelPrefix, COLORS.goldText[1], COLORS.goldText[2], COLORS.goldText[3])
             GameTooltip:AddLine(tooltipText, COLORS.whiteText[1], COLORS.whiteText[2], COLORS.whiteText[3], true)
-            GameTooltip:AddLine("Left-Click to bind a key. Right-Click or press ESC while binding to clear.", 0.65, 0.85, 1.0, true)
+            GameTooltip:AddLine(L["Left-Click to bind a key. Right-Click or press ESC while binding to clear."], 0.65, 0.85, 1.0, true)
             GameTooltip:Show()
         end
     end)
@@ -5380,7 +1316,8 @@ local function GetOrCreateLocalDropdownMenu()
     return menu
 end
 
-local function NormalizeDropdownOptions(options)
+-- Static option tables are translated; dynamic lists (profiles, fonts, media) are shown as-is
+local function NormalizeDropdownOptions(options, translate)
     local list = {}
     if type(options) == "table" then
         if #options > 0 then
@@ -5388,14 +1325,15 @@ local function NormalizeDropdownOptions(options)
                 if type(item) == "table" then
                     local k = (item.key ~= nil) and item.key or ((item.value ~= nil) and item.value or item[1])
                     local l = item.label or item.text or item[2] or tostring(k)
-                    table.insert(list, { key = k, label = l, raw = item })
+                    table.insert(list, { key = k, label = translate and L[l] or l, raw = item })
                 else
                     table.insert(list, { key = item, label = tostring(item), raw = item })
                 end
             end
         else
             for k, v in pairs(options) do
-                table.insert(list, { key = k, label = tostring(v) })
+                local l = tostring(v)
+                table.insert(list, { key = k, label = translate and L[l] or l })
             end
             table.sort(list, function(a, b) return a.label:lower() < b.label:lower() end)
         end
@@ -5406,8 +1344,7 @@ end
 local function GetAvailableFonts()
     local fonts = {}
     local seen = {}
-    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-    if LSM and LSM.List then
+    do
         local lsmList = LSM:List("font")
         if lsmList then
             for _, f in ipairs(lsmList) do
@@ -5434,6 +1371,8 @@ local function GetAvailableFonts()
 end
 
 local function CreateStyledDropdown(parent, labelPrefix, width, height, options, getFunc, setFunc, tooltipText, isFont)
+    labelPrefix = labelPrefix and L[labelPrefix]
+    tooltipText = tooltipText and L[tooltipText]
     local btn = CreateFrame("Button", nil, parent, BACKDROP_TEMPLATE)
     btn:SetSize(width or 180, height or 22)
     btn:SetBackdrop(INSET_BACKDROP)
@@ -5458,7 +1397,7 @@ local function CreateStyledDropdown(parent, labelPrefix, width, height, options,
         if type(options) == "function" then
             return NormalizeDropdownOptions(options())
         end
-        return NormalizeDropdownOptions(options)
+        return NormalizeDropdownOptions(options, true)
     end
 
     local function GetSelectedLabel(curVal)
@@ -5466,7 +1405,7 @@ local function CreateStyledDropdown(parent, labelPrefix, width, height, options,
         for _, opt in ipairs(curOpts) do
             if opt.key == curVal then return opt.label end
         end
-        return tostring(curVal or "N/A")
+        return tostring(curVal or L["None"])
     end
 
     local function UpdateLabel()
@@ -5474,11 +1413,7 @@ local function CreateStyledDropdown(parent, labelPrefix, width, height, options,
         local disp = GetSelectedLabel(cur)
         label:SetText((labelPrefix and (labelPrefix .. ": ") or "") .. disp)
         if isFont then
-            local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-            local fPath = LSM and LSM:Fetch("font", cur, true)
-            if not fPath and ns.Media and ns.Media.FetchFont then
-                fPath = ns.Media:FetchFont(cur)
-            end
+            local fPath = cur and ns.FetchFont(cur)
             if fPath then
                 pcall(function() label:SetFont(fPath, 11, "") end)
             end
@@ -5491,7 +1426,7 @@ local function CreateStyledDropdown(parent, labelPrefix, width, height, options,
         label:SetTextColor(COLORS.goldText[1], COLORS.goldText[2], COLORS.goldText[3])
         if tooltipText then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine(labelPrefix or "Option", COLORS.goldText[1], COLORS.goldText[2], COLORS.goldText[3])
+            GameTooltip:AddLine(labelPrefix or L["Option"], COLORS.goldText[1], COLORS.goldText[2], COLORS.goldText[3])
             GameTooltip:AddLine(tooltipText, COLORS.whiteText[1], COLORS.whiteText[2], COLORS.whiteText[3], true)
             GameTooltip:Show()
         end
@@ -5538,7 +1473,6 @@ local function CreateStyledDropdown(parent, labelPrefix, width, height, options,
             end
         end
 
-        local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
         local selectedIndex = 1
 
         for i, itm in ipairs(curOpts) do
@@ -5587,10 +1521,7 @@ local function CreateStyledDropdown(parent, labelPrefix, width, height, options,
             end
 
             if isFont then
-                local fPath = LSM and LSM:Fetch("font", itm.key, true)
-                if not fPath and ns.Media and ns.Media.FetchFont then
-                    fPath = ns.Media:FetchFont(itm.key)
-                end
+                local fPath = ns.FetchFont(itm.key)
                 if fPath then
                     pcall(function() b.text:SetFont(fPath, 11, "") end)
                 end
@@ -5607,10 +1538,7 @@ local function CreateStyledDropdown(parent, labelPrefix, width, height, options,
                 end
                 UpdateLabel()
                 menu:Hide()
-                if ns.Tracker and ns.Tracker.UpdateSettings then ns.Tracker:UpdateSettings() end
-                if ns.Tracker and ns.Tracker.UpdateTypography then ns.Tracker:UpdateTypography() end
-                if ns.FireCallback then ns:FireCallback("SETTINGS_UPDATED") end
-                if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+                ScheduleApply()
             end)
             b:Show()
         end
@@ -5639,16 +1567,16 @@ local function CreateStyledDropdown(parent, labelPrefix, width, height, options,
     end)
 
     btn.Sync = UpdateLabel
+    btn.SetEnabledState = function(_, enabled)
+        btn:SetEnabled(enabled)
+        btn:SetAlpha(enabled and 1 or 0.4)
+    end
     UpdateLabel()
     return btn
 end
 
 local function CreateStyledFontDropdown(parent, labelPrefix, width, height, getFunc, setFunc, tooltipText)
     return CreateStyledDropdown(parent, labelPrefix, width, height, GetAvailableFonts, getFunc, setFunc, tooltipText, true)
-end
-
-local function CreateStyledCycleButton(parent, labelPrefix, width, height, options, getFunc, setFunc, tooltipText)
-    return CreateStyledDropdown(parent, labelPrefix, width, height, options, getFunc, setFunc, tooltipText)
 end
 
 local function CreateStyledTextInput(parent, width, height, placeholder, onEnterFunc)
@@ -5669,7 +1597,7 @@ local function CreateStyledTextInput(parent, width, height, placeholder, onEnter
 
     local hint = boxFrame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     hint:SetPoint("LEFT", boxFrame, "LEFT", 8, 0)
-    hint:SetText(placeholder or "")
+    hint:SetText(placeholder and L[placeholder] or "")
 
     edit:SetScript("OnTextChanged", function(self)
         local txt = self:GetText()
@@ -5696,6 +1624,32 @@ end
 --[[-----------------------------------------------------------------------------
     Native Tab Builders for Quest Tracker
 -------------------------------------------------------------------------------]]
+
+-- Tab builders capture these proxies, which always resolve against the active
+-- profile, so widgets keep working after a profile switch or reset.
+local function LiveTable(resolve)
+    return setmetatable({}, {
+        __index = function(_, key)
+            local t = resolve()
+            return t and t[key]
+        end,
+        __newindex = function(_, key, value)
+            local t = resolve()
+            if t then t[key] = value end
+        end,
+    })
+end
+
+local LiveDB = LiveTable(function() return ns.db end)
+
+local function LiveSection(section)
+    return LiveTable(function()
+        local db = ns.db
+        if not db then return nil end
+        if db[section] == nil then db[section] = {} end
+        return db[section]
+    end)
+end
 local OUTLINE_OPTIONS = {
     { key = "OUTLINE",      label = "Outline" },
     { key = "THICKOUTLINE", label = "Thick Outline" },
@@ -5820,7 +1774,7 @@ local function GetCompleteSoundOptions()
     local options = {}
     local seen = {}
     for _, opt in ipairs(COMPLETE_SOUNDS) do
-        table.insert(options, { key = opt.key, label = opt.label })
+        table.insert(options, { key = opt.key, label = L[opt.label] })
         seen[opt.key] = true
     end
     local customList = ns.GetCustomSoundList and ns.GetCustomSoundList()
@@ -5832,8 +1786,7 @@ local function GetCompleteSoundOptions()
             end
         end
     end
-    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-    if LSM and LSM.List then
+    do
         local lsmSounds = LSM:List("sound")
         if type(lsmSounds) == "table" then
             for _, soundName in ipairs(lsmSounds) do
@@ -5851,7 +1804,7 @@ local function GetObjectiveSoundOptions()
     local options = {}
     local seen = {}
     for _, opt in ipairs(OBJECTIVE_SOUNDS) do
-        table.insert(options, { key = opt.key, label = opt.label })
+        table.insert(options, { key = opt.key, label = L[opt.label] })
         seen[opt.key] = true
     end
     local customList = ns.GetCustomSoundList and ns.GetCustomSoundList()
@@ -5863,8 +1816,7 @@ local function GetObjectiveSoundOptions()
             end
         end
     end
-    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-    if LSM and LSM.List then
+    do
         local lsmSounds = LSM:List("sound")
         if type(lsmSounds) == "table" then
             for _, soundName in ipairs(lsmSounds) do
@@ -5878,12 +1830,615 @@ local function GetObjectiveSoundOptions()
     return options
 end
 
+--[[-----------------------------------------------------------------------------
+    Declarative settings, flowed in two columns beneath each tab's own layout
+-------------------------------------------------------------------------------]]
+local FONT_FLAG_OPTIONS = {
+    { key = "",                    label = "None" },
+    { key = "OUTLINE",             label = "Outline" },
+    { key = "THICKOUTLINE",        label = "Thick Outline" },
+    { key = "MONOCHROME",          label = "Monochrome" },
+    { key = "OUTLINE, MONOCHROME", label = "Outline Monochrome" },
+}
+
+local BAR_BORDER_STYLES = {
+    { key = "flat",    label = "Sleek 1px (Modern Flat)" },
+    { key = "tooltip", label = "Blizzard Tooltip (Classic Rounded)" },
+    { key = "dialog",  label = "Blizzard Dialog (Classic Window)" },
+    { key = "toast",   label = "Blizzard Toast (Soft Alert)" },
+    { key = "none",    label = "None (Borderless)" },
+}
+
+local function Bars() return ns.db.databars end
+local function WF() return ns.db.wayfinder end
+
+local function DataBars(method, ...)
+    local mod = ns.DataBarsModule
+    if mod and mod[method] then mod[method](mod, ...) end
+end
+
+local function Wayfinder(method, ...)
+    local mod = ns.WayfinderModule
+    if mod and mod[method] then mod[method](mod, ...) end
+end
+
+local function UnpackColor(c, fallback)
+    c = c or fallback
+    return c.r, c.g, c.b, c.a or fallback.a
+end
+
+local function InheritsTrackerLook()
+    return Bars().useTrackerAppearance ~= false
+end
+
+-- Border style, background texture, and colors for one DataBar (prefix "xp", "loc", "timer")
+local function BarAppearanceSpecs(prefix, title, defaultBg, defaultBorder)
+    local styleKey, texKey = prefix .. "BorderStyle", prefix .. "BgTexture"
+    local bgKey, borderKey = prefix .. "BgColor", prefix .. "BorderColor"
+    local specs = {
+        { type = "select", label = title .. " Border Style", values = BAR_BORDER_STYLES,
+          desc = "Border frame style for this bar (inherited from the tracker while Inherit Tracker Frame Appearance is enabled).",
+          disabled = InheritsTrackerLook,
+          get = function()
+              if InheritsTrackerLook() then return ns.db.backdrop.borderStyle or "flat" end
+              return Bars()[styleKey] or "flat"
+          end,
+          set = function(v) Bars()[styleKey] = v; DataBars("RefreshBars") end },
+        { type = "select", label = title .. " Background Texture", values = BACKGROUND_SURFACE_TEXTURES,
+          desc = "Background surface texture behind this bar (inherited from the tracker while Inherit Tracker Frame Appearance is enabled).",
+          disabled = InheritsTrackerLook,
+          get = function()
+              if InheritsTrackerLook() then return ns.db.backdrop.bgTexture or "solid" end
+              return Bars()[texKey] or "solid"
+          end,
+          set = function(v)
+              local bars = Bars()
+              local prev = bars[texKey] or "solid"
+              bars[texKey] = v
+              local isParchment = (v == "parchment" or v == "parchment_clean")
+              local wasParchment = (prev == "parchment" or prev == "parchment_clean")
+              if isParchment and not wasParchment then
+                  bars[bgKey] = { r = 0.96, g = 0.90, b = 0.78, a = 0.90 }
+              elseif wasParchment and not isParchment then
+                  bars[bgKey] = { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }
+              end
+              DataBars("RefreshBars")
+          end },
+        { type = "color", label = title .. " Background",
+          desc = "Background color and opacity behind this bar.",
+          disabled = InheritsTrackerLook,
+          get = function()
+              if InheritsTrackerLook() then
+                  return UnpackColor(ns.db.backdrop.bgColor, { r = 0.05, g = 0.05, b = 0.05, a = 0.65 })
+              end
+              return UnpackColor(Bars()[bgKey], defaultBg)
+          end,
+          set = function(r, g, b, a) Bars()[bgKey] = { r = r, g = g, b = b, a = a }; DataBars("RefreshBars") end },
+        { type = "color", label = title .. " Border",
+          desc = "Border color and opacity around this bar.",
+          disabled = function() return InheritsTrackerLook() or Bars()[styleKey] == "none" end,
+          get = function()
+              if InheritsTrackerLook() then
+                  local bd = ns.db.backdrop
+                  if bd.classColorBorder and ns.GetClassColor then
+                      local cc = ns.GetClassColor()
+                      if cc then return cc.r, cc.g, cc.b, (bd.borderColor and bd.borderColor.a) or 0.90 end
+                  end
+                  return UnpackColor(bd.borderColor, { r = 0.15, g = 0.15, b = 0.15, a = 0.90 })
+              end
+              return UnpackColor(Bars()[borderKey], defaultBorder)
+          end,
+          set = function(r, g, b, a) Bars()[borderKey] = { r = r, g = g, b = b, a = a }; DataBars("RefreshBars") end },
+    }
+    return specs
+end
+
+local function Concat(...)
+    local out = {}
+    for i = 1, select("#", ...) do
+        for _, v in ipairs((select(i, ...))) do out[#out + 1] = v end
+    end
+    return out
+end
+
+StaticPopupDialogs["BFQ_RELOAD_FOR_LANGUAGE"] = {
+    text = "Bleakfiber's Quest Tracker: reload the interface now to finish changing the language?",
+    button1 = ACCEPT,
+    button2 = CANCEL,
+    OnShow = function(self)
+        local textRegion = self.text or self.Text
+        if textRegion and textRegion.SetText then
+            textRegion:SetText(L["Bleakfiber's Quest Tracker: reload the interface now to finish changing the language?"])
+        end
+    end,
+    OnAccept = function() ReloadUI() end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
+local TAB_EXTRAS = {
+    general = {
+        { type = "header", text = "LANGUAGE & CHAT OUTPUT" },
+        { type = "select", label = "Language", values = function() return ns.GetLanguageOptions() end,
+          desc = "Choose the language used by the tracker and its settings. Language packs ship in the Locales folder; Automatic follows your game client.",
+          get = function() return ns.dbObject.global.language or "auto" end,
+          set = function(v)
+              if v == (ns.dbObject.global.language or "auto") then return end
+              ns.dbObject.global.language = v
+              ns.SetLanguage(v)
+              StaticPopup_Show("BFQ_RELOAD_FOR_LANGUAGE")
+          end },
+        { type = "toggle", label = "Debug & Chat Output",
+          desc = "Allow the addon to write status, diagnostic, and debug messages to your chat window. When off, nothing is printed to chat.",
+          get = function() return ns.dbObject.global.chatOutput == true end,
+          set = function(v) ns.dbObject.global.chatOutput = v end },
+        { type = "header", text = "TRACKER SIZE" },
+        { type = "range", label = "Bottom Padding (px)", min = 0, max = 20, step = 1,
+          desc = "Empty space between the last quest and the bottom edge of the tracker.",
+          get = function() return ns.db.trackerBottomPadding or 4 end,
+          set = function(v) ns.db.trackerBottomPadding = v end },
+        { type = "header", text = "QUEST FILTERING" },
+        { type = "select", label = "Quest Filter Mode",
+          values = { { key = "all", label = "All Quests" }, { key = "zone", label = "Current Zone Only" }, { key = "watched", label = "Watched Only" } },
+          desc = "Choose which quests the tracker shows: every quest, only quests for your current zone, or only quests you have watched (Shift-click in the quest log).",
+          get = function() return ns.db.filtering.filterMode or "all" end,
+          set = function(v) Config:SetFilterMode(v) end },
+        { type = "toggle", label = "Enable Cross-Zone Objective Tracking",
+          desc = "Show quests in the zones where their objectives or turn-ins are, even if you accepted them elsewhere.",
+          get = function() return ns.db.filtering.enableCrossZone ~= false end,
+          set = function(v) ns.db.filtering.enableCrossZone = v; ns:FireCallback("QUEST_DATA_CHANGED") end },
+    },
+    quests = {
+        { type = "header", text = "ADDITIONAL QUEST OPTIONS" },
+        { type = "toggle", label = "Show Timers in Objective Text",
+          desc = "Show a live countdown next to timed quest objectives (e.g. [04:12]). Only appears on quests with an active timer.",
+          get = function() return ns.db.showTimerInObjectives ~= false end,
+          set = function(v) ns.db.showTimerInObjectives = v end },
+        { type = "toggle", label = "Highlight Most Valuable Choice Reward",
+          desc = "For quests with several reward choices, mark the item with the highest vendor price.",
+          disabled = function() return ns.db.tooltips.showRewards == false end,
+          get = function() return ns.db.tooltips.showBestSell ~= false end,
+          set = function(v) ns.db.tooltips.showBestSell = v end },
+        { type = "select", label = "Active Quest Marker",
+          values = {
+              { key = "star", label = "Gold Star (Blizzard)" }, { key = "arrow", label = "Gold Arrow" },
+              { key = "blizz", label = "Blizzard Quest Icon" }, { key = "pointer", label = "Cyan Pointer (>)" },
+              { key = "none", label = "None" },
+          },
+          desc = "Icon shown next to the active quest. Hidden while the inline Wayfinder arrow is shown.",
+          disabled = function() return ns.IsModuleEnabled("wayfinder") and WF().enableInlineArrow end,
+          get = function() return ns.db.activeQuestIcon or "star" end,
+          set = function(v) ns.db.activeQuestIcon = v; ns:FireCallback("QUEST_DATA_CHANGED") end },
+        { type = "keybind", label = "Quest Item Key", binding = ns.BINDING_QUEST_ITEM,
+          desc = "Uses the quest item of the top quest in the tracker. Works in combat." },
+        { type = "toggle", label = "Show Test Quest Item Button",
+          desc = "Shows a test quest item button on a quest so you can check its placement, size and your Quest Item Key without owning a quest item. Clicking it uses no item. Turns off when you reload. Also /bfq testitem.",
+          get = function() return ns.StandaloneTracker and ns.StandaloneTracker.itemPreview == true end,
+          set = function(v)
+              if not ns.StandaloneTracker:SetItemPreview(v) then
+                  C_Timer.After(0, function() Config:SyncAll() end)
+              end
+          end },
+        { type = "select", label = "Open Quests In",
+          values = { { key = "world", label = "World Map (Blizzard)" }, { key = "classic", label = "Classic Quest Log" }, { key = "both", label = "Both" } },
+          desc = "Where Ctrl+Click, Show in Quest Log, and the [Log] header button open quests. Classic Quest Log needs a classic quest log addon (such as Kerzo's Classic Quest Log); without one, the world map opens instead.",
+          get = function() return ns.db.questOpenMode or "world" end,
+          set = function(v) ns.db.questOpenMode = v end },
+        { type = "header", text = "FOREVER QUESTS" },
+        { type = "toggle", label = "Mark Quests New in WoW Forever",
+          desc = "Adds a marker to quests that were not in original Classic. The list comes straight from the game clients' own quest data. Type /bfq questid to check a quest.",
+          get = function() return ns.db.foreverMarker.enabled ~= false end,
+          set = function(v) ns.db.foreverMarker.enabled = v end },
+        { type = "select", label = "Marker Position",
+          values = { { key = "after", label = "After the Quest Name" }, { key = "before", label = "Before the Quest Name" } },
+          desc = "Where the marker appears on the quest title.",
+          disabled = function() return ns.db.foreverMarker.enabled == false end,
+          get = function() return ns.db.foreverMarker.position or "after" end,
+          set = function(v) ns.db.foreverMarker.position = v end },
+        { type = "select", label = "Marker Style",
+          values = { { key = "icon", label = "Infinity Icon" }, { key = "text", label = "Text Badge [F]" } },
+          desc = "Show the marker as a small infinity icon or as a text badge.",
+          disabled = function() return ns.db.foreverMarker.enabled == false end,
+          get = function() return ns.db.foreverMarker.style or "icon" end,
+          set = function(v) ns.db.foreverMarker.style = v end },
+        { type = "range", label = "Marker Size (px)", min = 8, max = 20, step = 1,
+          desc = "Height of the infinity icon.",
+          disabled = function() return ns.db.foreverMarker.enabled == false or ns.db.foreverMarker.style == "text" end,
+          get = function() return ns.db.foreverMarker.size or 12 end,
+          set = function(v) ns.db.foreverMarker.size = v end },
+        { type = "color", label = "Marker Color",
+          desc = "Color of the marker and of the tooltip note.",
+          disabled = function() return ns.db.foreverMarker.enabled == false end,
+          get = function()
+              local c = ns.db.foreverMarker.color or { r = 0.60, g = 0.90, b = 0.95 }
+              return c.r, c.g, c.b, 1
+          end,
+          set = function(r, g, b) ns.db.foreverMarker.color = { r = r, g = g, b = b, a = 1 } end },
+        { type = "toggle", label = "Tint the Quest Name",
+          desc = "Also colors the name of quests new in WoW Forever with the marker color.",
+          disabled = function() return ns.db.foreverMarker.enabled == false end,
+          get = function() return ns.db.foreverMarker.tintTitle == true end,
+          set = function(v) ns.db.foreverMarker.tintTitle = v end },
+        { type = "header", text = "QUEST ACTION BUTTONS" },
+        { type = "select", label = "Quest Action Buttons",
+          values = { { key = "off", label = "Off" }, { key = "hover", label = "Show on Hover" }, { key = "always", label = "Always" } },
+          desc = "Small buttons at the right end of each quest title for quick actions. They always stay left of the quest item button and never cover it.",
+          get = function() return ns.db.questButtons.mode or "off" end,
+          set = function(v) ns.db.questButtons.mode = v end },
+        { type = "range", label = "Action Button Size (px)", min = 12, max = 24, step = 1,
+          desc = "Size of the quest action buttons.",
+          disabled = function() return (ns.db.questButtons.mode or "off") == "off" end,
+          get = function() return ns.db.questButtons.size or 16 end,
+          set = function(v) ns.db.questButtons.size = v end },
+        { type = "toggle", label = "Set Active Button",
+          desc = "Star button that sets or clears the active quest.",
+          disabled = function() return (ns.db.questButtons.mode or "off") == "off" end,
+          get = function() return ns.db.questButtons.setActive ~= false end,
+          set = function(v) ns.db.questButtons.setActive = v end },
+        { type = "toggle", label = "Show on Map Button",
+          desc = "Opens the world map on the quest's zone.",
+          disabled = function() return (ns.db.questButtons.mode or "off") == "off" end,
+          get = function() return ns.db.questButtons.map ~= false end,
+          set = function(v) ns.db.questButtons.map = v end },
+        { type = "toggle", label = "Share Button",
+          desc = "Shares the quest with your group. Only shown while you are in a group and the quest can be shared.",
+          disabled = function() return (ns.db.questButtons.mode or "off") == "off" end,
+          get = function() return ns.db.questButtons.share ~= false end,
+          set = function(v) ns.db.questButtons.share = v end },
+        { type = "toggle", label = "Open Quest Button",
+          desc = "Left-click opens the quest on the world map. Right-click opens it in a classic quest log addon.",
+          disabled = function() return (ns.db.questButtons.mode or "off") == "off" end,
+          get = function() return ns.db.questButtons.log ~= false end,
+          set = function(v) ns.db.questButtons.log = v end },
+    },
+    appearance = {
+        { type = "header", text = "FRAME BORDER" },
+        { type = "toggle", label = "Show Background & Backdrop",
+          desc = "Show the tracker background and border.",
+          get = function() return ns.db.backdrop.show ~= false end,
+          set = function(v) ns.db.backdrop.show = v end },
+        { type = "range", label = "Border Thickness (px)", min = 0, max = 5, step = 1,
+          desc = "Pixel thickness of the flat border (0 for no border).",
+          disabled = function() local st = ns.db.backdrop.borderStyle; return st ~= nil and st ~= "flat" end,
+          get = function()
+              local bd = ns.db.backdrop
+              if bd.borderWidth ~= nil then return bd.borderWidth end
+              return bd.edgeSize or 1
+          end,
+          set = function(v) ns.db.backdrop.borderWidth = v; ns.db.backdrop.edgeSize = v end },
+        { type = "range", label = "Corner & Border Size (px)", min = 8, max = 24, step = 1,
+          desc = "Edge and corner size for the classic rounded borders (default 16).",
+          disabled = function() local st = ns.db.backdrop.borderStyle; return st == nil or st == "flat" or st == "none" end,
+          get = function() return ns.db.backdrop.edgeSize or 16 end,
+          set = function(v) ns.db.backdrop.edgeSize = v end },
+        { type = "range", label = "DataBar Docking Spacing (px)", min = 0, max = 5, step = 1,
+          desc = "Gap between the tracker and docked DataBars, and between stacked bars.",
+          get = function() return Bars().dockSpacing or 0 end,
+          set = function(v) Bars().dockSpacing = v; DataBars("UpdateAllDocking") end },
+    },
+    headers = {
+        { type = "header", text = "QUEST CLICKS" },
+        { type = "toggle", label = "Double-Click Sets Active Quest",
+          desc = "Double-click a quest to make it your active quest. A single click still collapses or expands it, after a short 0.25 second wait. If you use the Set Active action button, you can turn this off so single clicks act instantly. Has no effect while Left-Click Sets Active Quest is on.",
+          disabled = function() return ns.db.sorting.leftClickSetsActive == true end,
+          get = function() return ns.db.sorting.doubleClickSetsActive ~= false end,
+          set = function(v) ns.db.sorting.doubleClickSetsActive = v end },
+        { type = "header", text = "HEADER COLOR SHARING & COUNTER" },
+        { type = "toggle", label = "Header Texture Uses Border Color",
+          desc = "Tint the header texture with the tracker border color.",
+          disabled = function() return ns.db.headers.texture == "none" end,
+          get = function() return ns.db.headers.textureColorShare == true end,
+          set = function(v) ns.db.headers.textureColorShare = v end },
+        { type = "toggle", label = "Header Text Uses Border Color",
+          desc = "Color the header text with the tracker border color.",
+          get = function() return ns.db.headers.textColorShare == true end,
+          set = function(v) ns.db.headers.textColorShare = v end },
+        { type = "toggle", label = "Header Buttons Use Border Color",
+          desc = "Color the header buttons with the tracker border color.",
+          get = function() return ns.db.headers.buttonColorShare == true end,
+          set = function(v) ns.db.headers.buttonColorShare = v end },
+        { type = "select", label = "Quest Counter Format",
+          values = { { key = "none", label = "None" }, { key = "short", label = "(5/40) - Short" }, { key = "full", label = "(5/40 Quests) - Full" } },
+          desc = "Format of the quest log counter shown in the header.",
+          get = function() return ns.db.headers.countFormat or "short" end,
+          set = function(v) ns.db.headers.countFormat = v end },
+        { type = "select", label = "Collapsed Tracker Text",
+          values = { { key = "none", label = "None (Minimal [+])" }, { key = "counter", label = "Counter Only" }, { key = "title", label = "Title & Counter" } },
+          desc = "Text shown on the header while the tracker is collapsed.",
+          get = function() return ns.db.headers.collapsedText or "counter" end,
+          set = function(v) ns.db.headers.collapsedText = v end },
+    },
+    wayfinder = {
+        { type = "header", text = "ARROW HUD DETAILS" },
+        { type = "toggle", label = "Lock Arrow Position",
+          desc = "Prevent dragging the floating HUD arrow.",
+          get = function() return WF().locked == true end,
+          set = function(v) WF().locked = v end },
+        { type = "toggle", label = "Show Backdrop Circle",
+          desc = "Show a semi-transparent circle behind the floating arrow.",
+          get = function() return WF().showBackdrop == true end,
+          set = function(v) WF().showBackdrop = v end },
+        { type = "toggle", label = "Show Destination Name",
+          desc = "Show the destination name above the distance readout.",
+          get = function() return WF().showDestination ~= false end,
+          set = function(v) WF().showDestination = v; Wayfinder("ForceImmediateUpdate") end },
+        { type = "select", label = "Destination Name Format",
+          values = { { key = "zone", label = "Zone" }, { key = "quest", label = "Quest Title" }, { key = "both", label = "Zone & Quest Title" } },
+          desc = "What the arrow shows above the distance readout.",
+          disabled = function() return WF().showDestination == false end,
+          get = function() return WF().hudTitleFormat or "zone" end,
+          set = function(v) WF().hudTitleFormat = v; Wayfinder("ForceImmediateUpdate") end },
+        { type = "select", label = "Destination Text Outline", values = FONT_FLAG_OPTIONS,
+          desc = "Outline style for the destination name.",
+          get = function() return WF().hudTitleFontOutline or "OUTLINE" end,
+          set = function(v) WF().hudTitleFontOutline = v end },
+        { type = "select", label = "Distance Text Outline", values = FONT_FLAG_OPTIONS,
+          desc = "Outline style for the distance readout.",
+          get = function() return WF().hudFontOutline or "OUTLINE" end,
+          set = function(v) WF().hudFontOutline = v end },
+        { type = "toggle", label = "Show Distance Readout",
+          desc = "Show the distance (yards or meters) below the arrow.",
+          get = function() return WF().showDistance ~= false end,
+          set = function(v) WF().showDistance = v; Wayfinder("ForceImmediateUpdate") end },
+        { type = "toggle", label = "Show Estimated Time of Arrival",
+          desc = "Show an ETA based on your current movement speed.",
+          get = function() return WF().showETA == true end,
+          set = function(v) WF().showETA = v end },
+        { type = "header", text = "NAVIGATION BEHAVIOR" },
+        { type = "toggle", label = "Auto-Track Active Quest",
+          desc = "Point the arrow at the active (or super-tracked) quest automatically.",
+          get = function() return WF().autoTrackActiveQuest ~= false end,
+          set = function(v) WF().autoTrackActiveQuest = v; Wayfinder("RefreshState") end },
+        { type = "select", label = "Inline Arrow Position",
+          values = { { key = "left", label = "Left (In Front of Title)" }, { key = "right", label = "Right (Tracker Margin)" } },
+          desc = "Where the small arrow appears next to the active quest title.",
+          get = function() return WF().inlineArrowPosition or "left" end,
+          set = function(v) WF().inlineArrowPosition = v end },
+        { type = "range", label = "Arrival Distance (Yards)", min = 5, max = 50, step = 1,
+          desc = "How close you must get before the arrow reports that you have arrived.",
+          get = function() return WF().arrivalThreshold or 15 end,
+          set = function(v) WF().arrivalThreshold = v end },
+        { type = "range", label = "Clear Waypoint After Arrival (s)", min = 0, max = 30, step = 1,
+          desc = "Seconds to wait after arriving before a custom waypoint is cleared (0 clears immediately).",
+          get = function() local v = WF().arrivalClearDelay; if v == nil then return 5 end return v end,
+          set = function(v) WF().arrivalClearDelay = v end },
+        { type = "toggle", label = "Show World Map Waypoint Pins",
+          desc = "Mark custom waypoints on the World Map.",
+          get = function() return WF().showMapPins ~= false end,
+          set = function(v) WF().showMapPins = v; Wayfinder("RefreshMapPins") end },
+        { type = "toggle", label = "Show Player & Cursor Coordinates",
+          desc = "Show player and cursor coordinates at the bottom of the World Map.",
+          get = function() return WF().showCoordinates == true end,
+          set = function(v) WF().showCoordinates = v; Wayfinder("UpdateCoordinatesDisplay") end },
+    },
+    databars = Concat({
+        { type = "header", text = "SHARED BAR APPEARANCE" },
+        { type = "toggle", label = "Inherit Tracker Frame Appearance",
+          desc = "DataBars use the tracker's background, border style, and colors. Turn off to style each bar separately below.",
+          get = function() return InheritsTrackerLook() end,
+          set = function(v) Bars().useTrackerAppearance = v; DataBars("RefreshBars") end },
+        { type = "header", text = "XP BAR DETAILS" },
+        { type = "toggle", label = "Hide Blizzard XP Bar",
+          desc = "Hide Blizzard's default experience / status tracking bar.",
+          get = function() return Bars().hideBlizzardXPBar ~= false end,
+          set = function(v) Bars().hideBlizzardXPBar = v; DataBars("SuppressBlizzardXP", v) end },
+        { type = "toggle", label = "Show All Quests XP (Ghost Bar)",
+          desc = "Overlay the total XP of every quest in your log on the bar.",
+          get = function() return Bars().showAllQuestXP == true end,
+          set = function(v) Bars().showAllQuestXP = v; DataBars("UpdateXPBar") end },
+        { type = "toggle", label = "Hide Quest XP Text",
+          desc = "Hide the +Done / +All quest XP text on the bar. The ghost bars and tooltip details stay.",
+          get = function() return Bars().hideQuestXPText == true end,
+          set = function(v) Bars().hideQuestXPText = v; DataBars("UpdateXPBar") end },
+        { type = "toggle", label = "Show Watched Reputation at Max Level",
+          desc = "At maximum level, show your watched faction's reputation instead of XP.",
+          get = function() return Bars().showReputationAtMax ~= false end,
+          set = function(v) Bars().showReputationAtMax = v; DataBars("UpdateXPBar") end },
+        { type = "select", label = "XP Text Format",
+          values = {
+              { key = "smart", label = "Smart (Current / Max (Pct%) + Quest XP)" }, { key = "cur_max", label = "Current / Max" },
+              { key = "cur_pct", label = "Percentage Only" }, { key = "remain", label = "XP Remaining to Level" },
+              { key = "none", label = "Hide Text (Clean Bar)" },
+          },
+          desc = "How the XP text is written on the bar.",
+          get = function() return Bars().xpTextFormat or "smart" end,
+          set = function(v) Bars().xpTextFormat = v; DataBars("UpdateXPBar") end },
+        { type = "range", label = "XP Text Size (px)", min = 8, max = 18, step = 1,
+          desc = "Font size of the XP bar text.",
+          get = function() return Bars().xpFontSize or 11 end,
+          set = function(v) Bars().xpFontSize = v; DataBars("ApplyTypography") end },
+        { type = "select", label = "XP Text Outline", values = FONT_FLAG_OPTIONS,
+          desc = "Outline style of the XP bar text.",
+          get = function() return Bars().xpFontOutline or "OUTLINE" end,
+          set = function(v) Bars().xpFontOutline = v; DataBars("ApplyTypography") end },
+        { type = "select", label = "XP Statusbar Texture", values = GetStatusbarTextureList,
+          desc = "Fill texture of the XP bar.",
+          get = function() return Bars().xpBarTexture or "Solid" end,
+          set = function(v) Bars().xpBarTexture = v; DataBars("RefreshBars") end },
+    }, BarAppearanceSpecs("xp", "XP Bar", { r = 0.05, g = 0.05, b = 0.05, a = 0.65 }, { r = 0.12, g = 0.12, b = 0.16, a = 0.95 }), {
+        { type = "header", text = "LOCATION BAR DETAILS" },
+        { type = "toggle", label = "Hide Default Minimap Zone Header",
+          desc = "Hide Blizzard's zone text above the minimap while the Location Bar is enabled.",
+          get = function() return Bars().hideMinimapHeader ~= false end,
+          set = function(v) Bars().hideMinimapHeader = v; DataBars("ApplyMinimapHeaderSuppression", v) end },
+        { type = "toggle", label = "Show Subzone Text",
+          desc = "Show the subzone name next to the zone name.",
+          get = function() return Bars().showSubzone ~= false end,
+          set = function(v) Bars().showSubzone = v; DataBars("UpdateLocationBar", true) end },
+        { type = "select", label = "Location Text Format",
+          values = {
+              { key = "subzone_only", label = "Subzone When Available" }, { key = "smart", label = "Smart Auto-Fit" },
+              { key = "zone_only", label = "Zone Only" }, { key = "both", label = "Both (Zone - Subzone)" },
+          },
+          desc = "How zone and subzone names are combined on the Location Bar.",
+          get = function() return Bars().locFormat or "subzone_only" end,
+          set = function(v) Bars().locFormat = v; DataBars("UpdateLocationBar", true) end },
+        { type = "range", label = "Location Bar Height", min = 16, max = 36, step = 1,
+          desc = "Height of the Location Bar in pixels (default 22).",
+          get = function() return Bars().locHeight or 22 end,
+          set = function(v) Bars().locHeight = v; DataBars("UpdateLocationDocking") end },
+        { type = "range", label = "Location Text Size (px)", min = 8, max = 18, step = 1,
+          desc = "Font size of the Location Bar text.",
+          get = function() return Bars().locFontSize or 11 end,
+          set = function(v) Bars().locFontSize = v; DataBars("ApplyTypography") end },
+        { type = "select", label = "Location Text Outline", values = FONT_FLAG_OPTIONS,
+          desc = "Outline style of the Location Bar text.",
+          get = function() return Bars().locFontOutline or "OUTLINE" end,
+          set = function(v) Bars().locFontOutline = v; DataBars("ApplyTypography") end },
+    }, BarAppearanceSpecs("loc", "Location Bar", { r = 0.06, g = 0.08, b = 0.12, a = 0.90 }, { r = 0.15, g = 0.55, b = 0.95, a = 0.85 }), {
+        { type = "header", text = "QUEST TIMER BAR" },
+        { type = "toggle", label = "Enable Quest Timer Bar",
+          desc = "Show a bar with the time left on your active timed quest. Hidden when no timed quest is active.",
+          get = function() return Bars().enableTimerBar ~= false end,
+          set = function(v) Bars().enableTimerBar = v; DataBars("RefreshBars") end },
+        { type = "select", label = "Timer Bar Docking",
+          values = { { key = "tracker_top", label = "Dock to Tracker Top" }, { key = "tracker_bottom", label = "Dock to Tracker Bottom" }, { key = "free", label = "Free Floating (Movable)" } },
+          desc = "Where the Quest Timer Bar is placed.",
+          get = function() return Bars().timerDockMode or "tracker_top" end,
+          set = function(v) Bars().timerDockMode = v; DataBars("UpdateTimerDocking"); DataBars("UpdateTimerBar") end },
+        { type = "toggle", label = "Show Quest Title on Timer Bar",
+          desc = "Show the quest name next to the countdown.",
+          get = function() return Bars().timerShowTitle ~= false end,
+          set = function(v) Bars().timerShowTitle = v; DataBars("UpdateTimerBar") end },
+        { type = "range", label = "Timer Bar Height (px)", min = 16, max = 36, step = 1,
+          desc = "Height of the timer bar (default 22).",
+          get = function() return Bars().timerHeight or 22 end,
+          set = function(v) Bars().timerHeight = v; DataBars("UpdateTimerDocking") end },
+        { type = "range", label = "Timer Bar Width (px)", min = 140, max = 400, step = 5,
+          desc = "Width of the timer bar while free floating (default 220).",
+          get = function() return Bars().timerWidth or 220 end,
+          set = function(v) Bars().timerWidth = v; DataBars("UpdateTimerDocking") end },
+        { type = "range", label = "Timer Text Size (px)", min = 8, max = 18, step = 1,
+          desc = "Font size of the countdown text.",
+          get = function() return Bars().timerFontSize or 11 end,
+          set = function(v) Bars().timerFontSize = v; DataBars("ApplyTypography") end },
+        { type = "select", label = "Timer Text Outline", values = FONT_FLAG_OPTIONS,
+          desc = "Outline style of the countdown text.",
+          get = function() return Bars().timerFontOutline or "OUTLINE" end,
+          set = function(v) Bars().timerFontOutline = v; DataBars("ApplyTypography") end },
+        { type = "select", label = "Timer Statusbar Texture", values = GetStatusbarTextureList,
+          desc = "Fill texture of the timer bar.",
+          get = function() return Bars().timerBarTexture or "Solid" end,
+          set = function(v) Bars().timerBarTexture = v; DataBars("RefreshBars") end },
+    }, BarAppearanceSpecs("timer", "Timer Bar", { r = 0.06, g = 0.08, b = 0.12, a = 0.90 }, { r = 1.00, g = 0.82, b = 0.00, a = 0.85 })),
+}
+
+local extraSliderCount = 0
+
+-- Builds the widgets for one tab's extra settings; returns a layout function
+-- that places them below startY and returns the new bottom offset.
+local function BuildExtraSettings(content, syncList, specs)
+    local entries = {}
+
+    local function RefreshDisabled()
+        for _, e in ipairs(entries) do
+            if e.spec.disabled then
+                local enabled = not e.spec.disabled()
+                local w = e.widget
+                if w.SetEnabledState then
+                    w:SetEnabledState(enabled)
+                elseif e.spec.type == "color" then
+                    w:SetEnabled(enabled)
+                else
+                    if w.SetEnabled then w:SetEnabled(enabled) end
+                    w:SetAlpha(enabled and 1 or 0.4)
+                    if w.Label then w.Label:SetAlpha(enabled and 1 or 0.4) end
+                end
+            end
+        end
+    end
+
+    local function Wrap(set)
+        return function(...)
+            set(...)
+            RefreshDisabled()
+        end
+    end
+
+    for _, spec in ipairs(specs) do
+        local w, height, full
+        if spec.type == "header" then
+            local header = CreateSectionHeader(content, spec.text, 12, 0)
+            w, height, full = header, 30, true
+        elseif spec.type == "toggle" then
+            w = CreateStyledCheckbox(content, spec.label, spec.desc, spec.get, Wrap(spec.set))
+            height = 30
+        elseif spec.type == "range" then
+            extraSliderCount = extraSliderCount + 1
+            w = CreateStyledSlider(content, "BFQ_ExtraSlider" .. extraSliderCount, spec.label, spec.desc,
+                spec.min, spec.max, spec.step, spec.get, Wrap(spec.set), spec.format)
+            height = 46
+        elseif spec.type == "select" then
+            w = CreateStyledDropdown(content, spec.label, 220, 22, spec.values, spec.get, Wrap(spec.set), spec.desc)
+            height = 32
+        elseif spec.type == "color" then
+            w = CreateStyledColorPickerWithHex(content, spec.label, 220, 22, spec.get, Wrap(spec.set), spec.desc)
+            height = 32
+        elseif spec.type == "keybind" then
+            w = CreateStyledKeybindButton(content, spec.binding, spec.label, 220, 22, spec.desc)
+            height = 32
+        end
+        if w then
+            entries[#entries + 1] = { spec = spec, widget = w, height = height, full = full }
+            if w.Sync then
+                local baseSync = w.Sync
+                w.Sync = function()
+                    baseSync(w)
+                    RefreshDisabled()
+                end
+                syncList[#syncList + 1] = w
+            end
+        end
+    end
+    RefreshDisabled()
+
+    return function(startY, width)
+        if not width or width < 100 then width = content:GetWidth() or 500 end
+        local twoCols = width >= 470
+        local colWidth = twoCols and math.floor((width - 48) / 2) or (width - 36)
+        local colX = { 16, 16 + colWidth + 16 }
+        local y = startY - 10
+        local col, rowHeight = 1, 0
+        for _, e in ipairs(entries) do
+            local w = e.widget
+            if e.full then
+                if col == 2 then y = y - rowHeight end
+                col, rowHeight = 1, 0
+                w:ClearAllPoints()
+                w:SetPoint("TOPLEFT", content, "TOPLEFT", 12, y)
+                y = y - e.height
+            else
+                local offsetY = (e.spec.type == "range") and -16 or 0
+                w:ClearAllPoints()
+                w:SetPoint("TOPLEFT", content, "TOPLEFT", colX[col] + (e.spec.type == "toggle" and 0 or 4), y + offsetY)
+                if e.spec.type == "toggle" then
+                    if w.Text then w.Text:SetWidth(colWidth - 34) end
+                else
+                    w:SetWidth(math.min(220, colWidth - 20))
+                end
+                rowHeight = math.max(rowHeight, e.height)
+                if twoCols and col == 1 then
+                    col = 2
+                else
+                    col = 1
+                    y = y - rowHeight
+                    rowHeight = 0
+                end
+            end
+        end
+        if col == 2 then y = y - rowHeight end
+        return y
+    end
+end
+
 -- TAB 1: General Settings
 local function BuildGeneralTab(content, syncList)
-    local db = ns.db or {}
-    local filterDb = db.filtering or {}
+    local db = LiveDB
+    local filterDb = LiveSection("filtering")
 
-    local h1, d1 = CreateSectionHeader(content, "FRAME LOCK & SIZING", 12, 0)
+    local h1 = CreateSectionHeader(content, "FRAME LOCK & SIZING", 12, 0)
     local cbLock = CreateStyledCheckbox(content, "Lock Tracker Frame (Shift-drag unlock)",
         "Locks the tracker frame in place. When unlocked, hold Shift + Left Click to drag anywhere on screen.",
         function() return db.isLocked == true end,
@@ -5942,7 +2497,7 @@ local function BuildGeneralTab(content, syncList)
     )
     table.insert(syncList, ddGrowCorner)
 
-    local h2, d2 = CreateSectionHeader(content, "VISIBILITY & COMBAT BEHAVIOR", 12, 0)
+    local h2 = CreateSectionHeader(content, "VISIBILITY & COMBAT BEHAVIOR", 12, 0)
     local cbEmpty = CreateStyledCheckbox(content, "Auto-Hide When Empty",
         "Automatically hides the quest tracker backdrop when you have no active tracked quests.",
         function() return filterDb.autoHideEmpty == true end,
@@ -5977,7 +2532,7 @@ local function BuildGeneralTab(content, syncList)
         end
     end, "Completely hide or show the entire quest tracker window. Macro / Slash commands: /bfqhide, /bfq hide, /bfq show, /bfq togglehide.")
 
-    local btnBindHide = CreateStyledKeybindButton(content, "BLEAKFIBER_TOGGLE_TRACKER_VISIBILITY", "Hide Tracker Key", 190, 22,
+    local btnBindHide = CreateStyledKeybindButton(content, ns.BINDING_TOGGLE_TRACKER, "Hide Tracker Key", 190, 22,
         "Bind a keyboard shortcut to completely hide or show the quest tracker window."
     )
     table.insert(syncList, btnBindHide)
@@ -5995,7 +2550,7 @@ local function BuildGeneralTab(content, syncList)
     )
     table.insert(syncList, cbHideDataBarsWithTracker)
 
-    local h3, d3 = CreateSectionHeader(content, "MODULE MANAGEMENT", 12, 0)
+    local h3 = CreateSectionHeader(content, "MODULE MANAGEMENT", 12, 0)
     local cbModWayfinder = CreateStyledCheckbox(content, "Wayfinder Navigation Module",
         "3D floating HUD waypoint arrow, inline tracker mini arrows, and distance readouts.",
         function() return ns.IsModuleEnabled("wayfinder") end,
@@ -6024,7 +2579,7 @@ local function BuildGeneralTab(content, syncList)
     )
     table.insert(syncList, cbModQoL)
 
-    local h4, d4 = CreateSectionHeader(content, "UTILITY & POSITION ACTIONS", 12, 0)
+    local h4 = CreateSectionHeader(content, "UTILITY & POSITION ACTIONS", 12, 0)
     local cbOverlay = CreateStyledCheckbox(content, "Show Bounds Overlay & Resize Handle",
         "Display the on-screen blue bounding box and [Drag to Resize] handle on the tracker.",
         function()
@@ -6052,18 +2607,15 @@ local function BuildGeneralTab(content, syncList)
         if ns.Tracker and ns.Tracker.ResetPosition then
             ns.Tracker:ResetPosition()
         end
-        if ns.Print then ns.Print("Tracker position reset to default.") end
+        ns.Notify(L["Tracker position reset to default."])
     end, "Reset the tracker to the default screen position (top-right).")
 
     local btnResetUntracked = CreateStyledButton(content, "Reset Untracked Quests", 190, 22, function()
         if db.filtering then
             db.filtering.untrackedQuests = {}
         end
-        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-        if ns.StandaloneTracker and ns.StandaloneTracker.RefreshQuests then
-            ns.StandaloneTracker:RefreshQuests()
-        end
-        if ns.Print then ns.Print("Untracked quests restored.") end
+        ns:FireCallback("QUEST_DATA_CHANGED")
+        ns.Notify(L["Untracked quests restored."])
     end, "Restores all quests that were hidden from the tracker using the right-click 'Untrack Quest' menu.")
 
     local function Layout(w)
@@ -6239,14 +2791,14 @@ end
 
 -- TAB 2: Quests & Items
 local function BuildQuestsTab(content, syncList)
-    local db = ns.db or {}
-    local itemDb = db.itemButtons or {}
-    local headerDb = db.headers or {}
-    local fontDb = db.fonts or {}
-    local sortDb = db.sorting or {}
-    local tipDb = db.tooltips or {}
+    local db = LiveDB
+    local itemDb = LiveSection("itemButtons")
+    local headerDb = LiveSection("headers")
+    local fontDb = LiveSection("fonts")
+    local sortDb = LiveSection("sorting")
+    local tipDb = LiveSection("tooltips")
 
-    local h1, d1 = CreateSectionHeader(content, "QUEST ITEM ACTION BUTTONS", 12, 0)
+    local h1 = CreateSectionHeader(content, "QUEST ITEM ACTION BUTTONS", 12, 0)
     local cbItemBtn = CreateStyledCheckbox(content, "Enable Quest Item Buttons",
         "Renders clickable quest item shortcut buttons next to objectives (e.g. Hearthstone, quest items).",
         function() return itemDb.enabled ~= false end,
@@ -6284,34 +2836,16 @@ local function BuildQuestsTab(content, syncList)
 
     local btnItemPos = CreateStyledDropdown(content, "Item Placement", 220, 22, ITEM_POSITIONS,
         function()
-            local p = (ns.db and ns.db.itemButtonPlacement) or (db and db.itemButtonPlacement) or "inside_right"
+            local p = db.itemButtonPlacement
             if p ~= "outside_left" and p ~= "inside_right" then
                 p = "inside_right"
             end
             return p
         end,
         function(v)
-            if ns.db then
-                ns.db.itemButtonPlacement = v
-                ns.db.itemButtonPosition = nil
-            end
-            if db then
-                db.itemButtonPlacement = v
-                db.itemButtonPosition = nil
-            end
-            if itemDb then
-                itemDb.position = (v == "outside_left") and "left" or "right"
-                itemDb.placement = v
-            end
-            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-            if ns.Tracker and ns.Tracker.UpdateSettings then
-                ns.Tracker:UpdateSettings()
-            elseif ns.StandaloneTracker and ns.StandaloneTracker.RequestUpdate then
-                ns.StandaloneTracker:RequestUpdate()
-            end
-            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateItemButton then
-                ns.StandaloneTracker:UpdateItemButton()
-            end
+            db.itemButtonPlacement = v
+            db.itemButtonPosition = nil
+            if ns.StandaloneTracker then ns.StandaloneTracker:UpdateItemButtonVisibility() end
         end,
         "Dock quest item buttons on the left side outside of the tracker or on the right side of the quest inside of the tracker."
     )
@@ -6322,7 +2856,6 @@ local function BuildQuestsTab(content, syncList)
         function(v)
             ns.db = ns.db or {}
             ns.db.itemButtonStrata = v
-            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
             if ns.StandaloneTracker and ns.StandaloneTracker.UpdateItemButtonStrata then
                 ns.StandaloneTracker:UpdateItemButtonStrata()
             end
@@ -6331,7 +2864,7 @@ local function BuildQuestsTab(content, syncList)
     )
     table.insert(syncList, btnItemStrata)
 
-    local h2, d2 = CreateSectionHeader(content, "OBJECTIVES, BADGES & TOOLTIPS", 12, 0)
+    local h2 = CreateSectionHeader(content, "OBJECTIVES, BADGES & TOOLTIPS", 12, 0)
     local cbCompleteIcon = CreateStyledCheckbox(content, "Show Completed ? Checkmark Icon",
         "Shows a prominent gold question mark or checkmark when a quest is ready to turn in.",
         function() return headerDb.showCompleteIcon ~= false end,
@@ -6405,7 +2938,7 @@ local function BuildQuestsTab(content, syncList)
     )
     table.insert(syncList, cbPartyBadge)
 
-    local h3, d3 = CreateSectionHeader(content, "ZONE EXPANSION ACTIONS", 12, 0)
+    local h3 = CreateSectionHeader(content, "ZONE EXPANSION ACTIONS", 12, 0)
     local btnExpandAll = CreateStyledButton(content, "Expand All Zones", 190, 22, function()
         if db then
             db.collapsedZones = {}
@@ -6560,12 +3093,12 @@ end
 
 -- TAB 3: Colors & Fonts
 local function BuildColorsTab(content, syncList)
-    local db = ns.db or {}
-    local bgDb = db.backdrop or {}
-    local fontDb = db.fonts or {}
-    local headerDb = db.headers or {}
-    local wfDb = db.wayfinder or {}
-    local dataDb = db.databars or {}
+    local db = LiveDB
+    local bgDb = LiveSection("backdrop")
+    local fontDb = LiveSection("fonts")
+    local headerDb = LiveSection("headers")
+    local wfDb = LiveSection("wayfinder")
+    local dataDb = LiveSection("databars")
     local ui = {}
 
     -- SECTION 1: TRACKER BACKDROP & BORDER
@@ -6590,8 +3123,7 @@ local function BuildColorsTab(content, syncList)
         bgDb.bgColor = { r = 0, g = 0, b = 0, a = 1.0 }
         if ns.Tracker and ns.Tracker.UpdateBackdrop then ns.Tracker:UpdateBackdrop() end
         for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
-        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-        if ns.Print then ns.Print("Tracker background set to Pure Black (#000000) at 100% opacity.") end
+        ns.Notify(L["Tracker background set to Pure Black (#000000) at 100% opacity."])
     end, "Instantly sets the background to solid pitch black (#000000) with 100% opacity for maximum contrast and readability.")
 
     ui.slBgAlpha = CreateStyledSlider(content, "BFQ_SlBgAlpha", "Background Opacity:",
@@ -6633,7 +3165,6 @@ local function BuildColorsTab(content, syncList)
             if ns.Tracker and ns.Tracker.UpdateBackdrop then ns.Tracker:UpdateBackdrop() end
             if ns.DataBarsModule and ns.DataBarsModule.RefreshBars then ns.DataBarsModule:RefreshBars() end
             for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
-            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
         end,
         "Select the background surface texture for the tracker window (Solid, Tooltip, Marble, Rock, or Parchment)."
     )
@@ -6677,8 +3208,7 @@ local function BuildColorsTab(content, syncList)
         end
         if ns.Tracker and ns.Tracker.UpdateBackdrop then ns.Tracker:UpdateBackdrop() end
         for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
-        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-        if ns.Print then ns.Print("Tracker backdrop and border colors reset to defaults.") end
+        ns.Notify(L["Tracker backdrop and border colors reset to defaults."])
     end, "Reset tracker background color, border color, and opacity back to defaults.")
 
     -- SECTION 2: QUEST & OBJECTIVE TYPOGRAPHY & COLORS
@@ -6926,8 +3456,7 @@ local function BuildColorsTab(content, syncList)
         if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
         if ns.Tracker and ns.Tracker.UpdateTypography then ns.Tracker:UpdateTypography() end
         for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
-        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-        if ns.Print then ns.Print("Quest and objective text colors & typography reset to defaults.") end
+        ns.Notify(L["Quest and objective text colors & typography reset to defaults."])
     end, "Reset quest title, objective, completed colors, and font sizes back to defaults.")
 
     -- SECTION 3: HEADER & ZONE BAR COLORS
@@ -7019,8 +3548,7 @@ local function BuildColorsTab(content, syncList)
         if ns.Tracker and ns.Tracker.UpdateSettings then ns.Tracker:UpdateSettings() end
         if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
         for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
-        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-        if ns.Print then ns.Print("Main header and zone header colors reset to defaults.") end
+        ns.Notify(L["Main header and zone header colors reset to defaults."])
     end, "Reset main header and zone header colors back to defaults.")
 
     -- SECTION 4: WAYFINDER NAVIGATION COLORS & FONTS
@@ -7142,8 +3670,7 @@ local function BuildColorsTab(content, syncList)
         if ns.WayfinderModule and ns.WayfinderModule.ApplyHUDSettings then ns.WayfinderModule:ApplyHUDSettings() end
         if ns.WayfinderModule and ns.WayfinderModule.ForceImmediateUpdate then ns.WayfinderModule:ForceImmediateUpdate() end
         for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
-        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-        if ns.Print then ns.Print("Wayfinder arrow colors, text colors, and font sizes reset to defaults.") end
+        ns.Notify(L["Wayfinder arrow colors, text colors, and font sizes reset to defaults."])
     end, "Reset Wayfinder navigation arrow colors, destination text color, and distance text color back to defaults.")
 
     -- SECTION 5: DATABARS COLORS & FONTS
@@ -7265,8 +3792,7 @@ local function BuildColorsTab(content, syncList)
         end
         if ns.DataBarsModule and ns.DataBarsModule.RefreshBars then ns.DataBarsModule:RefreshBars() end
         for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
-        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-        if ns.Print then ns.Print("DataBars colors reset to defaults.") end
+        ns.Notify(L["DataBars colors reset to defaults."])
     end, "Reset XP Bar, Location Bar, coordinates, and Timer Bar colors back to defaults.")
 
     -- SECTION 6: THEME PRESETS & MASTER RESET
@@ -7274,19 +3800,19 @@ local function BuildColorsTab(content, syncList)
 
     ui.btnPresetGlass = CreateStyledButton(content, "Modern Dark Glass", 190, 22, function()
         if Config.ApplyModernGlassPreset then Config:ApplyModernGlassPreset() end
-        if ns.Print then ns.Print("Applied Modern Dark Glass preset.") end
+        ns.Notify(L["Applied Modern Dark Glass preset."])
         for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
     end, "Modern dark glassmorphism preset with sleek flat 1px border and crisp white text.")
 
     ui.btnPresetClassic = CreateStyledButton(content, "Classic WoW Plus", 190, 22, function()
         if Config.ApplyClassicPreset then Config:ApplyClassicPreset() end
-        if ns.Print then ns.Print("Applied Classic WoW Plus preset.") end
+        ns.Notify(L["Applied Classic WoW Plus preset."])
         for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
     end, "Classic World of Warcraft parchment tooltip border with gold headers and high contrast.")
 
     ui.btnPresetMinimal = CreateStyledButton(content, "Ultra Minimalist", 190, 22, function()
         if Config.ApplyMinimalPreset then Config:ApplyMinimalPreset() end
-        if ns.Print then ns.Print("Applied Ultra Minimalist preset.") end
+        ns.Notify(L["Applied Ultra Minimalist preset."])
         for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
     end, "Borderless flat backdrop with compact typography for maximum screen space.")
 
@@ -7344,8 +3870,7 @@ local function BuildColorsTab(content, syncList)
         if ns.WayfinderModule and ns.WayfinderModule.ForceImmediateUpdate then ns.WayfinderModule:ForceImmediateUpdate() end
         if ns.DataBarsModule and ns.DataBarsModule.RefreshBars then ns.DataBarsModule:RefreshBars() end
         for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
-        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-        if ns.Print then ns.Print("All tracker, header, Wayfinder, and DataBars colors have been reset to defaults.") end
+        ns.Notify(L["All tracker, header, Wayfinder, and DataBars colors have been reset to defaults."])
     end, "Resets ALL colors across the entire addon (Tracker Backdrop, Quests, Headers, Wayfinder arrow, DataBars) back to default settings.")
 
     local function Layout(w)
@@ -7776,11 +4301,11 @@ end
 
 -- TAB 4: Headers & Sort
 local function BuildHeadersTab(content, syncList)
-    local db = ns.db or {}
-    local headerDb = db.headers or {}
-    local sortDb = db.sorting or {}
+    local db = LiveDB
+    local headerDb = LiveSection("headers")
+    local sortDb = LiveSection("sorting")
 
-    local h1, d1 = CreateSectionHeader(content, "MAIN HEADER BAR BUTTONS", 12, 0)
+    local h1 = CreateSectionHeader(content, "MAIN HEADER BAR BUTTONS", 12, 0)
     local cbLog = CreateStyledCheckbox(content, "Show [Log] Button",
         "Shows the [Log] button to instantly toggle Blizzard QuestLogFrame.",
         function() return headerDb.showQuestLogBtn ~= false end,
@@ -7816,7 +4341,7 @@ local function BuildHeadersTab(content, syncList)
     )
     table.insert(syncList, cbCollapse)
 
-    local h1b, d1b = CreateSectionHeader(content, "HEADER & ZONE STYLING & COLORS", 12, 0)
+    local h1b = CreateSectionHeader(content, "HEADER & ZONE STYLING & COLORS", 12, 0)
 
     local ddHeaderTex = CreateStyledDropdown(content, "Header Bar Style", 190, 22, HEADER_STYLES,
         function() return headerDb.texture or "gradient" end,
@@ -7921,11 +4446,10 @@ local function BuildHeadersTab(content, syncList)
         if ns.Tracker and ns.Tracker.UpdateSettings then ns.Tracker:UpdateSettings() end
         if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
         for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
-        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-        if ns.Print then ns.Print("Main header and zone header colors reset to defaults.") end
+        ns.Notify(L["Main header and zone header colors reset to defaults."])
     end, "Reset main header and zone header colors back to defaults.")
 
-    local h2, d2 = CreateSectionHeader(content, "ZONE GROUPING & SORTING", 12, 0)
+    local h2 = CreateSectionHeader(content, "ZONE GROUPING & SORTING", 12, 0)
     local cbZoneHeaders = CreateStyledCheckbox(content, "Group Quests Under Zone Headers",
         "Groups quests into collapsible zone header categories.",
         function() return headerDb.showZoneHeaders ~= false end,
@@ -8207,13 +4731,13 @@ end
 
 -- TAB 5: Automation & QoL
 local function BuildAutomationTab(content, syncList)
-    local db = ns.db or {}
-    local qolDb = db.qol or {}
-    local socialDb = db.social or {}
+    local db = LiveDB
+    local qolDb = LiveSection("qol")
+    local socialDb = LiveSection("social")
 
-    local h1, d1 = CreateSectionHeader(content, "QUEST & LOOT AUTOMATION", 12, 0)
+    local h1 = CreateSectionHeader(content, "QUEST & LOOT AUTOMATION", 12, 0)
     local cbFastLoot = CreateStyledCheckbox(content, "Fast Auto Loot (Instant Looting)",
-        "Dramatically accelerates looting by instantly querying and collecting all loot window items simultaneously.",
+        "Collects every item in the loot window instantly whenever the game's Auto Loot is active (Interface option or the auto-loot modifier key).",
         function() return qolDb.fastAutoLoot ~= false end,
         function(v) qolDb.fastAutoLoot = v end
     )
@@ -8295,7 +4819,7 @@ local function BuildAutomationTab(content, syncList)
     )
     table.insert(syncList, cbAutoShare)
 
-    local h2, d2 = CreateSectionHeader(content, "MERCHANT & SOCIAL QOL", 12, 0)
+    local h2 = CreateSectionHeader(content, "MERCHANT & SOCIAL QOL", 12, 0)
     local cbSellJunk = CreateStyledCheckbox(content, "Auto-Sell Grey Junk Items at Vendors",
         "Automatically sells all low-quality grey items when opening vendor merchant frames.",
         function() return qolDb.autoSellJunk == true end,
@@ -8468,19 +4992,11 @@ end
 
 -- TAB 6: Wayfinder & Audio
 local function BuildWayfinderTab(content, syncList)
-    local db = ns.db or {}
-    local wfDb = db.wayfinder or {}
-    local soundDb = db.sound or {}
-    if soundDb.soundChoice == "custom" then
-        soundDb.soundChoice = (soundDb.customCompleteSoundChoice and soundDb.customCompleteSoundChoice ~= "custom" and soundDb.customCompleteSoundChoice) or "peon"
-        soundDb.useCustomCompleteSound = false
-    end
-    if soundDb.objectiveSoundChoice == "custom" then
-        soundDb.objectiveSoundChoice = (soundDb.customObjectiveSoundChoice and soundDb.customObjectiveSoundChoice ~= "custom" and soundDb.customObjectiveSoundChoice) or "whisper_ping"
-        soundDb.useCustomObjectiveSound = false
-    end
+    local db = LiveDB
+    local wfDb = LiveSection("wayfinder")
+    local soundDb = LiveSection("sound")
 
-    local h1, d1 = CreateSectionHeader(content, "WAYFINDER HUD NAVIGATION", 12, 0)
+    local h1 = CreateSectionHeader(content, "WAYFINDER HUD NAVIGATION", 12, 0)
     local cbHUDArrow = CreateStyledCheckbox(content, "Enable Floating HUD Arrow",
         "Shows a floating navigation arrow pointing toward your active quest objective.",
         function() return wfDb.enableHUDArrow ~= false end,
@@ -8590,7 +5106,7 @@ local function BuildWayfinderTab(content, syncList)
     )
     table.insert(syncList, cbHideCombat)
 
-    local h1b, d1b = CreateSectionHeader(content, "WAYFINDER UTILITY ACTIONS", 12, 0)
+    local h1b = CreateSectionHeader(content, "WAYFINDER UTILITY ACTIONS", 12, 0)
     local btnPreviewArrow = CreateStyledButton(content, "Preview / Move Arrow", 190, 22, function()
         if ns.WayfinderModule and ns.WayfinderModule.TogglePreviewMode then
             ns.WayfinderModule:TogglePreviewMode()
@@ -8604,8 +5120,7 @@ local function BuildWayfinderTab(content, syncList)
             if db.wayfinder then
                 db.wayfinder.hudPosition = { point = "CENTER", x = 0, y = 160 }
             end
-            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-            if ns.Print then ns.Print("HUD arrow position reset.") end
+            ns.Notify(L["HUD arrow position reset."])
         end
     end, "Reset the floating HUD arrow back to its default position above center screen.")
 
@@ -8621,7 +5136,7 @@ local function BuildWayfinderTab(content, syncList)
         end
     end, "Remove all manually created custom waypoints.")
 
-    local h2, d2 = CreateSectionHeader(content, "AUDIO & SOUND EFFECTS", 12, 0)
+    local h2 = CreateSectionHeader(content, "AUDIO & SOUND EFFECTS", 12, 0)
     local cbCompleteSound = CreateStyledCheckbox(content, "Play Sound on Quest Complete",
         "Plays an audio alert when you achieve 100% completion on a quest.",
         function() return soundDb.enableCompleteSound ~= false end,
@@ -8642,8 +5157,6 @@ local function BuildWayfinderTab(content, syncList)
         function() return soundDb.soundChoice or "peon" end,
         function(v)
             soundDb.soundChoice = v
-            soundDb.useCustomCompleteSound = false
-            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
             if ns.SocialModule and ns.SocialModule.PlayPreviewSound then
                 ns.SocialModule:PlayPreviewSound(v)
             end
@@ -8656,7 +5169,6 @@ local function BuildWayfinderTab(content, syncList)
         function() return soundDb.completeSoundChannel or "Master" end,
         function(v)
             soundDb.completeSoundChannel = v
-            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
         end,
         "Select audio channel for completion sound playback."
     )
@@ -8691,8 +5203,6 @@ local function BuildWayfinderTab(content, syncList)
         function() return soundDb.objectiveSoundChoice or "whisper_ping" end,
         function(v)
             soundDb.objectiveSoundChoice = v
-            soundDb.useCustomObjectiveSound = false
-            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
             if ns.SocialModule and ns.SocialModule.PlayPreviewObjectiveSound then
                 ns.SocialModule:PlayPreviewObjectiveSound(v)
             end
@@ -8705,7 +5215,6 @@ local function BuildWayfinderTab(content, syncList)
         function() return soundDb.objectiveSoundChannel or "Master" end,
         function(v)
             soundDb.objectiveSoundChannel = v
-            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
         end,
         "Select audio channel for objective progress sound playback."
     )
@@ -8724,7 +5233,7 @@ local function BuildWayfinderTab(content, syncList)
 
     local descCustom = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     descCustom:SetJustifyH("LEFT")
-    descCustom:SetText("Place .wav files in Media\\Sounds\\ & restart WoW. Enter filename below or list in Media\\CustomSounds.lua:")
+    descCustom:SetText(L["Place .wav files in Media\\Sounds\\ & restart WoW. Enter filename below or list in Media\\CustomSounds.lua:"])
 
     local inputCustom = CreateStyledTextInput(content, 190, 22, "filename.wav (e.g. fart.wav)")
     local btnAddCustom = CreateStyledButton(content, "Add Sound", 100, 22, function()
@@ -8734,11 +5243,11 @@ local function BuildWayfinderTab(content, syncList)
             local ok, res = ns.AddCustomSound(txt)
             if ok then
                 if eb then eb:SetText("") end
-                if btnCompleteSound and btnCompleteSound.Update then btnCompleteSound:Update() end
-                if btnObjSound and btnObjSound.Update then btnObjSound:Update() end
-                DEFAULT_CHAT_FRAME:AddMessage("|cff00c0ff[BQT]|r Registered custom sound: |cffffd100" .. res .. "|r")
-            elseif res and DEFAULT_CHAT_FRAME then
-                DEFAULT_CHAT_FRAME:AddMessage("|cff00c0ff[BQT]|r |cffff2020Error:|r " .. res)
+                if btnCompleteSound then btnCompleteSound:Sync() end
+                if btnObjSound then btnObjSound:Sync() end
+                ns.Notify(string.format(L["Registered custom sound: %s"], txt), 0.2, 1.0, 0.2)
+            elseif res then
+                ns.Notify(string.format(L["Could not add sound: %s"], res), 1.0, 0.3, 0.3)
             end
         end
     end, "Register this sound file so it appears in the Complete Sound and Objective Sound dropdowns.")
@@ -8953,8 +5462,7 @@ end
 
 -- TAB 7: DataBars
 local function BuildDataBarsTab(content, syncList)
-    local db = ns.db or {}
-    local dataDb = db.databars or {}
+    local dataDb = LiveSection("databars")
 
     local cbHideWithTracker = CreateStyledCheckbox(content, "Hide DataBars When Tracker Hidden",
         "When enabled, hiding the quest tracker via keybind, button, or slash command also hides all active DataBars (XP Bar, Location Bar, and Quest Timer Bar).",
@@ -8980,7 +5488,7 @@ local function BuildDataBarsTab(content, syncList)
     )
     table.insert(syncList, cbHideDataBarsCombat)
 
-    local h1, d1 = CreateSectionHeader(content, "EXPERIENCE & QUEST LOG PROGRESS BAR", 12, 0)
+    local h1 = CreateSectionHeader(content, "EXPERIENCE & QUEST LOG PROGRESS BAR", 12, 0)
     local cbXPBar = CreateStyledCheckbox(content, "Enable Standalone XP DataBar",
         "Renders a customizable experience and completed quest turn-in progress bar.",
         function() return dataDb.enableXPBar == true end,
@@ -9052,7 +5560,7 @@ local function BuildDataBarsTab(content, syncList)
     )
     table.insert(syncList, cbRestedXP)
 
-    local h2, d2 = CreateSectionHeader(content, "LOCATION & COORDINATES HEADER BAR", 12, 0)
+    local h2 = CreateSectionHeader(content, "LOCATION & COORDINATES HEADER BAR", 12, 0)
     local cbLocBar = CreateStyledCheckbox(content, "Enable Location & Coordinates Bar",
         "Renders a precision zone, subzone, and coordinates bar.",
         function() return dataDb.enableLocationBar == true end,
@@ -9084,7 +5592,7 @@ local function BuildDataBarsTab(content, syncList)
     local btnResetXPPos = CreateStyledButton(content, "Reset Free XP Position", 190, 22, function()
         if dataDb then dataDb.xpFreePosition = nil end
         if ns.DataBarsModule and ns.DataBarsModule.UpdateXPDocking then ns.DataBarsModule:UpdateXPDocking() end
-        if ns.Print then ns.Print("XP Bar position reset.") end
+        ns.Notify(L["XP Bar position reset."])
     end, "Reset the free floating XP bar back to its default position.")
 
     local btnResetXPColors = CreateStyledButton(content, "Reset XP Colors", 190, 22, function()
@@ -9097,16 +5605,16 @@ local function BuildDataBarsTab(content, syncList)
             dataDb.dingReadyColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 }
         end
         if ns.DataBarsModule and ns.DataBarsModule.UpdateXPBar then ns.DataBarsModule:UpdateXPBar() end
-        if ns.Print then ns.Print("XP Bar colors reset to defaults.") end
+        ns.Notify(L["XP Bar colors reset to defaults."])
     end, "Reset all XP bar colors back to defaults.")
 
     local btnResetLocPos = CreateStyledButton(content, "Reset Free Loc Position", 190, 22, function()
         if dataDb then dataDb.locFreePosition = nil end
-        if ns.DataBarsModule and ns.DataBarsModule.UpdateLocDocking then ns.DataBarsModule:UpdateLocDocking() end
-        if ns.Print then ns.Print("Location Bar position reset.") end
+        if ns.DataBarsModule then ns.DataBarsModule:UpdateLocationDocking() end
+        ns.Notify(L["Location Bar position reset."])
     end, "Reset the free floating Location Bar back to its default position.")
 
-    local h3, d3 = CreateSectionHeader(content, "QUEST TIMER BAR & DOCKING", 12, 0)
+    local h3 = CreateSectionHeader(content, "QUEST TIMER BAR & DOCKING", 12, 0)
     local btnPreviewTimer = CreateStyledButton(content, "Preview / Move Timer Bar", 190, 22, function()
         if ns.DataBarsModule then
             ns.DataBarsModule.timerPreviewMode = not ns.DataBarsModule.timerPreviewMode
@@ -9117,7 +5625,7 @@ local function BuildDataBarsTab(content, syncList)
     local btnResetTimerPos = CreateStyledButton(content, "Reset Timer Bar Position", 190, 22, function()
         if dataDb then dataDb.timerFreePosition = nil end
         if ns.DataBarsModule and ns.DataBarsModule.UpdateTimerDocking then ns.DataBarsModule:UpdateTimerDocking() end
-        if ns.Print then ns.Print("Timer Bar position reset.") end
+        ns.Notify(L["Timer Bar position reset."])
     end, "Reset the free floating Timer Bar back to its default position.")
 
     local function Layout(w)
@@ -9281,23 +5789,20 @@ end
 
 -- TAB 8: Profiles
 local function BuildProfilesTab(content, syncList)
-    local h1, d1 = CreateSectionHeader(content, "ACTIVE PROFILE", 12, 0)
+    local h1 = CreateSectionHeader(content, "ACTIVE PROFILE", 12, 0)
 
     local lblCurrent = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     local function UpdateCurrent()
         local cur = (ns.dbObject and ns.dbObject.GetCurrentProfile and ns.dbObject:GetCurrentProfile()) or "Default"
-        lblCurrent:SetText("Active Profile: |cFFFFD100" .. cur .. "|r")
+        lblCurrent:SetText(string.format(L["Active Profile: %s"], "|cFFFFD100" .. cur .. "|r"))
     end
 
     local function TriggerFullSync()
         UpdateCurrent()
-        if ns.Tracker and ns.Tracker.UpdateSettings then ns.Tracker:UpdateSettings() end
-        if ns.Tracker and ns.Tracker.UpdateBackdrop then ns.Tracker:UpdateBackdrop() end
-        if ns.Tracker and ns.Tracker.UpdateTypography then ns.Tracker:UpdateTypography() end
-        if ns.DataBarsModule and ns.DataBarsModule.RefreshBars then ns.DataBarsModule:RefreshBars() end
-        if Config.SyncAllNative then Config.SyncAllNative() end
-        for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
+        Config:SyncAll()
     end
+    lblCurrent.Sync = UpdateCurrent
+    table.insert(syncList, lblCurrent)
 
     local function GetProfileOptions()
         local list = {}
@@ -9348,7 +5853,7 @@ local function BuildProfilesTab(content, syncList)
     end, "Resets all quest tracker settings in the active profile back to defaults.")
 
     -- SECTION 2: CREATE NEW PROFILE
-    local h2, d2 = CreateSectionHeader(content, "CREATE NEW PROFILE", 12, 0)
+    local h2 = CreateSectionHeader(content, "CREATE NEW PROFILE", 12, 0)
     local newProfileInput = CreateStyledTextInput(content, 220, 22, "Enter profile name...")
     local btnCreate = CreateStyledButton(content, "Create Profile", 180, 22, function()
         local name = newProfileInput.EditBox:GetText()
@@ -9370,7 +5875,7 @@ local function BuildProfilesTab(content, syncList)
     end)
 
     -- SECTION 3: COPY FROM EXISTING PROFILE
-    local h3, d3 = CreateSectionHeader(content, "COPY FROM EXISTING PROFILE", 12, 0)
+    local h3 = CreateSectionHeader(content, "COPY FROM EXISTING PROFILE", 12, 0)
     local selectedCopySource = nil
     local ddCopyProfile = CreateStyledDropdown(content, "Copy From", 220, 22,
         GetOtherProfileOptions,
@@ -9388,7 +5893,7 @@ local function BuildProfilesTab(content, syncList)
     end, "Copies all settings from the selected profile into your active profile (overwriting existing settings).")
 
     -- SECTION 4: DELETE PROFILE
-    local h4, d4 = CreateSectionHeader(content, "DELETE PROFILE", 12, 0)
+    local h4 = CreateSectionHeader(content, "DELETE PROFILE", 12, 0)
     local selectedDeleteTarget = nil
     local ddDeleteProfile = CreateStyledDropdown(content, "Delete Profile", 220, 22,
         GetOtherProfileOptions,
@@ -9503,30 +6008,37 @@ local function BuildProfilesTab(content, syncList)
 end
 
 --[[-----------------------------------------------------------------------------
-    Master Native Options Panel for Quest Tracker
+    Options container (shared by the standalone window, the Blizzard Settings
+    panel, and Bleakfiber's Addon Config hub)
 -------------------------------------------------------------------------------]]
-function Config:BuildNativeOptions(containerFrame, isMasterHub)
+local TABS = {
+    { id = "general",    label = "General",         builder = BuildGeneralTab },
+    { id = "quests",     label = "Quests & Items",  builder = BuildQuestsTab },
+    { id = "appearance", label = "Colors & Fonts",  builder = BuildColorsTab },
+    { id = "headers",    label = "Headers & Sort",  builder = BuildHeadersTab },
+    { id = "wayfinder",  label = "Wayfinder/Audio", builder = BuildWayfinderTab },
+    { id = "databars",   label = "Databars",        builder = BuildDataBarsTab },
+    { id = "automation", label = "Automation",      builder = BuildAutomationTab },
+    { id = "profiles",   label = "Profiles",        builder = BuildProfilesTab },
+}
+
+local builtContainers = {}
+local scrollFrameCount = 0
+
+-- Re-reads every widget in every built options container from the active profile
+function Config:SyncAll()
+    for _, container in ipairs(builtContainers) do
+        if container.SyncAll then container.SyncAll() end
+    end
+end
+
+function Config:BuildNativeOptions(containerFrame)
     if not containerFrame then return end
 
-    if not self.initialized then
-        self:InitializeOptions()
-    end
-
     if containerFrame.nativeOptionsBuilt then
-        if containerFrame.SyncAll then containerFrame.SyncAll() end
+        containerFrame.SyncAll()
         return containerFrame
     end
-
-    local tabs = {
-        { id = "general",    label = "General",         builder = BuildGeneralTab },
-        { id = "quests",     label = "Quests & Items",  builder = BuildQuestsTab },
-        { id = "appearance", label = "Colors & Fonts",  builder = BuildColorsTab },
-        { id = "headers",    label = "Headers & Sort",  builder = BuildHeadersTab },
-        { id = "wayfinder",  label = "Wayfinder/Audio", builder = BuildWayfinderTab },
-        { id = "databars",   label = "Databars",        builder = BuildDataBarsTab },
-        { id = "automation", label = "Automation",      builder = BuildAutomationTab },
-        { id = "profiles",   label = "Profiles",        builder = BuildProfilesTab },
-    }
 
     local tabBar = CreateFrame("Frame", nil, containerFrame)
     tabBar:SetHeight(28)
@@ -9545,35 +6057,31 @@ function Config:BuildNativeOptions(containerFrame, isMasterHub)
     local syncLists = {}
     local tabChildren = {}
 
+    local function SyncList(list)
+        for _, widget in ipairs(list) do
+            if widget.Sync then widget:Sync() end
+        end
+    end
+
     local function SelectTab(tabID)
-        for _, t in ipairs(tabs) do
+        for _, t in ipairs(TABS) do
             local btn = tabButtons[t.id]
             local scroll = tabScrolls[t.id]
             if t.id == tabID then
-                if btn then
-                    btn:SetBackdropColor(unpack(COLORS.tabActive))
-                    btn:SetBackdropBorderColor(unpack(COLORS.goldBorder))
-                    btn.label:SetTextColor(COLORS.goldText[1], COLORS.goldText[2], COLORS.goldText[3])
+                btn:SetBackdropColor(unpack(COLORS.tabActive))
+                btn:SetBackdropBorderColor(unpack(COLORS.goldBorder))
+                btn.label:SetTextColor(COLORS.goldText[1], COLORS.goldText[2], COLORS.goldText[3])
+                scroll:Show()
+                local child = tabChildren[t.id]
+                if child.LayoutTab then
+                    child.LayoutTab(scroll:GetWidth() - 24)
                 end
-                if scroll then
-                    scroll:Show()
-                    local child = tabChildren[t.id]
-                    if child and child.LayoutTab then
-                        child.LayoutTab(scroll:GetWidth() - 24)
-                    end
-                    if syncLists[t.id] then
-                        for _, w in ipairs(syncLists[t.id]) do
-                            if w.Sync then w:Sync() end
-                        end
-                    end
-                end
+                SyncList(syncLists[t.id])
             else
-                if btn then
-                    btn:SetBackdropColor(unpack(COLORS.tabNormal))
-                    btn:SetBackdropBorderColor(unpack(COLORS.goldMuted))
-                    btn.label:SetTextColor(COLORS.whiteText[1], COLORS.whiteText[2], COLORS.whiteText[3])
-                end
-                if scroll then scroll:Hide() end
+                btn:SetBackdropColor(unpack(COLORS.tabNormal))
+                btn:SetBackdropBorderColor(unpack(COLORS.goldMuted))
+                btn.label:SetTextColor(COLORS.whiteText[1], COLORS.whiteText[2], COLORS.whiteText[3])
+                scroll:Hide()
             end
         end
     end
@@ -9581,55 +6089,35 @@ function Config:BuildNativeOptions(containerFrame, isMasterHub)
     local function LayoutTabBar(w)
         if not w or w < 100 then w = containerFrame:GetWidth() or 540 end
         local gap = 4
-
         if w >= 620 then
-            -- 1 Row
             tabBar:SetHeight(28)
-            local btnW = math.floor((w - ((#tabs - 1) * gap)) / #tabs)
-            if btnW > 92 then btnW = 92 end
+            local btnW = math.min(92, math.floor((w - ((#TABS - 1) * gap)) / #TABS))
             local curX = 0
-            for _, t in ipairs(tabs) do
+            for _, t in ipairs(TABS) do
                 local b = tabButtons[t.id]
-                if b then
-                    b:SetSize(btnW, 24)
-                    b:ClearAllPoints()
-                    b:SetPoint("TOPLEFT", tabBar, "TOPLEFT", curX, 0)
-                end
+                b:SetSize(btnW, 24)
+                b:ClearAllPoints()
+                b:SetPoint("TOPLEFT", tabBar, "TOPLEFT", curX, 0)
                 curX = curX + btnW + gap
             end
         else
-            -- 2 Rows (Line break to prevent cramping)
+            -- Two rows on narrow hosts
             tabBar:SetHeight(52)
-            local row1Count = 4
-            local btnW1 = math.floor((w - ((row1Count - 1) * gap)) / row1Count)
-            local curX = 0
-            for i = 1, row1Count do
-                local t = tabs[i]
+            local perRow = math.ceil(#TABS / 2)
+            for i, t in ipairs(TABS) do
+                local row = (i <= perRow) and 0 or 1
+                local count = (row == 0) and perRow or (#TABS - perRow)
+                local index = (row == 0) and (i - 1) or (i - perRow - 1)
+                local btnW = math.floor((w - ((count - 1) * gap)) / count)
                 local b = tabButtons[t.id]
-                if b then
-                    b:SetSize(btnW1, 22)
-                    b:ClearAllPoints()
-                    b:SetPoint("TOPLEFT", tabBar, "TOPLEFT", curX, 0)
-                end
-                curX = curX + btnW1 + gap
-            end
-            local row2Count = #tabs - row1Count
-            local btnW2 = math.floor((w - ((row2Count - 1) * gap)) / row2Count)
-            curX = 0
-            for i = row1Count + 1, #tabs do
-                local t = tabs[i]
-                local b = tabButtons[t.id]
-                if b then
-                    b:SetSize(btnW2, 22)
-                    b:ClearAllPoints()
-                    b:SetPoint("TOPLEFT", tabBar, "TOPLEFT", curX, -26)
-                end
-                curX = curX + btnW2 + gap
+                b:SetSize(btnW, 22)
+                b:ClearAllPoints()
+                b:SetPoint("TOPLEFT", tabBar, "TOPLEFT", index * (btnW + gap), -26 * row)
             end
         end
     end
 
-    for _, t in ipairs(tabs) do
+    for _, t in ipairs(TABS) do
         local tID = t.id
         local btn = CreateFrame("Button", nil, tabBar, BACKDROP_TEMPLATE)
         btn:SetSize(72, 24)
@@ -9638,15 +6126,17 @@ function Config:BuildNativeOptions(containerFrame, isMasterHub)
         btn:SetBackdropBorderColor(unpack(COLORS.goldMuted))
 
         local lbl = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        lbl:SetPoint("CENTER", btn, "CENTER", 0, 0)
-        lbl:SetText(t.label)
+        lbl:SetPoint("LEFT", btn, "LEFT", 2, 0)
+        lbl:SetPoint("RIGHT", btn, "RIGHT", -2, 0)
+        lbl:SetWordWrap(false)
+        lbl:SetText(L[t.label])
         btn.label = lbl
 
         btn:SetScript("OnClick", function() SelectTab(tID) end)
         tabButtons[tID] = btn
 
-        -- ScrollFrame for this tab inside insetBox
-        local scroll = CreateFrame("ScrollFrame", "BFQ_Scroll_" .. tID, insetBox, "UIPanelScrollFrameTemplate")
+        scrollFrameCount = scrollFrameCount + 1
+        local scroll = CreateFrame("ScrollFrame", "BFQ_OptionsScroll" .. scrollFrameCount, insetBox, "UIPanelScrollFrameTemplate")
         scroll:SetPoint("TOPLEFT", insetBox, "TOPLEFT", 6, -6)
         scroll:SetPoint("BOTTOMRIGHT", insetBox, "BOTTOMRIGHT", -26, 6)
 
@@ -9661,7 +6151,18 @@ function Config:BuildNativeOptions(containerFrame, isMasterHub)
         t.builder(child, sList)
         tabChildren[tID] = child
 
-        scroll:HookScript("OnSizeChanged", function(self, sw)
+        local extras = TAB_EXTRAS[tID]
+        if extras then
+            local layoutExtras = BuildExtraSettings(child, sList, extras)
+            local baseLayout = child.LayoutTab
+            child.LayoutTab = function(w)
+                if baseLayout then baseLayout(w) end
+                local bottom = layoutExtras(-(child:GetHeight() - 30), w)
+                child:SetHeight(math.abs(bottom) + 30)
+            end
+        end
+
+        scroll:HookScript("OnSizeChanged", function(_, sw)
             if sw and sw > 60 and child.LayoutTab then
                 child.LayoutTab(sw - 24)
                 if updateScroll then updateScroll() end
@@ -9672,17 +6173,13 @@ function Config:BuildNativeOptions(containerFrame, isMasterHub)
         tabScrolls[tID] = scroll
     end
 
-    local function SyncAll()
-        for _, sList in pairs(syncLists) do
-            for _, widget in ipairs(sList) do
-                if widget.Sync then widget:Sync() end
-            end
+    containerFrame.SyncAll = function()
+        for _, list in pairs(syncLists) do
+            SyncList(list)
         end
     end
-    containerFrame.SyncAll = SyncAll
-    Config.SyncAllNative = SyncAll
 
-    containerFrame:HookScript("OnSizeChanged", function(self, w)
+    containerFrame:HookScript("OnSizeChanged", function(_, w)
         if w and w > 60 then
             LayoutTabBar(w)
         end
@@ -9690,165 +6187,130 @@ function Config:BuildNativeOptions(containerFrame, isMasterHub)
 
     LayoutTabBar(containerFrame:GetWidth())
     SelectTab("general")
-    SyncAll()
+    containerFrame.SyncAll()
 
     containerFrame.nativeOptionsBuilt = true
+    builtContainers[#builtContainers + 1] = containerFrame
     return containerFrame
 end
 
 function Config:EmbedOptionsIntoContainer(containerFrame)
     if not containerFrame then return end
-    return Config:BuildNativeOptions(containerFrame, true)
+    if ns.SetupColorPickerEnhancements then
+        ns.SetupColorPickerEnhancements()
+    end
+    return Config:BuildNativeOptions(containerFrame)
+end
+
+local function SaveWindowGeometry(f)
+    if not ns.db then return end
+    local cw = ns.db.configWindow
+    local pt, _, relPt, x, y = f:GetPoint()
+    cw.point = pt
+    cw.relativePoint = relPt or pt
+    cw.xOfs = math.floor((x or 0) + 0.5)
+    cw.yOfs = math.floor((y or 0) + 0.5)
+    cw.width = math.floor(f:GetWidth() + 0.5)
+    cw.height = math.floor(f:GetHeight() + 0.5)
 end
 
 function Config:GetOrCreateStandaloneFrame()
     if self.standaloneFrame then return self.standaloneFrame end
 
-    local db = (ns.db and ns.db.configWindow) or {}
-    local width = db.width or 820
-    local height = db.height or 580
-    local point = db.point or "CENTER"
-    local relPoint = db.relativePoint or "CENTER"
-    local xOfs = db.xOfs or 0
-    local yOfs = db.yOfs or 0
+    local cw = (ns.db and ns.db.configWindow) or {}
 
     local f = CreateFrame("Frame", "BleakfibersStandaloneConfigFrame", UIParent, BACKDROP_TEMPLATE)
     f:Hide()
-    f:SetSize(width, height)
-    f:SetPoint(point, UIParent, relPoint, xOfs, yOfs)
+    f:SetSize(cw.width or 820, cw.height or 580)
+    f:SetPoint(cw.point or "CENTER", UIParent, cw.relativePoint or "CENTER", cw.xOfs or 0, cw.yOfs or 0)
     f:SetFrameStrata("HIGH")
     f:SetToplevel(true)
     f:SetClampedToScreen(true)
     f:EnableMouse(true)
     f:SetMovable(true)
     f:SetResizable(true)
-
+    f:SetResizeBounds(640, 420, 1200, 850)
     tinsert(UISpecialFrames, "BleakfibersStandaloneConfigFrame")
-
-    if f.SetResizeBounds then
-        f:SetResizeBounds(640, 420, 1200, 850)
-    else
-        f:SetMinResize(640, 420)
-        f:SetMaxResize(1200, 850)
-    end
 
     f:SetBackdrop(MAIN_WINDOW_BACKDROP)
     f:SetBackdropColor(unpack(COLORS.bgSlate))
     f:SetBackdropBorderColor(unpack(COLORS.goldBorder))
 
-    -- Title Bar Area (Draggable)
+    -- Title bar (drag handle)
     local titleBar = CreateFrame("Frame", nil, f)
     titleBar:SetHeight(32)
     titleBar:SetPoint("TOPLEFT", f, "TOPLEFT", 6, -6)
     titleBar:SetPoint("TOPRIGHT", f, "TOPRIGHT", -32, -6)
     titleBar:EnableMouse(true)
     titleBar:RegisterForDrag("LeftButton")
-
-    titleBar:SetScript("OnDragStart", function()
-        f:StartMoving()
-    end)
-
+    titleBar:SetScript("OnDragStart", function() f:StartMoving() end)
     titleBar:SetScript("OnDragStop", function()
         f:StopMovingOrSizing()
-        local pt, _, relPt, x, y = f:GetPoint()
-        if ns.db then
-            ns.db.configWindow = ns.db.configWindow or {}
-            ns.db.configWindow.point = pt
-            ns.db.configWindow.relativePoint = relPt or pt
-            ns.db.configWindow.xOfs = math.floor(x + 0.5)
-            ns.db.configWindow.yOfs = math.floor(y + 0.5)
-            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-        end
+        SaveWindowGeometry(f)
     end)
 
-    -- Title Icon / Emblem
     local titleIcon = titleBar:CreateTexture(nil, "ARTWORK")
     titleIcon:SetSize(18, 18)
     titleIcon:SetPoint("LEFT", titleBar, "LEFT", 6, 0)
     titleIcon:SetTexture("Interface\\Icons\\INV_Misc_Book_07")
     titleIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
-    -- Title Text
     local titleText = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     titleText:SetPoint("LEFT", titleIcon, "RIGHT", 8, 0)
     titleText:SetText("|cFFFFD100Bleakfiber's Quest Tracker|r  |cFF8899A6Forever|r")
 
-    -- Version Subtitle
     local versionText = titleBar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     versionText:SetPoint("LEFT", titleText, "RIGHT", 8, -1)
-    versionText:SetText("v" .. (ns.version or "1.0.18"))
+    versionText:SetText("v" .. tostring(ns.version))
 
-    -- Title Bar Action Buttons
     local refreshBtn = CreateStyledButton(titleBar, "Refresh", 65, 20, function()
-        if ns.Tracker and ns.Tracker.UpdateSettings then ns.Tracker:UpdateSettings() end
-        if f.contentPane and f.contentPane.SyncAll then f.contentPane.SyncAll() end
-        if ns.Print then ns.Print("Quest Tracker settings refreshed.") end
-    end, "Reapplies all visual settings and refreshes quest tracker.")
+        ns.ApplyAllSettings()
+        Config:SyncAll()
+        ns.Notify(L["Quest Tracker settings refreshed."])
+    end, "Reapplies all visual settings and refreshes the quest tracker.")
     refreshBtn:SetPoint("RIGHT", titleBar, "RIGHT", -6, 0)
 
     local btnMovers = CreateStyledButton(titleBar, "Toggle Movers", 95, 20, function()
         if ns.Tracker and ns.Tracker.SetLocked then
-            local locked = ns.db and ns.db.isLocked
-            ns.Tracker:SetLocked(not locked)
-            if ns.Print then
-                ns.Print(string.format("Quest Tracker %s.", (not locked) and "|cFFFF0000Locked|r" or "|cFF00FF00Unlocked|r"))
-            end
+            ns.Tracker:SetLocked(not (ns.db and ns.db.isLocked))
+            Config:SyncAll()
         end
-    end, "Unlocks or locks quest tracker anchor for click-and-drag repositioning.")
+    end, "Unlocks or locks the quest tracker for click-and-drag repositioning.")
     btnMovers:SetPoint("RIGHT", refreshBtn, "LEFT", -6, 0)
 
-    -- Gold Divider below Title Bar
     local titleDivider = f:CreateTexture(nil, "ARTWORK")
     titleDivider:SetHeight(1)
     titleDivider:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -36)
     titleDivider:SetPoint("TOPRIGHT", f, "TOPRIGHT", -8, -36)
     titleDivider:SetColorTexture(COLORS.goldBorder[1], COLORS.goldBorder[2], COLORS.goldBorder[3], 0.6)
 
-    -- Close Button
     local closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     closeBtn:SetSize(28, 28)
     closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -4, -4)
-    closeBtn:SetScript("OnClick", function()
-        f:Hide()
-    end)
+    closeBtn:SetScript("OnClick", function() f:Hide() end)
 
-    -- Bottom-right Resize Grip
+    -- Resize grip
     local resizeGrip = CreateFrame("Button", nil, f)
     resizeGrip:SetSize(16, 16)
     resizeGrip:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -4, 4)
     resizeGrip:EnableMouse(true)
-
     local gripTex = resizeGrip:CreateTexture(nil, "ARTWORK")
     gripTex:SetAllPoints(resizeGrip)
     gripTex:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-
-    resizeGrip:SetScript("OnEnter", function()
-        gripTex:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
-    end)
-    resizeGrip:SetScript("OnLeave", function()
-        gripTex:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-    end)
+    resizeGrip:SetScript("OnEnter", function() gripTex:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight") end)
+    resizeGrip:SetScript("OnLeave", function() gripTex:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up") end)
     resizeGrip:SetScript("OnMouseDown", function(_, button)
-        if button == "LeftButton" then
-            f:StartSizing("BOTTOMRIGHT")
-        end
+        if button == "LeftButton" then f:StartSizing("BOTTOMRIGHT") end
     end)
     resizeGrip:SetScript("OnMouseUp", function()
         f:StopMovingOrSizing()
-        if ns.db then
-            ns.db.configWindow = ns.db.configWindow or {}
-            ns.db.configWindow.width = math.floor(f:GetWidth() + 0.5)
-            ns.db.configWindow.height = math.floor(f:GetHeight() + 0.5)
-            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-        end
+        SaveWindowGeometry(f)
     end)
 
-    -- Footer hint text
     local footerText = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     footerText:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 12, 8)
-    footerText:SetText("|cFF667788Use /bfq or /bqt to toggle this window|r")
+    footerText:SetText("|cFF667788" .. L["Use /bfq to toggle this window"] .. "|r")
 
-    -- Content Pane (Houses the full options tabs)
     local contentPane = CreateFrame("Frame", nil, f, BACKDROP_TEMPLATE)
     contentPane:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -42)
     contentPane:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -10, 24)
@@ -9858,15 +6320,8 @@ function Config:GetOrCreateStandaloneFrame()
     f.contentPane = contentPane
 
     f:SetScript("OnShow", function()
-        if not self.initialized then
-            self:InitializeOptions()
-        end
-        if ns.SetupColorPickerEnhancements then
-            ns.SetupColorPickerEnhancements()
-        end
         Config:EmbedOptionsIntoContainer(contentPane)
     end)
-
     f:SetScript("OnHide", function()
         if ns.Tracker and ns.Tracker.HideConfigOverlay then
             ns.Tracker:HideConfigOverlay()
@@ -9878,38 +6333,137 @@ function Config:GetOrCreateStandaloneFrame()
 end
 
 function Config:ToggleConfigFrame()
-    if not self.standaloneFrame then
-        local f = self:GetOrCreateStandaloneFrame()
-        if PlaySound then
-            PlaySound((SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPEN) or 850)
-        end
-        f:Show()
-        return
-    end
-    if self.standaloneFrame:IsShown() then
-        if PlaySound then
-            PlaySound((SOUNDKIT and SOUNDKIT.IG_MAINMENU_CLOSE) or 851)
-        end
-        self.standaloneFrame:Hide()
+    local f = self:GetOrCreateStandaloneFrame()
+    if f:IsShown() then
+        PlaySound(SOUNDKIT.IG_MAINMENU_CLOSE)
+        f:Hide()
     else
-        if PlaySound then
-            PlaySound((SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPEN) or 850)
-        end
-        self.standaloneFrame:Show()
+        PlaySound(SOUNDKIT.IG_MAINMENU_OPEN)
+        f:Show()
     end
 end
 
-local PublicAPI = ns.PublicAPI or _G["BleakfibersQuestTrackerForever"]
+-- Blizzard Settings (Esc > Options > AddOns) hosts the same options container
+function Config:RegisterSettingsPanel()
+    if self.settingsCategory or not (Settings and Settings.RegisterCanvasLayoutCategory) then return end
+
+    local panel = CreateFrame("Frame")
+    panel:Hide()
+    local content = CreateFrame("Frame", nil, panel)
+    content:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -8)
+    content:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -8, 8)
+    panel:SetScript("OnShow", function()
+        Config:EmbedOptionsIntoContainer(content)
+    end)
+    panel:SetScript("OnHide", function()
+        if ns.Tracker and ns.Tracker.HideConfigOverlay then
+            ns.Tracker:HideConfigOverlay()
+        end
+    end)
+
+    local category = Settings.RegisterCanvasLayoutCategory(panel, "Bleakfiber's Quest Tracker")
+    Settings.RegisterAddOnCategory(category)
+    self.settingsCategory = category
+end
+
+local PublicAPI = ns.PublicAPI
 
 function PublicAPI:BuildMasterConfigUI(parentContainer)
     if not parentContainer then return end
-    local content = parentContainer.content or parentContainer
-    Config:EmbedOptionsIntoContainer(content)
+    Config:EmbedOptionsIntoContainer(parentContainer.content or parentContainer)
 end
 
--- Slash Command Handler
+--[[-----------------------------------------------------------------------------
+    Slash commands
+-------------------------------------------------------------------------------]]
+local function ColorOnOff(enabled)
+    return enabled and ("|cff00ff00" .. L["ON"] .. "|r") or ("|cffff3333" .. L["OFF"] .. "|r")
+end
+
+local function PrintPositionDebug()
+    local frame = ns.Tracker and ns.Tracker:GetFrame()
+    local pos = ns.db and ns.db.framePosition
+    ns.Print(L["--- Tracker Position Debug ---"])
+    if pos then
+        ns.Print(string.format(L["Saved in DB: %s relative to %s at (%d, %d)"], tostring(pos.point), tostring(pos.relativePoint), pos.x or 0, pos.y or 0))
+    else
+        ns.Print(L["Saved in DB: default position"])
+    end
+    if frame then
+        ns.Print(string.format(L["Live Frame: left=%.1f, top=%.1f, scale=%.2f"], frame:GetLeft() or -1, frame:GetTop() or -1, frame:GetScale() or 1))
+    end
+end
+
+-- Lists every quest and whether Blizzard reports it as shareable (read-only; nothing is pushed)
+local function PrintShareDiagnostics()
+    local API = ns.API
+    ns.Print(L["--- Quest Share Diagnostic ---"])
+    local info, found = {}, 0
+    for i = 1, API.GetNumQuestLogEntries() do
+        API.GetQuestInfo(i, info)
+        if not info.isHeader and info.questID then
+            found = found + 1
+            local status = API.IsQuestPushable(info.questID, i) and ("|cff00ff00" .. L["Shareable"] .. "|r") or ("|cffff4444" .. L["Not shareable"] .. "|r")
+            ns.Print(string.format("  [%d] %s (ID %d) - %s", found, info.title or "?", info.questID, status))
+        end
+    end
+    if found == 0 then
+        ns.Print(L["No active quests found in quest log."])
+    end
+end
+
+local function PrintZoneDiagnostics()
+    local API = ns.API
+    local mapID = C_Map.GetBestMapForUnit("player")
+    local mapInfo = mapID and C_Map.GetMapInfo(mapID)
+    ns.Print(L["--- Cross-Zone Diagnostics ---"])
+    ns.Print(string.format(L["Zone: %s | Real: %s | Sub: %s"], GetZoneText() or "?", GetRealZoneText() or "?", GetSubZoneText() or ""))
+    ns.Print(string.format(L["MapID: %s (%s)"], tostring(mapID), (mapInfo and mapInfo.name) or "?"))
+
+    local info, header, count = {}, L["General"], 0
+    for i = 1, API.GetNumQuestLogEntries() do
+        API.GetQuestInfo(i, info)
+        if info.isHeader then
+            header = info.title or header
+        elseif info.questID then
+            count = count + 1
+            local poiMap = C_QuestLog.GetMapForQuestPOIs and C_QuestLog.GetMapForQuestPOIs(info.questID)
+            local poiInfo = poiMap and poiMap > 0 and C_Map.GetMapInfo(poiMap)
+            local state = (info.isComplete == 1) and ("|cff00ff00" .. L["Turn-in"] .. "|r") or ("|cffffcc00" .. L["Incomplete"] .. "|r")
+            ns.Print(string.format("  |cff00e5ff[%d]|r %s %s", info.questID, info.title or "?", state))
+            ns.Print(string.format(L["     Header: %s | POI map: %s (%s)"], header, tostring(poiMap), (poiInfo and poiInfo.name) or L["None"]))
+        end
+    end
+    if count == 0 then
+        ns.Print(L["No active quests found in quest log."])
+    end
+end
+
+local function PrintHelp()
+    ns.Print("|cff00c0ffBleakfiber's Quest Tracker|r")
+    local lines = {
+        { "/bfq", L["Open the settings"] },
+        { "/bfq standalone", L["Open the standalone settings window"] },
+        { "/bfq onboard", L["Open the setup walkthrough"] },
+        { "/bfq lock | unlock", L["Lock or unlock the tracker position"] },
+        { "/bfq toggle", L["Expand or collapse the tracker"] },
+        { "/bfq hide | show | togglehide", L["Hide or show the tracker (/bfqhide also works)"] },
+        { "/bfq reset", L["Reset the tracker position"] },
+        { "/bfq profile [name]", L["Show or switch the active profile"] },
+        { "/bfq lang [code]", L["Show or set the language (e.g. deDE, auto)"] },
+        { "/bfq testitem", L["Show or hide a test quest item button"] },
+        { "/bfq questid [id]", L["Check whether a quest is new in WoW Forever"] },
+        { "/bfq debug", L["Toggle debug & chat output"] },
+        { "/bfq pos | sharetest | poi", L["Print position, quest sharing, or zone diagnostics"] },
+        { "/bfq way x y [name]", L["Set a custom waypoint (also /bfqway)"] },
+    }
+    for _, line in ipairs(lines) do
+        ns.Print(string.format("  |cff00ff00%s|r - %s", line[1], line[2]))
+    end
+end
+
 local function HandleSlashCommands(msg)
-    local command, rest = msg:match("^(%S*)%s*(.-)$")
+    local command, rest = (msg or ""):match("^(%S*)%s*(.-)$")
     command = string.lower(command or "")
 
     if command == "lock" then
@@ -9917,234 +6471,92 @@ local function HandleSlashCommands(msg)
     elseif command == "unlock" then
         ns.Tracker:SetLocked(false)
     elseif command == "reset" then
-        if ns.Tracker and ns.Tracker.ResetPosition then
-            ns.Tracker:ResetPosition()
-        end
-        if ns.db then
-            ns.db.itemButtonPosition = nil
-        end
-        if ns.StandaloneTracker and ns.StandaloneTracker.UpdateItemButton then
-            ns.StandaloneTracker:UpdateItemButton()
-        end
-        if ns.FlushDBToGlobals then
-            ns.FlushDBToGlobals()
-        end
-        ns.Print("Position reset to default.")
+        ns.Tracker:ResetPosition()
+        ns.db.itemButtonPosition = nil
+        if ns.StandaloneTracker then ns.StandaloneTracker:UpdateItemButtonVisibility() end
     elseif command == "toggle" then
         ns.Tracker:ToggleCollapse()
     elseif command == "hide" then
-        if ns.Tracker and ns.Tracker.HideTracker then
-            ns.Tracker:HideTracker()
-        end
+        ns.Tracker:HideTracker()
     elseif command == "show" then
-        if ns.Tracker and ns.Tracker.ShowTracker then
-            ns.Tracker:ShowTracker()
-        end
+        ns.Tracker:ShowTracker()
     elseif command == "togglehide" or command == "visibility" then
-        if ns.Tracker and ns.Tracker.ToggleVisibility then
-            ns.Tracker:ToggleVisibility()
-        end
+        ns.Tracker:ToggleVisibility()
     elseif command == "profile" then
-        if rest and rest ~= "" then
-            if ns.dbObject and ns.dbObject.SetProfile then
-                ns.dbObject:SetProfile(rest)
-                ns.Print("Switched profile to: |cff00ff00" .. rest .. "|r")
-            end
+        if rest ~= "" then
+            ns.SwitchToProfile(rest)
+            ns.Notify(string.format(L["Switched profile to: %s"], rest))
         else
-            local currentProfile = (ns.dbObject and ns.dbObject.GetCurrentProfile and ns.dbObject:GetCurrentProfile()) or "Default"
-            ns.Print("Active Profile: |cff00ff00" .. currentProfile .. "|r. Use |cff00c0ff/bfq profile <name>|r to switch.")
+            ns.Notify(string.format(L["Active Profile: %s"], ns.dbObject:GetCurrentProfile()))
         end
-    elseif command == "pos" or command == "position" then
-        local frame = ns.Tracker and ns.Tracker:GetFrame()
-        local db = (ns.dbObject and ns.dbObject.profile) or ns.db
-        local prof = (ns.dbObject and ns.dbObject.GetCurrentProfile and ns.dbObject:GetCurrentProfile()) or "none"
-        ns.Print("--- Tracker Position Debug ---")
-        local pos = db and db.framePosition
-        if pos then
-            ns.Print(string.format("Saved in DB: %s relative to %s at (%d, %d)", tostring(pos.point), tostring(pos.relativePoint), pos.x or 0, pos.y or 0))
+    elseif command == "lang" or command == "language" then
+        if rest ~= "" then
+            local code = (rest:lower() == "auto") and "auto" or rest
+            ns.dbObject.global.language = code
+            local active = ns.SetLanguage(code)
+            ns.Notify(string.format(L["Language set to %s. Reload the interface (/reload) to apply everywhere."], ns.LANGUAGE_NAMES[active] or active))
         else
-            ns.Print("Saved in DB: default (TOPRIGHT, farthest right, 35px below minimap)")
-        end
-        if frame then
-            ns.Print(string.format("Live Frame: left=%.1f, top=%.1f, scale=%.2f, isUserPlaced=%s", frame:GetLeft() or -1, frame:GetTop() or -1, frame:GetScale() or 1, tostring(frame:IsUserPlaced())))
-        else
-            ns.Print("Live Frame: nil!")
+            local active = ns.GetActiveLanguage()
+            ns.Notify(string.format(L["Current language: %s"], ns.LANGUAGE_NAMES[active] or active))
         end
     elseif command == "debug" then
-        ns.debugMode = not ns.debugMode
-        if ns.debugMode then
-            ns.Print("Debug messages |cff00ff00ENABLED|r.")
-        else
-            ns.Print("Debug messages |cffff3333DISABLED|r.")
-        end
+        local enabled = not ns.IsChatOutputEnabled()
+        ns.dbObject.global.chatOutput = enabled
+        ns.Notify(string.format(L["Debug & chat output: %s"], ColorOnOff(enabled)))
+        Config:SyncAll()
+    elseif command == "pos" or command == "position" then
+        ns.HintChatOutput()
+        PrintPositionDebug()
     elseif command == "sharetest" or command == "testshare" then
-        ns.Print("--- Quest Share Pipeline Diagnostic (Retail/Midnight API) ---")
-        local numEntries = (C_QuestLog and C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetNumQuestLogEntries())
-            or (GetNumQuestLogEntries and GetNumQuestLogEntries()) or 0
-
-        local foundQuests = 0
-        local firstPushableID = nil
-        local firstPushableIndex = nil
-        local firstPushableTitle = nil
-
-        for i = 1, numEntries do
-            local title, questID, isHeader
-            if C_QuestLog and C_QuestLog.GetInfo then
-                local info = C_QuestLog.GetInfo(i)
-                if info then
-                    title = info.title
-                    questID = info.questID
-                    isHeader = info.isHeader
-                end
-            elseif GetQuestLogTitle then
-                local t, _, _, h, _, _, _, id = GetQuestLogTitle(i)
-                title, questID, isHeader = t, id, h
-            end
-
-            if not isHeader and questID and questID > 0 then
-                foundQuests = foundQuests + 1
-
-                -- 1. Select the quest
-                if C_QuestLog and C_QuestLog.SetSelectedQuest then
-                    C_QuestLog.SetSelectedQuest(questID)
-                end
-                if SelectQuestLogEntry then
-                    SelectQuestLogEntry(i)
-                end
-
-                -- 2. Check pushability
-                local cPush = (C_QuestLog and C_QuestLog.IsPushableQuest and C_QuestLog.IsPushableQuest(questID))
-                local gPush = (GetQuestLogPushable and GetQuestLogPushable())
-                local isPushable = cPush or (gPush and true or false)
-
-                local statusText = isPushable and "|cff00ff00YES (Shareable)|r" or "|cffff4444NO (Solo-only)|r"
-                ns.Print(string.format("  [%d] '%s' (ID: %d) -> %s", foundQuests, title or "Quest", questID, statusText))
-
-                if isPushable and not firstPushableID then
-                    firstPushableID = questID
-                    firstPushableIndex = i
-                    firstPushableTitle = title
-                end
-            end
-        end
-
-        if foundQuests == 0 then
-            ns.Print("No active quests found in quest log.")
-        elseif firstPushableID then
-            ns.Print(string.format("Executing live share test on: '%s' (ID: %d, index: %d)...", firstPushableTitle or "Quest", firstPushableID, firstPushableIndex or 0))
-            if C_QuestLog and C_QuestLog.SetSelectedQuest then
-                C_QuestLog.SetSelectedQuest(firstPushableID)
-            end
-            if SelectQuestLogEntry and firstPushableIndex then
-                SelectQuestLogEntry(firstPushableIndex)
-            end
-            if C_QuestLog and C_QuestLog.ShareQuest then
-                C_QuestLog.ShareQuest(firstPushableID)
-                ns.Print("Called C_QuestLog.ShareQuest(" .. firstPushableID .. "). If solo, Blizzard will print 'You are not in a party.'")
-            elseif QuestLogPushQuest then
-                QuestLogPushQuest()
-                ns.Print("Called QuestLogPushQuest(). If solo, Blizzard will print 'You are not in a party.'")
-            end
-        else
-            ns.Print("None of your current quests are flagged as shareable by Blizzard.")
-        end
+        ns.HintChatOutput()
+        PrintShareDiagnostics()
     elseif command == "poi" or command == "testzone" or command == "crosszone" then
-        local pZone = (GetZoneText and GetZoneText()) or "Unknown"
-        local pReal = (GetRealZoneText and GetRealZoneText()) or "Unknown"
-        local pSub = (GetSubZoneText and GetSubZoneText()) or ""
-        local pMapID = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
-        local mapInfo = pMapID and C_Map.GetMapInfo and C_Map.GetMapInfo(pMapID)
-        local mapName = (mapInfo and mapInfo.name) or "nil"
-
-        ns.Print(string.format("|cff00c0ff[BFQ Cross-Zone Diagnostics]|r Player Location:"))
-        ns.Print(string.format("  Zone: |cffffff00%s|r | Real: |cffffff00%s|r | Sub: |cffffff00%s|r", pZone, pReal, pSub ~= "" and pSub or "none"))
-        ns.Print(string.format("  MapID: |cffffff00%s|r (%s) | MapType: |cffffff00%s|r", tostring(pMapID), mapName, tostring(mapInfo and mapInfo.mapType)))
-
-        local numEntries = (ns.GetNumQuestLogEntries and select(1, ns.GetNumQuestLogEntries())) or (GetNumQuestLogEntries and select(1, GetNumQuestLogEntries())) or 0
-        local curHeader = "General"
-        local count = 0
-
-        for i = 1, numEntries do
-            local title, isH, isComplete, questID
-            if C_QuestLog and C_QuestLog.GetInfo then
-                local info = C_QuestLog.GetInfo(i)
-                if info then
-                    title = info.title
-                    isH = info.isHeader
-                    isComplete = info.isComplete
-                    questID = info.questID
+        ns.HintChatOutput()
+        PrintZoneDiagnostics()
+    elseif command == "questid" then
+        local questID = tonumber(rest)
+        local title
+        if not questID then
+            -- The quest under the mouse, otherwise the active quest
+            local st = ns.StandaloneTracker
+            for qID, block in pairs(st.activeBlocks or {}) do
+                if block:IsVisible() and block:IsMouseOver() then
+                    questID = qID
+                    break
                 end
             end
-            if not title and GetQuestLogTitle then
-                local t, _, _, h, _, c, _, q = GetQuestLogTitle(i)
-                title, isH, isComplete, questID = t, h, c, q
-            end
-
-            if isH then
-                curHeader = title or "General"
-            elseif title and questID then
-                count = count + 1
-                local poiMap = (C_QuestLog and C_QuestLog.GetMapForQuestPOIs and C_QuestLog.GetMapForQuestPOIs(questID))
-                local poiMapName = "none"
-                if poiMap and poiMap > 0 and C_Map and C_Map.GetMapInfo then
-                    local pInfo = C_Map.GetMapInfo(poiMap)
-                    poiMapName = (pInfo and pInfo.name) or tostring(poiMap)
-                end
-
-                local poiCount = 0
-                local poiMapsList = {}
-                if C_QuestLog and C_QuestLog.GetQuestPOIs then
-                    local pois = C_QuestLog.GetQuestPOIs(questID)
-                    if pois and type(pois) == "table" then
-                        poiCount = #pois
-                        for _, p in ipairs(pois) do
-                            if p and p.mapID then
-                                table.insert(poiMapsList, tostring(p.mapID))
-                            end
-                        end
-                    end
-                end
-
-                local completeStr = (isComplete == 1 or isComplete == true) and "|cff00ff00[Turn-in]|r" or "|cffffcc00[Incomplete]|r"
-                ns.Print(string.format("  |cff00e5ff[%d]|r %s %s", questID, title, completeStr))
-                ns.Print(string.format("     Header: |cffffff00%s|r | POIMap: |cffffff00%s|r (%s)", curHeader, tostring(poiMap), poiMapName))
-                if poiCount > 0 then
-                    ns.Print(string.format("     Points: %d | POI MapIDs: [%s]", poiCount, table.concat(poiMapsList, ", ")))
-                end
-            end
+            questID = questID or ns.activeQuestID
         end
-        if count == 0 then
-            ns.Print("  No quests found in quest log.")
+        if not questID then
+            ns.Notify(L["Hover a quest in the tracker, or type /bfq questid <quest ID>."])
+            return
+        end
+        title = ns.API.GetTitleForQuestID(questID) or string.format(L["Quest #%d"], questID)
+        local verdict = ns.API.IsForeverQuest(questID) and L["New in WoW Forever"] or L["Original Classic quest"]
+        ns.Notify(string.format(L["%s (ID %d): %s"], title, questID, verdict))
+    elseif command == "testitem" then
+        local st = ns.StandaloneTracker
+        if st:SetItemPreview(not st.itemPreview) then
+            ns.Notify(st.itemPreview and L["Test quest item button shown."] or L["Test quest item button hidden."])
+            Config:SyncAll()
         end
     elseif command == "onboard" or command == "onboarding" then
-        if ns.Onboarding and ns.Onboarding.ShowWizard then
-            ns.Onboarding:ShowWizard()
-        end
+        ns.Onboarding:ShowWizard()
     elseif command == "standalone" then
         Config:ToggleConfigFrame()
     elseif command == "config" or command == "options" or command == "" then
-        if BleakfibersAddonConfigForever and BleakfibersAddonConfigForever.OpenToModule and not IsShiftKeyDown() then
-            BleakfibersAddonConfigForever:OpenToModule("BleakfibersQuestTracker")
+        local hub = _G.BleakfibersAddonConfigForever
+        if hub and hub.OpenToModule and not IsShiftKeyDown() then
+            hub:OpenToModule("BleakfibersQuestTracker")
         else
             Config:ToggleConfigFrame()
         end
+    elseif ns.WayfinderModule and ns.WayfinderModule.HandleTrackerSubcommand
+        and ns.WayfinderModule:HandleTrackerSubcommand(command, rest) then
+        return
     else
-        ns.Print("|cff00c0ffBleakfiber's Quest Tracker Commands:|r")
-        ns.Print("  |cff00ff00/bfq|r or |cff00ff00/bqt|r - Open configuration panel")
-        ns.Print("  |cff00ff00/bfq standalone|r - Force open standalone settings panel")
-        ns.Print("  |cff00ff00/bfq onboard|r - Open interactive setup walkthrough")
-        ns.Print("  |cff00ff00/bfq poi|r - Inspect live quest objective and turn-in map coordinates")
-        ns.Print("  |cff00ff00/bfq lock|r - Lock tracker position")
-        ns.Print("  |cff00ff00/bfq unlock|r - Unlock tracker position")
-        ns.Print("  |cff00ff00/bfq toggle|r - Expand or collapse tracker")
-        ns.Print("  |cff00ff00/bfq hide|r - Hide tracker completely")
-        ns.Print("  |cff00ff00/bfq show|r - Show tracker")
-        ns.Print("  |cff00ff00/bfq togglehide|r or |cff00ff00/bfqhide|r - Toggle tracker visibility (Hide/Show)")
-        ns.Print("  |cff00ff00/bfq reset|r - Reset tracker position to default")
-        ns.Print("  |cff00ff00/bfq pos|r - View live position and saved coordinates debug info")
-        ns.Print("  |cff00ff00/bfq profile [name]|r - View or switch active profile")
-        ns.Print("  |cff00ff00/bfq sharetest|r - Test quest share pipeline and pushability")
-        ns.Print("  |cff00ff00/bfq debug|r - Toggle debug log messages")
+        ns.HintChatOutput()
+        PrintHelp()
     end
 end
 
@@ -10160,5 +6572,9 @@ SlashCmdList["BLEAKFIBERTRACKERHIDE"] = function()
 end
 
 ns:RegisterCallback("ON_INITIALIZE", function()
-    Config:InitializeOptions()
+    Config:RegisterSettingsPanel()
+end)
+
+ns:RegisterCallback("PROFILE_CHANGED", function()
+    Config:SyncAll()
 end)

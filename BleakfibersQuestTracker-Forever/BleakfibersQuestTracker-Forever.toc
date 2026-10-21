@@ -2,16 +2,30 @@
 ## Title: |cff00c0ffBleakfiber's Quest Tracker|r - |cffffd100Forever|r
 ## Notes: A lightweight, standalone, modular quest tracker designed for World of Warcraft: Forever.
 ## Author: Bleakfiber
-## Version: 1.1.18
-## SavedVariables: BleakfiberTrackerDB, BleakfiberTrackerBackupDB
-## SavedVariablesPerCharacter: BleakfiberTrackerCharDB
+## Version: 1.2.3
+## SavedVariables: BleakfiberTrackerDB
 ## IconTexture: Interface\Icons\INV_Misc_Book_07
 ## X-License: Restricted - Source Available (All Rights Reserved, No Derivatives)
 ## X-Website: https://github.com/Bleakfiber/BleakfibersQuestTracker-Forever
 
-## OptionalDeps: BleakfibersAddonConfigForever, Ace3, LibSharedMedia-3.0
+## OptionalDeps: BleakfibersAddonConfigForever, LibSharedMedia-3.0
 
 Libs\Libs.xml
+
+Locales\Locale.lua
+Locales\deDE.lua
+Locales\esES.lua
+Locales\esMX.lua
+Locales\frFR.lua
+Locales\itIT.lua
+Locales\koKR.lua
+Locales\ptBR.lua
+Locales\ruRU.lua
+Locales\zhCN.lua
+Locales\zhTW.lua
+
+Data\ForeverQuestIDs.lua
+API.lua
 Media\CustomSounds.lua
 Media\Media.lua
 Core.lua

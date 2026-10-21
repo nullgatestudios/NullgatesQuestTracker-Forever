@@ -38,7 +38,7 @@ Runs **100% standalone out of the box** with zero required third-party libraries
 
 ## 🌟 Key Highlights
 
-* **Pure Standalone Power**: Zero external dependencies required to run. Embedded libraries (`Ace3`, `LibSharedMedia-3.0`) ensure full out-of-the-box reliability.
+* **Pure Standalone Power**: Zero external dependencies required to run. Embedded libraries (`AceDB-3.0`, `LibSharedMedia-3.0`) ensure full out-of-the-box reliability.
 * **Bespoke Native GUI**: Replaces generic AceGUI options with a native 8-tab configuration interface styled in signature dark slate with beveled gold accents.
 * **Dynamic Zero-Overlap Reflow**: Window resize detection dynamically shifts controls between a 2-column balanced view and a 1-column stacked view with word-wrapped labels to prevent text clipping.
 * **Smart Auto-Hiding Scrollbars**: Automatically disables mouse wheel scrolling and hides scrollbars whenever content fits within the visible container height.
@@ -108,7 +108,7 @@ Immediate auditory cues for quest progression:
 Seamless integration with `BleakfibersAddonConfig-Forever`:
 - **Master Mover Mode**: Toggle screen repositioning for all Bleakfiber addons simultaneously with `/bac mover`.
 - **Non-Destructive Profiles**: New profiles duplicate current active settings instead of resetting your configuration to factory defaults.
-- Full backup and profile switching via AceDB-3.0.
+- Profiles (create, copy, reset, delete, switch) via AceDB-3.0.
 
 ---
 
@@ -165,7 +165,9 @@ Type `/bfq` or `/bqt` in chat to open the options panel:
 | `/bfq toggle` | Minimizes or expands the tracker frame. |
 | `/bfq reset` | Resets tracker position back to default (`TOPRIGHT`). |
 | `/bfq profile <name>` | Switches to a named profile or displays current active profile. |
-| `/bfq debug` | Toggles developer diagnostic output in chat. |
+| `/bfq debug` | Turns Debug & Chat Output on or off (the addon writes nothing to chat while it is off). |
+| `/bfq lang [code]` | Shows or sets the language (e.g. `deDE`, `auto`). |
+| `/bfqway`, `/bfqcway`, `/bfqpaste` | Always-available names for the `/way` commands below. `/way`, `/cway` and `/waypaste` are only added when another addon (such as TomTom) does not already use them. |
 | `/way <x> <y> [title]` | Sets a custom Wayfinder navigation waypoint in your current zone. |
 | `/way <zone> <x> <y> [title]` | Sets a custom Wayfinder waypoint in a specific zone. |
 | `/way test` | Toggles test preview mode on the Wayfinder HUD arrow for repositioning. |
@@ -197,7 +199,7 @@ BleakfibersQuestTracker-Forever/
 │   ├── Fonts/                           # Embedded Nata Sans, Orbitron, and Roboto Condensed fonts
 │   ├── Sounds/                          # Custom audio completion cues (.wav)
 │   └── Textures/                        # Wayfinder HUD arrows, map pins, borders & mask files
-└── Libs/                                # Embedded Ace3 & LibSharedMedia-3.0 libraries
+└── Libs/                                # Embedded LibStub, CallbackHandler, AceDB-3.0 & LibSharedMedia-3.0
 ```
 
 ---

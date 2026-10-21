@@ -1,0 +1,25 @@
+name: Luacheck
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**.lua"
+      - ".luacheckrc"
+      - ".github/workflows/luacheck.yml"
+  pull_request:
+    paths:
+      - "**.lua"
+      - ".luacheckrc"
+      - ".github/workflows/luacheck.yml"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run luacheck
+        uses: lunarmodules/luacheck@v1
+        with:
+          args: BleakfibersQuestTracker-Forever

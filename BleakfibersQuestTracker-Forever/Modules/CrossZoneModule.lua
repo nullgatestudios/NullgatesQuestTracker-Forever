@@ -1,12 +1,12 @@
 --[[
     Bleakfiber's Quest Tracker (Forever) - CrossZoneModule.lua
     Standalone Cross-Zone Objective and Turn-In Tracker
-    
+
     Provides intelligent cross-zone filtering for quests whose objectives or turn-ins
     occur in different zones than where the quest was picked up:
       1. While in-progress (isComplete == false): Shows in the zone(s) where objectives take place.
       2. While complete (isComplete == true): Shows in the zone where the quest is turned in.
-    
+
     100% Dynamic Text Scanning:
       - Reads full quest objectives, summaries, and descriptions directly from the game client.
       - Resolves zones, towns, quest hubs, and subzones across all 60 WoW Forever maps.
@@ -16,10 +16,11 @@
 local addonName, ns = ...
 
 -- Localized Lua & WoW API bindings for performance & garbage reduction
-local pairs, ipairs, type, tostring = pairs, ipairs, type, tostring
+local pairs, ipairs, type = pairs, ipairs, type
 local string_lower, string_match, string_gsub, string_find = string.lower, string.match, string.gsub, string.find
 local table_insert = table.insert
-local wipe = table.wipe or wipe or function(t) for k in pairs(t) do t[k] = nil end return t end
+local wipe = ns.wipe
+local API = ns.API
 
 local CrossZoneModule = {}
 ns.CrossZoneModule = CrossZoneModule
@@ -431,22 +432,7 @@ local function GetQuestTexts(questID, questLogIndex)
         return questObjCache[questID], questDescCache[questID]
     end
 
-    if not questLogIndex and questID then
-        if C_QuestLog and C_QuestLog.GetLogIndexForQuestID then
-            local idx = C_QuestLog.GetLogIndexForQuestID(questID)
-            if idx and idx > 0 then questLogIndex = idx end
-        end
-        if not questLogIndex and GetNumQuestLogEntries and GetQuestLogTitle then
-            local count = GetNumQuestLogEntries() or 0
-            for i = 1, count do
-                local _, _, _, isHeader, _, _, _, qID = GetQuestLogTitle(i)
-                if not isHeader and qID == questID then
-                    questLogIndex = i
-                    break
-                end
-            end
-        end
-    end
+    questLogIndex = questLogIndex or API.GetLogIndexForQuestID(questID)
 
     local objTexts = {}
     local descText = nil
@@ -500,22 +486,58 @@ local function GetQuestTexts(questID, questLogIndex)
 end
 
 local staticNormValid = {}
+local zoneWordPatterns = {}
+
+-- Frontier pattern that matches a zone name as a whole word (cached per zone)
+local function GetZoneWordPattern(zone)
+    local pat = zoneWordPatterns[zone]
+    if not pat then
+        pat = "%f[%a]" .. zone:gsub("%-", "%%-") .. "%f[%A]"
+        zoneWordPatterns[zone] = pat
+    end
+    return pat
+end
+
+local function MatchesAnyZone(zoneList, normValid)
+    if not zoneList then return false end
+    for _, targetZone in ipairs(zoneList) do
+        local normTarget = NormalizeZone(targetZone)
+        if normValid[normTarget] then
+            return true
+        end
+        -- Substring match for compound names (e.g. "stormwind" in "stormwind city")
+        if #normTarget >= 5 then
+            for playerZ in pairs(normValid) do
+                if #playerZ >= 5 and (normTarget:find(playerZ, 1, true) or playerZ:find(normTarget, 1, true)) then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+local function TextMentionsZone(textStr, normValid)
+    if not textStr or textStr == "" then return false end
+    local lower = string_lower(textStr)
+    for playerZ in pairs(normValid) do
+        if #playerZ >= 4 and lower:find(GetZoneWordPattern(playerZ)) then
+            return true
+        end
+    end
+    return MatchesAnyZone(ParseZonesFromText(textStr), normValid)
+end
 
 -- =========================================================================
--- 5. Main Evaluation Entrypoint called by StandaloneTracker
--- 100% Dynamic: Evaluates active quest objectives & full quest text in real time.
--- Zero hardcoded quest IDs.
+-- Main Evaluation Entrypoint called by StandaloneTracker
+-- Evaluates active quest objectives & quest text; zero hardcoded quest IDs.
 -- =========================================================================
 function CrossZoneModule:MatchesCurrentZone(questID, questLogIndex, validZones)
     if not questID then return false end
-
-    -- Check if feature is enabled in user settings (defaults to true)
-    local isEnabled = not (ns.db and ns.db.filtering and ns.db.filtering.enableCrossZone == false)
-    if not isEnabled then
+    if ns.db and ns.db.filtering and ns.db.filtering.enableCrossZone == false then
         return false
     end
 
-    -- Normalize player's valid zones using static table (zero allocation)
     local normValid = staticNormValid
     wipe(normValid)
     for _, z in ipairs(validZones) do
@@ -525,56 +547,14 @@ function CrossZoneModule:MatchesCurrentZone(questID, questLogIndex, validZones)
         end
     end
 
-    local function MatchesAny(zoneList)
-        if not zoneList then return false end
-        for _, targetZone in ipairs(zoneList) do
-            local normTarget = NormalizeZone(targetZone)
-            if normValid[normTarget] then
-                return true
-            end
-            -- Substring match for compound names (e.g. "stormwind" in "stormwind city", "zephras isle" in "zephras isles")
-            for playerZ in pairs(normValid) do
-                if #normTarget >= 5 and #playerZ >= 5 then
-                    if normTarget:find(playerZ, 1, true) or playerZ:find(normTarget, 1, true) then
-                        return true
-                    end
-                end
-            end
-        end
-        return false
-    end
-
-    local function CheckText(textStr)
-        if not textStr or textStr == "" then return false end
-        local lower = string.lower(textStr)
-
-        -- Check 1: Does this text line explicitly mention any of the player's valid zones?
-        for playerZ in pairs(normValid) do
-            if #playerZ >= 4 then
-                local pat = "%f[%a]" .. playerZ:gsub("%-", "%%-") .. "%f[%A]"
-                if lower:find(pat) then
-                    return true
-                end
-            end
-        end
-
-        -- Check 2: Parsed zones & settlement hubs check
-        local parsedZones = ParseZonesFromText(textStr)
-        if parsedZones and MatchesAny(parsedZones) then
-            return true
-        end
-        return false
-    end
-
-    -- Retrieve quest objective lines and narrative description
     local objTexts, descText = GetQuestTexts(questID, questLogIndex)
 
-    -- Phase 1: Check Objective Texts (The actual task instructions)
-    -- If the objective text specifies where to go, that is the authoritative destination.
+    -- Objective texts are the authoritative destination; only fall back to the
+    -- description when no objective line names any zone or settlement.
     if objTexts and #objTexts > 0 then
         local anyObjHadExplicitZone = false
         for _, objStr in ipairs(objTexts) do
-            if CheckText(objStr) then
+            if TextMentionsZone(objStr, normValid) then
                 return true
             end
             local parsed = ParseZonesFromText(objStr)
@@ -582,21 +562,12 @@ function CrossZoneModule:MatchesCurrentZone(questID, questLogIndex, validZones)
                 anyObjHadExplicitZone = true
             end
         end
-        -- If an objective explicitly specified a destination zone that isn't current, do not fall through to lore backstory.
-        -- But if none of the objective lines mentioned any zone or settlement hub at all, fall through to description!
         if anyObjHadExplicitZone then
             return false
         end
     end
 
-    -- Phase 2: Fallback to Quest Description only if objective texts were empty
-    if descText and descText ~= "" then
-        if CheckText(descText) then
-            return true
-        end
-    end
-
-    return false
+    return TextMentionsZone(descText, normValid)
 end
 
 -- Helper: Discover destination zone parsed from quest objective lines or description text

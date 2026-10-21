@@ -1,10 +1,5 @@
 <Bindings>
-    <!-- Use Active Quest Item -->
-    <Binding name="BLEAKFIBER_USE_QUEST_ITEM" header="BLEAKFIBER_TRACKER" runOnUp="false">
-        Bleakfiber_UseQuestItem();
-    </Binding>
-    <!-- Toggle Tracker Visibility (Hide/Show) -->
-    <Binding name="BLEAKFIBER_TOGGLE_TRACKER_VISIBILITY" runOnUp="false">
-        Bleakfiber_ToggleTracker();
-    </Binding>
+    <!-- Secure click bindings: they work in combat and use the button's own action -->
+    <Binding name="CLICK BleakfiberQuestItemButton1:LeftButton" header="BLEAKFIBER_TRACKER"/>
+    <Binding name="CLICK BleakfiberTrackerToggleButton:LeftButton"/>
 </Bindings>

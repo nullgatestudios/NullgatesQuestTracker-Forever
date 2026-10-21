@@ -1,22 +1,21 @@
 local addonName, ns = ...
 
 -- Localized Lua & WoW API bindings for performance & zero table churn
-local pairs, ipairs, type, tostring, tonumber, select, pcall = pairs, ipairs, type, tostring, tonumber, select, pcall
+local ipairs, tostring, tonumber, pcall, select = ipairs, tostring, tonumber, pcall, select
 local string_format = string.format
 local table_insert, table_remove = table.insert, table.remove
-local wipe = table.wipe or wipe or function(t) for k in pairs(t) do t[k] = nil end return t end
 local math_floor, math_ceil, math_max, math_min = math.floor, math.ceil, math.max, math.min
 local CreateFrame, InCombatLockdown = CreateFrame, InCombatLockdown
 local UnitXP, UnitXPMax, UnitLevel = UnitXP, UnitXPMax, UnitLevel
 local GetXPExhaustion = GetXPExhaustion
 local GetZoneText, GetSubZoneText, GetZonePVPInfo = GetZoneText, GetSubZoneText, GetZonePVPInfo
 local ToggleWorldMap = ToggleWorldMap
-local IsShiftKeyDown = IsShiftKeyDown
-local C_QuestLog = C_QuestLog
-local GetNumQuestLogEntries = GetNumQuestLogEntries
-local GetQuestLogTitle = GetQuestLogTitle
 local GetQuestLogRewardXP = GetQuestLogRewardXP
 local C_Map = C_Map
+
+local API = ns.API
+local L = ns.L
+local wipe = ns.wipe
 
 local DataBarsModule = {}
 ns.DataBarsModule = DataBarsModule
@@ -28,6 +27,15 @@ local COLOR_XP_RESTED      = { r = 0.00, g = 0.44, b = 0.88, a = 1.00 } -- Blue 
 local COLOR_XP_QUEST_GHOST = { r = 0.25, g = 0.85, b = 0.45, a = 0.65 } -- Lighter Green (Completed Quest Turn-in XP)
 local COLOR_XP_ALL_QUESTS  = { r = 0.12, g = 0.45, b = 0.25, a = 0.80 } -- Darker Green (All Quests Log XP)
 local COLOR_XP_DING_READY  = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 } -- Gold ([Ding Ready!] Alert)
+
+local TERRITORY_LABELS = {
+    sanctuary = L["Sanctuary"],
+    friendly = L["Friendly"],
+    contested = L["Contested"],
+    hostile = L["Hostile"],
+    combat = L["Combat Zone"],
+    arena = L["Arena"],
+}
 
 local COLOR_TERRITORY = {
     ["sanctuary"] = { r = 0.40, g = 0.80, b = 1.00 }, -- Cyan
@@ -73,9 +81,9 @@ local BG_TEXTURE_PATHS = {
 local function ApplyBarBackdrop(frame, borderStyle, edgeSize, bgColor, borderColor, bgTexture)
     if not frame then return end
 
-    local curDB = (ns.db and ns.db.databars) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.databars)
+    local curDB = ns.db.databars
     local useTrackerAppearance = (curDB and curDB.useTrackerAppearance ~= false)
-    local trackerBackdrop = (ns.db and ns.db.backdrop) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.backdrop)
+    local trackerBackdrop = ns.db.backdrop
 
     if useTrackerAppearance and trackerBackdrop then
         if trackerBackdrop.show == false then
@@ -227,10 +235,7 @@ local function ApplyBarBackdrop(frame, borderStyle, edgeSize, bgColor, borderCol
 end
 
 local function GetLSMFont()
-    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-    local fontName = (ns.db and ns.db.fonts and ns.db.fonts.font) or "Nata Sans Bold"
-    local font = LSM and LSM:Fetch("font", fontName)
-    return font or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    return ns.FetchFont(ns.db.fonts.font or ns.DEFAULT_FONT_NAME)
 end
 
 -- ===========================================================================
@@ -238,6 +243,7 @@ end
 -- ===========================================================================
 
 local cachedCompletedQuests = {}
+local scanRowInfo = {}
 local completedQuestPool = {}
 
 local function AcquireCompletedQuestEntry()
@@ -263,25 +269,16 @@ end
 local function ScanCompletedQuestLogXP()
     ReleaseCompletedQuests()
     local totalXP = 0
-    local numEntries = (C_QuestLog and C_QuestLog.GetNumQuestLogEntries and SafeCall(C_QuestLog.GetNumQuestLogEntries)) or (GetNumQuestLogEntries and SafeCall(GetNumQuestLogEntries)) or 0
-    if numEntries == 0 then return 0, cachedCompletedQuests end
+    local info = scanRowInfo
+    for i = 1, API.GetNumQuestLogEntries() do
+        local row = API.GetQuestInfo(i, info)
+        local title = row and row.title
+        local level = row and row.level
+        local isHeader = not row or row.isHeader
+        local questID = row and row.questID
+        local isComplete = row and row.isComplete == 1
 
-    for i = 1, numEntries do
-        local title, level, _, isHeader, _, isComplete, _, questID
-        if C_QuestLog and C_QuestLog.GetInfo then
-            local info = SafeCall(C_QuestLog.GetInfo, i)
-            if info then
-                title = info.title
-                level = info.level
-                isHeader = info.isHeader
-                isComplete = (info.isComplete == 1 or info.isComplete == true)
-                questID = info.questID
-            end
-        elseif GetQuestLogTitle then
-            title, level, _, isHeader, _, isComplete, _, questID = SafeCall(GetQuestLogTitle, i)
-        end
-
-        if not isHeader and questID and (isComplete or (ns.IsQuestComplete and ns.IsQuestComplete(questID, i))) then
+        if not isHeader and questID and (isComplete or API.IsQuestComplete(questID, i)) then
             local rewardXP = 0
             if GetQuestLogRewardXP then
                 rewardXP = SafeCall(GetQuestLogRewardXP, questID) or 0
@@ -289,7 +286,7 @@ local function ScanCompletedQuestLogXP()
             totalXP = totalXP + rewardXP
             local entry = AcquireCompletedQuestEntry()
             entry.questID = questID
-            entry.title = title or ("Quest #" .. tostring(questID))
+            entry.title = title or string_format(L["Quest #%d"], questID)
             entry.level = level or 0
             entry.rewardXP = rewardXP
             table_insert(cachedCompletedQuests, entry)
@@ -325,23 +322,14 @@ end
 local function ScanAllQuestLogXP()
     ReleaseAllQuests()
     local totalXP = 0
-    local numEntries = (C_QuestLog and C_QuestLog.GetNumQuestLogEntries and SafeCall(C_QuestLog.GetNumQuestLogEntries)) or (GetNumQuestLogEntries and SafeCall(GetNumQuestLogEntries)) or 0
-    if numEntries == 0 then return 0, cachedAllQuests end
-
-    for i = 1, numEntries do
-        local title, level, _, isHeader, _, isComplete, _, questID
-        if C_QuestLog and C_QuestLog.GetInfo then
-            local info = SafeCall(C_QuestLog.GetInfo, i)
-            if info then
-                title = info.title
-                level = info.level
-                isHeader = info.isHeader
-                isComplete = (info.isComplete == 1 or info.isComplete == true)
-                questID = info.questID
-            end
-        elseif GetQuestLogTitle then
-            title, level, _, isHeader, _, isComplete, _, questID = SafeCall(GetQuestLogTitle, i)
-        end
+    local info = scanRowInfo
+    for i = 1, API.GetNumQuestLogEntries() do
+        local row = API.GetQuestInfo(i, info)
+        local title = row and row.title
+        local level = row and row.level
+        local isHeader = not row or row.isHeader
+        local questID = row and row.questID
+        local isComplete = row and row.isComplete == 1
 
         if not isHeader and questID then
             local rewardXP = 0
@@ -351,10 +339,10 @@ local function ScanAllQuestLogXP()
             totalXP = totalXP + rewardXP
             local entry = AcquireAllQuestEntry()
             entry.questID = questID
-            entry.title = title or ("Quest #" .. tostring(questID))
+            entry.title = title or string_format(L["Quest #%d"], questID)
             entry.level = level or 0
             entry.rewardXP = rewardXP
-            entry.isComplete = (isComplete or (ns.IsQuestComplete and ns.IsQuestComplete(questID, i)))
+            entry.isComplete = isComplete or API.IsQuestComplete(questID, i)
             table_insert(cachedAllQuests, entry)
         end
     end
@@ -365,7 +353,7 @@ end
 function DataBarsModule:CreateXPBar()
     if xpFrame then return xpFrame end
 
-    local db = (ns.db and ns.db.databars) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.databars)
+    local db = ns.db.databars
 
     local f = CreateFrame("Button", "BleakfiberQuestTrackerXPBar", UIParent, BackdropTemplateMixin and "BackdropTemplate")
     xpFrame = f
@@ -392,7 +380,6 @@ function DataBarsModule:CreateXPBar()
             if curDB and curDB.xpDockMode == "free" then
                 local point, _, relPoint, x, y = self:GetPoint()
                 curDB.xpFreePosition = { point = point, relativePoint = relPoint, x = x, y = y }
-                if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
             end
         end
     end)
@@ -477,7 +464,7 @@ end
 
 function DataBarsModule:UpdateXPDocking()
     if not xpFrame then return end
-    local db = (ns.db and ns.db.databars) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.databars)
+    local db = ns.db.databars
     if not db then return end
 
     local height = db.xpHeight or 14
@@ -590,7 +577,7 @@ end
 function DataBarsModule:UpdateXPBar()
     if not xpFrame or not xpFrame:IsShown() then return end
 
-    local db = (ns.db and ns.db.databars) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.databars)
+    local db = ns.db.databars
     local cXP = (db and db.xpColor) or COLOR_XP_PURPLE
     local cRested = (db and db.restedColor) or COLOR_XP_RESTED
     local cQuest = (db and db.questXPColor) or COLOR_XP_QUEST_GHOST
@@ -642,7 +629,7 @@ function DataBarsModule:UpdateXPBar()
                 watchedFaction.name,
                 BreakUpLargeNumbers(repProgress),
                 BreakUpLargeNumbers(repSpan),
-                standingText ~= "" and standingText or "Rep",
+                standingText ~= "" and standingText or L["Reputation"],
                 repPct))
             return
         end
@@ -655,7 +642,7 @@ function DataBarsModule:UpdateXPBar()
         xpFrame.questXPBar:Hide()
         if xpFrame.allQuestXPBar then xpFrame.allQuestXPBar:Hide() end
         xpFrame.restedBar:Hide()
-        xpFrame.text:SetText(string_format("Level %d (Max Level)", curLevel))
+        xpFrame.text:SetText(string_format(L["Level %d (Max Level)"], curLevel))
         return
     end
 
@@ -722,10 +709,10 @@ function DataBarsModule:UpdateXPBar()
 
     if isDingReady and db and db.showDingReadyText ~= false and formatMode ~= "none" then
         if hideQuestText then
-            xpFrame.text:SetText(string_format("|cff00ff00[DING READY!]|r %.1f%%", curPct))
+            xpFrame.text:SetText(string_format("|cff00ff00[%s]|r %.1f%%", L["DING READY!"], curPct))
         else
             local completedPct = (completedQuestXP / maxXP) * 100
-            xpFrame.text:SetText(string_format("|cff00ff00[DING READY!]|r %.1f%% + |cffffd100%.1f%%|r", curPct, completedPct))
+            xpFrame.text:SetText(string_format("|cff00ff00[%s]|r %.1f%% + |cffffd100%.1f%%|r", L["DING READY!"], curPct, completedPct))
         end
     elseif formatMode == "none" then
         xpFrame.text:SetText("")
@@ -734,17 +721,17 @@ function DataBarsModule:UpdateXPBar()
     elseif formatMode == "cur_pct" then
         xpFrame.text:SetText(string_format("%.1f%%", curPct))
     elseif formatMode == "remain" then
-        xpFrame.text:SetText(string_format("%s to Level %d", BreakUpLargeNumbers(maxXP - curXP), curLevel + 1))
+        xpFrame.text:SetText(string_format(L["%s to Level %d"], BreakUpLargeNumbers(maxXP - curXP), curLevel + 1))
     else -- "smart" default
         local maxAvailableWidth = math_max(100, xpFrame:GetWidth() - 14)
         local questXPStr = ""
         if not hideQuestText then
             if completedQuestXP > 0 and db and db.showAllQuestXP and allQuestXP > completedQuestXP then
-                questXPStr = string_format(" |cffffd100(+%s Done)|r |cff3399ff(+%s All)|r", BreakUpLargeNumbers(completedQuestXP), BreakUpLargeNumbers(allQuestXP))
+                questXPStr = " |cffffd100(" .. string_format(L["+%s Done"], BreakUpLargeNumbers(completedQuestXP)) .. ")|r |cff3399ff(" .. string_format(L["+%s All"], BreakUpLargeNumbers(allQuestXP)) .. ")|r"
             elseif completedQuestXP > 0 then
-                questXPStr = string_format(" |cffffd100(+%s Quest XP)|r", BreakUpLargeNumbers(completedQuestXP))
+                questXPStr = " |cffffd100(" .. string_format(L["+%s Quest XP"], BreakUpLargeNumbers(completedQuestXP)) .. ")|r"
             elseif allQuestXP > 0 and db and db.showAllQuestXP then
-                questXPStr = string_format(" |cff3399ff(+%s All Quest XP)|r", BreakUpLargeNumbers(allQuestXP))
+                questXPStr = " |cff3399ff(" .. string_format(L["+%s All Quest XP"], BreakUpLargeNumbers(allQuestXP)) .. ")|r"
             end
         end
 
@@ -771,11 +758,11 @@ function DataBarsModule:UpdateXPBar()
             local cDoneStr = ""
             if not hideQuestText then
                 if completedQuestXP > 0 and db and db.showAllQuestXP and allQuestXP > completedQuestXP then
-                    cDoneStr = string_format(" |cffffd100(+%s Done)|r |cff3399ff(+%s All)|r", FormatCompactXP(completedQuestXP), FormatCompactXP(allQuestXP))
+                    cDoneStr = " |cffffd100(" .. string_format(L["+%s Done"], FormatCompactXP(completedQuestXP)) .. ")|r |cff3399ff(" .. string_format(L["+%s All"], FormatCompactXP(allQuestXP)) .. ")|r"
                 elseif completedQuestXP > 0 then
-                    cDoneStr = string_format(" |cffffd100(+%s Quest)|r", FormatCompactXP(completedQuestXP))
+                    cDoneStr = " |cffffd100(" .. string_format(L["+%s Quest"], FormatCompactXP(completedQuestXP)) .. ")|r"
                 elseif allQuestXP > 0 and db and db.showAllQuestXP then
-                    cDoneStr = string_format(" |cff3399ff(+%s All)|r", FormatCompactXP(allQuestXP))
+                    cDoneStr = " |cff3399ff(" .. string_format(L["+%s All"], FormatCompactXP(allQuestXP)) .. ")|r"
                 end
             end
             local t2 = string_format("%s / %s (%.1f%%)%s", FormatCompactXP(curXP), FormatCompactXP(maxXP), curPct, cDoneStr)
@@ -810,7 +797,7 @@ function DataBarsModule:ShowXPTooltip(owner)
     local isMaxLevel = (maxXP == 0)
 
     GameTooltip:SetOwner(owner, "ANCHOR_TOP")
-    GameTooltip:AddLine("|cff00c0ffBleakfiber's Quest Tracker|r - Experience DataBar", 1, 1, 1)
+    GameTooltip:AddLine("|cff00c0ffBleakfiber's Quest Tracker|r - " .. L["Experience DataBar"], 1, 1, 1)
 
     if isMaxLevel then
         local watchedFaction = (C_Reputation and C_Reputation.GetWatchedFactionData and SafeCall(C_Reputation.GetWatchedFactionData))
@@ -824,12 +811,12 @@ function DataBarsModule:ShowXPTooltip(owner)
             local standingText = (GetText and SafeCall(GetText, "FACTION_STANDING_LABEL" .. tostring(watchedFaction.reaction))) or ""
 
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine(string_format("Watched Faction: |cffffffff%s|r", watchedFaction.name))
-            GameTooltip:AddLine(string_format("Standing: |cffffd100%s|r", standingText ~= "" and standingText or "Rep"))
-            GameTooltip:AddLine(string_format("Progress: |cffffffff%s / %s|r (%.1f%%)",
-                BreakUpLargeNumbers(repProgress), BreakUpLargeNumbers(repSpan), repPct))
+            GameTooltip:AddLine(string_format(L["Watched Faction: %s"], "|cffffffff" .. watchedFaction.name .. "|r"))
+            GameTooltip:AddLine(string_format(L["Standing: %s"], "|cffffd100" .. (standingText ~= "" and standingText or L["Reputation"]) .. "|r"))
+            GameTooltip:AddLine(string_format(L["Progress: %s"], string_format("|cffffffff%s / %s|r (%.1f%%)",
+                BreakUpLargeNumbers(repProgress), BreakUpLargeNumbers(repSpan), repPct)))
         else
-            GameTooltip:AddLine(string_format("Level: |cffffffff%d (Max Level)|r", curLevel))
+            GameTooltip:AddLine("|cffffffff" .. string_format(L["Level %d (Max Level)"], curLevel) .. "|r")
         end
     else
         local remaining = maxXP - curXP
@@ -839,57 +826,56 @@ function DataBarsModule:ShowXPTooltip(owner)
         local projectedXP = curXP + totalQuestXP
         local isDingReady = (projectedXP >= maxXP)
 
-        GameTooltip:AddLine(string_format("Level %d Player", curLevel), 0.8, 0.8, 0.8)
+        GameTooltip:AddLine(string_format(L["Level %d Player"], curLevel), 0.8, 0.8, 0.8)
         GameTooltip:AddLine(" ")
-        GameTooltip:AddDoubleLine("Current XP:", string_format("|cffffffff%s / %s (%.1f%%)|r",
+        GameTooltip:AddDoubleLine(L["Current XP:"], string_format("|cffffffff%s / %s (%.1f%%)|r",
             BreakUpLargeNumbers(curXP), BreakUpLargeNumbers(maxXP), curPct))
-        GameTooltip:AddDoubleLine("XP to Level " .. tostring(curLevel + 1) .. ":", string_format("|cffffffff%s|r",
+        GameTooltip:AddDoubleLine(string_format(L["XP to Level %d:"], curLevel + 1), string_format("|cffffffff%s|r",
             BreakUpLargeNumbers(remaining)))
 
         if restedXP > 0 then
             local restedPct = (restedXP / maxXP) * 100
-            GameTooltip:AddDoubleLine("Rested Bonus:", string_format("|cff0070dd+%s (%.1f%%)|r",
+            GameTooltip:AddDoubleLine(L["Rested Bonus:"], string_format("|cff0070dd+%s (%.1f%%)|r",
                 BreakUpLargeNumbers(restedXP), restedPct))
         end
 
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("|cffffd100Completed Quest Log XP:|r")
+        GameTooltip:AddLine("|cffffd100" .. L["Completed Quest Log XP:"] .. "|r")
         if #qList > 0 then
             for _, q in ipairs(qList) do
                 local greyNow = (ns.IsQuestGrey and ns.IsQuestGrey(q.level, curLevel, q.questID))
                 local greyAtNext = (ns.IsQuestGrey and ns.IsQuestGrey(q.level, curLevel + 1, q.questID))
                 local statusTag = ""
                 if not greyNow and greyAtNext then
-                    statusTag = " |cffff2020[Grey at Ding!]|r"
+                    statusTag = " |cffff2020[" .. L["Grey at Ding!"] .. "]|r"
                 end
                 GameTooltip:AddDoubleLine(string_format("  - [%d] %s%s", q.level, q.title, statusTag),
-                    string_format("|cff20ff20+%s XP|r", BreakUpLargeNumbers(q.rewardXP)), 0.9, 0.9, 0.9)
+                    "|cff20ff20" .. string_format(L["+%s XP"], BreakUpLargeNumbers(q.rewardXP)) .. "|r", 0.9, 0.9, 0.9)
             end
-            GameTooltip:AddDoubleLine("Total Completed Turn-In XP:", string_format("|cff00ff00+%s XP (%d quests)|r",
-                BreakUpLargeNumbers(totalQuestXP), #qList))
+            GameTooltip:AddDoubleLine(L["Total Completed Turn-In XP:"], "|cff00ff00" .. string_format(L["+%s XP (%d quests)"],
+                BreakUpLargeNumbers(totalQuestXP), #qList) .. "|r")
 
             if isDingReady then
                 local overflow = projectedXP - maxXP
                 GameTooltip:AddLine(" ")
                 local checkIcon = "|TInterface\\Common\\CommonIcons:13:13:0:0:2048:1024:13:253:542:752|t"
-                GameTooltip:AddLine(string_format("%s |cff00ff00Ding Ready!|r Turning in these quests will level you up to %d (+%s overflow XP)!",
-                    checkIcon, curLevel + 1, BreakUpLargeNumbers(overflow)), 0.2, 1.0, 0.2, true)
+                GameTooltip:AddLine(checkIcon .. " |cff00ff00" .. L["Ding Ready!"] .. "|r " .. string_format(L["Turning in these quests will level you up to %d (+%s overflow XP)!"],
+                    curLevel + 1, BreakUpLargeNumbers(overflow)), 0.2, 1.0, 0.2, true)
             end
         else
-            GameTooltip:AddLine("  No completed quests ready for turn-in.", 0.6, 0.6, 0.6)
+            GameTooltip:AddLine("  " .. L["No completed quests ready for turn-in."], 0.6, 0.6, 0.6)
         end
 
-        local db = (ns.db and ns.db.databars) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.databars)
-        if db and db.showAllQuestXP then
+        if ns.db.databars.showAllQuestXP then
             local allXP, allList = ScanAllQuestLogXP()
             GameTooltip:AddLine(" ")
-            GameTooltip:AddDoubleLine("Total Active Quests in Log XP:", string_format("|cff3399ff+%s XP (%d quests)|r",
-                BreakUpLargeNumbers(allXP), #allList))
+            GameTooltip:AddDoubleLine(L["Total Active Quests in Log XP:"], "|cff3399ff" .. string_format(L["+%s XP (%d quests)"],
+                BreakUpLargeNumbers(allXP), #allList) .. "|r")
         end
     end
 
     GameTooltip:AddLine(" ")
-    GameTooltip:AddLine("|cff00c0ffRight-Click:|r Open Settings & Appearance", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("|cff00c0ff" .. L["Right-Click:"] .. "|r " .. L["Open Settings"], 0.7, 0.7, 0.7)
     GameTooltip:Show()
 end
 
@@ -900,7 +886,7 @@ end
 function DataBarsModule:CreateLocationBar()
     if locFrame then return locFrame end
 
-    local db = (ns.db and ns.db.databars) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.databars)
+    local db = ns.db.databars
 
     local f = CreateFrame("Button", "BleakfiberQuestTrackerLocationBar", UIParent, BackdropTemplateMixin and "BackdropTemplate")
     locFrame = f
@@ -927,7 +913,6 @@ function DataBarsModule:CreateLocationBar()
             if curDB and curDB.locDockMode == "free" then
                 local point, _, relPoint, x, y = self:GetPoint()
                 curDB.locFreePosition = { point = point, relativePoint = relPoint, x = x, y = y }
-                if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
             end
         end
     end)
@@ -986,7 +971,7 @@ end
 
 function DataBarsModule:UpdateLocationDocking()
     if not locFrame then return end
-    local db = (ns.db and ns.db.databars) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.databars)
+    local db = ns.db.databars
     if not db then return end
 
     local height = db.locHeight or 22
@@ -1102,7 +1087,7 @@ function DataBarsModule:UpdateLocationBar(force)
         self.lastLocationStr = nil
     end
 
-    local db = (ns.db and ns.db.databars) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.databars)
+    local db = ns.db.databars
     local bestMapID = (C_Map and C_Map.GetBestMapForUnit and SafeCall(C_Map.GetBestMapForUnit, "player"))
 
     local zoneName = (GetZoneText and SafeCall(GetZoneText)) or ""
@@ -1110,7 +1095,7 @@ function DataBarsModule:UpdateLocationBar(force)
         local info = SafeCall(C_Map.GetMapInfo, bestMapID)
         if info and info.name then zoneName = info.name end
     end
-    if zoneName == "" then zoneName = "Unknown Zone" end
+    if zoneName == "" then zoneName = L["Unknown Zone"] end
 
     local subZone = (GetSubZoneText and SafeCall(GetSubZoneText)) or ""
 
@@ -1201,39 +1186,42 @@ end
 
 function DataBarsModule:ShowLocationTooltip(owner)
     local bestMapID = (C_Map and C_Map.GetBestMapForUnit and SafeCall(C_Map.GetBestMapForUnit, "player"))
-    local zoneName = (GetZoneText and SafeCall(GetZoneText)) or "Current Zone"
+    local zoneName = (GetZoneText and SafeCall(GetZoneText)) or L["Current Zone"]
     local subZone = (GetSubZoneText and SafeCall(GetSubZoneText)) or ""
-    local pvpType, _, factionName = (GetZonePVPInfo and SafeCall(GetZonePVPInfo))
+    local pvpType, factionName
+    if GetZonePVPInfo then
+        pvpType = GetZonePVPInfo()
+        factionName = select(3, GetZonePVPInfo())
+    end
 
     GameTooltip:SetOwner(owner, "ANCHOR_BOTTOM")
-    GameTooltip:AddLine("|cff00c0ffBleakfiber's Quest Tracker|r - Location Header", 1, 1, 1)
+    GameTooltip:AddLine("|cff00c0ffBleakfiber's Quest Tracker|r - " .. L["Location Header"], 1, 1, 1)
     GameTooltip:AddLine(" ")
-    GameTooltip:AddDoubleLine("Zone:", string_format("|cffffffff%s|r", zoneName))
+    GameTooltip:AddDoubleLine(L["Zone:"], string_format("|cffffffff%s|r", zoneName))
     if subZone ~= "" and subZone ~= zoneName then
-        GameTooltip:AddDoubleLine("Subzone:", string_format("|cffffffff%s|r", subZone))
+        GameTooltip:AddDoubleLine(L["Subzone:"], string_format("|cffffffff%s|r", subZone))
     end
 
     if pvpType then
         local color = COLOR_TERRITORY[pvpType] or COLOR_TERRITORY["default"]
-        local typeLabel = pvpType:gsub("^%l", string.upper)
+        local typeLabel = TERRITORY_LABELS[pvpType] or pvpType
         if factionName and factionName ~= "" then
             typeLabel = typeLabel .. " (" .. factionName .. ")"
         end
-        GameTooltip:AddDoubleLine("Territory:", string_format("|cff%02x%02x%02x%s|r",
-            math_floor(color.r * 255), math_floor(color.g * 255), math_floor(color.b * 255), typeLabel))
+        GameTooltip:AddDoubleLine(L["Territory:"], ns.ColorToHex(color) .. typeLabel .. "|r")
     end
 
     if bestMapID and C_Map and C_Map.GetPlayerMapPosition then
         local pos = SafeCall(C_Map.GetPlayerMapPosition, bestMapID, "player")
         if pos and pos.x and pos.y and pos.x > 0 and pos.y > 0 then
-            GameTooltip:AddDoubleLine("Coordinates:", string_format("|cffffffff%.1f, %.1f|r (Map ID: %d)",
-                pos.x * 100, pos.y * 100, bestMapID))
+            GameTooltip:AddDoubleLine(L["Coordinates:"], string_format("|cffffffff%.1f, %.1f|r (%s)",
+                pos.x * 100, pos.y * 100, string_format(L["Map ID: %d"], bestMapID)))
         end
     end
 
     GameTooltip:AddLine(" ")
-    GameTooltip:AddLine("|cff00c0ffLeft-Click:|r Toggle World Map", 0.2, 0.8, 1.0)
-    GameTooltip:AddLine("|cff00c0ffRight-Click:|r Open Settings & Options", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("|cff00c0ff" .. L["Left-Click:"] .. "|r " .. L["Toggle World Map"], 0.2, 0.8, 1.0)
+    GameTooltip:AddLine("|cff00c0ff" .. L["Right-Click:"] .. "|r " .. L["Open Settings"], 0.7, 0.7, 0.7)
     GameTooltip:Show()
 end
 
@@ -1257,166 +1245,65 @@ function DataBarsModule:GetSelectedQuestID()
     if ns.activeQuestID and ns.activeQuestID > 0 then
         return ns.activeQuestID
     end
-    if C_SuperTrack and C_SuperTrack.GetSuperTrackedQuestID then
-        local stID = SafeCall(C_SuperTrack.GetSuperTrackedQuestID)
-        if stID and stID > 0 then
-            return stID
-        end
-    end
-    if GetQuestLogSelection and ns.GetQuestLogTitle then
-        local sel = SafeCall(GetQuestLogSelection)
-        if sel and sel > 0 then
-            local _, _, _, _, _, _, _, qID = ns.GetQuestLogTitle(sel)
-            if qID and qID > 0 then
-                return qID
-            end
-        end
+    local stID = API.GetSuperTrackedQuestID()
+    if stID and stID > 0 then
+        return stID
     end
     return nil
 end
 
+-- Reused result table (the timer bar refreshes every second)
+local activeTimedQuest = {}
+
+local function FillTimedQuest(questID, logIndex, title, timeLeft, maxTime)
+    activeTimedQuest.questID = questID
+    activeTimedQuest.logIndex = logIndex
+    activeTimedQuest.title = title or API.GetTitleForQuestID(questID) or L["Timed Quest"]
+    activeTimedQuest.timeLeft = timeLeft
+    local saved = ns.db.databars.timerMaxValues[questID]
+    if not maxTime or maxTime <= 0 then
+        maxTime = (saved and saved >= timeLeft and saved) or timeLeft
+    end
+    activeTimedQuest.maxTime = maxTime
+    return activeTimedQuest
+end
+
 function DataBarsModule:GetActiveTimedQuest()
-    if ns.PurgeInvalidTimerCache then
-        ns.PurgeInvalidTimerCache()
-    end
-
-    local numEntries = (C_QuestLog and C_QuestLog.GetNumQuestLogEntries and SafeCall(C_QuestLog.GetNumQuestLogEntries))
-        or (GetNumQuestLogEntries and SafeCall(GetNumQuestLogEntries)) or 0
-
-    -- Check if player has an actively selected/targeted quest:
+    -- The selected / super-tracked quest wins; if it has no timer the bar stays hidden
     local selectedQID = self:GetSelectedQuestID()
-    if selectedQID and selectedQID > 0 then
-        -- Find the selected quest's log index and title
-        local activeTitle = nil
-        local activeLogIndex = nil
-        for i = 1, numEntries do
-            local qInfo = C_QuestLog and C_QuestLog.GetInfo and SafeCall(C_QuestLog.GetInfo, i)
-            local qID = qInfo and qInfo.questID
-            if not qID and ns.GetQuestLogTitle then
-                local _, _, _, _, _, _, _, id = ns.GetQuestLogTitle(i)
-                qID = id
-            end
-            if qID and qID == selectedQID then
-                activeLogIndex = i
-                activeTitle = (qInfo and qInfo.title) or (ns.GetQuestLogTitle and select(1, ns.GetQuestLogTitle(i)))
-                break
-            end
-        end
-
-        -- If the selected quest is failed, do not show timer
-        if ns.IsQuestFailed and ns.IsQuestFailed(selectedQID, activeLogIndex) then
-            if ns.ClearQuestTimer then ns.ClearQuestTimer(selectedQID) end
-            return nil
-        end
-
-        local timeLeft, maxTime = nil, nil
-        if ns.GetQuestTimeInfo then
-            timeLeft, maxTime = ns.GetQuestTimeInfo(selectedQID, activeLogIndex)
-        end
-
+    if selectedQID then
+        local logIndex = API.GetLogIndexForQuestID(selectedQID)
+        if not logIndex then return nil end
+        local timeLeft, maxTime = ns.GetQuestTimeInfo(selectedQID, logIndex)
         if timeLeft and timeLeft > 0 then
-            activeTitle = activeTitle 
-                or (C_QuestLog and C_QuestLog.GetTitleForQuestID and SafeCall(C_QuestLog.GetTitleForQuestID, selectedQID)) 
-                or "Timed Quest"
-
-            local curDB = (ns.db and ns.db.databars)
-            if not maxTime or maxTime <= 0 then
-                local curSaved = curDB and curDB.timerMaxValues and curDB.timerMaxValues[selectedQID]
-                maxTime = (curSaved and curSaved >= timeLeft and curSaved) or timeLeft
-            end
-
-            return {
-                questID = selectedQID,
-                logIndex = activeLogIndex,
-                title = activeTitle,
-                timeLeft = timeLeft,
-                maxTime = maxTime or timeLeft,
-            }
-        else
-            -- USER REQUIREMENT: Hide the databar if the selected quest doesn't have a timer
-            return nil
+            return FillTimedQuest(selectedQID, logIndex, nil, timeLeft, maxTime)
         end
+        return nil
     end
 
-    if numEntries == 0 then return nil end
-
-    local bestQuest = nil
-    local lowestTime = 999999
-
-    for i = 1, numEntries do
-        local title, isHeader, questID
-        if C_QuestLog and C_QuestLog.GetInfo then
-            local info = SafeCall(C_QuestLog.GetInfo, i)
-            if info then
-                title = info.title
-                isHeader = info.isHeader
-                questID = info.questID
-            end
-        elseif GetQuestLogTitle then
-            local t, _, _, h, _, _, _, qID = SafeCall(GetQuestLogTitle, i)
-            title = t
-            isHeader = h
-            questID = qID
-        end
-
-        if title and not isHeader and (questID or i) then
-            questID = questID or i
-            local isFailed = ns.IsQuestFailed and ns.IsQuestFailed(questID, i)
-            if not isFailed then
-                local timeLeft, maxTime
-                if ns.GetQuestTimeInfo then
-                    timeLeft, maxTime = ns.GetQuestTimeInfo(questID, i)
-                end
-
-                if timeLeft and timeLeft > 0 then
-                    -- Persist maxTime across /reload via SavedVariables
-                    local curDB = (ns.db and ns.db.databars)
-                    if not maxTime or maxTime <= 0 then
-                        local curSaved = curDB and curDB.timerMaxValues and curDB.timerMaxValues[questID]
-                        if curSaved and curSaved >= timeLeft then
-                            maxTime = curSaved
-                        else
-                            maxTime = timeLeft
-                            if curDB then
-                                curDB.timerMaxValues = curDB.timerMaxValues or {}
-                                curDB.timerMaxValues[questID] = maxTime
-                                if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                            end
-                        end
-                    else
-                        if curDB then
-                            curDB.timerMaxValues = curDB.timerMaxValues or {}
-                            if curDB.timerMaxValues[questID] ~= maxTime then
-                                curDB.timerMaxValues[questID] = maxTime
-                                if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                            end
-                        end
-                    end
-
-                    if timeLeft < lowestTime then
-                        lowestTime = timeLeft
-                        bestQuest = {
-                            questID = questID,
-                            logIndex = i,
-                            title = title,
-                            timeLeft = timeLeft,
-                            maxTime = maxTime or timeLeft,
-                        }
-                    end
-                end
-            else
-                if ns.ClearQuestTimer then ns.ClearQuestTimer(questID) end
+    -- Otherwise show the most urgent timed quest in the log
+    local bestID, bestIndex, bestTitle, bestLeft, bestMax
+    local info = self.scanInfo or {}
+    self.scanInfo = info
+    for i = 1, API.GetNumQuestLogEntries() do
+        local row = API.GetQuestInfo(i, info)
+        if row and not row.isHeader and row.questID and row.isComplete ~= -1 then
+            local timeLeft, maxTime = ns.GetQuestTimeInfo(row.questID, i)
+            if timeLeft and timeLeft > 0 and (not bestLeft or timeLeft < bestLeft) then
+                bestID, bestIndex, bestTitle, bestLeft, bestMax = row.questID, i, row.title, timeLeft, maxTime
             end
         end
     end
-
-    return bestQuest
+    if bestID then
+        return FillTimedQuest(bestID, bestIndex, bestTitle, bestLeft, bestMax)
+    end
+    return nil
 end
 
 function DataBarsModule:CreateTimerBar()
     if timerFrame then return timerFrame end
 
-    local db = (ns.db and ns.db.databars) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.databars)
+    local db = ns.db.databars
 
     local f = CreateFrame("Button", "BleakfiberQuestTrackerTimerBar", UIParent, BackdropTemplateMixin and "BackdropTemplate")
     timerFrame = f
@@ -1463,7 +1350,6 @@ function DataBarsModule:CreateTimerBar()
             if curDB and curDB.timerDockMode == "free" then
                 local point, _, relPoint, x, y = self:GetPoint()
                 curDB.timerFreePosition = { point = point, relativePoint = relPoint, x = x, y = y }
-                if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
             end
         end
     end)
@@ -1521,17 +1407,17 @@ function DataBarsModule:CreateTimerBar()
 
     f:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-        GameTooltip:AddLine("|cff00c0ffBleakfiber's Quest Tracker|r - Quest Timer", 1, 1, 1)
+        GameTooltip:AddLine("|cff00c0ffBleakfiber's Quest Tracker|r - " .. L["Quest Timer"], 1, 1, 1)
         GameTooltip:AddLine(" ")
         if self.activeQuest then
-            GameTooltip:AddDoubleLine("Quest:", string_format("|cffffffff%s|r", self.activeQuest.title or "Timed Quest"))
-            GameTooltip:AddDoubleLine("Time Remaining:", string_format("|cffffd100%s|r", FormatTimeLeft(self.activeQuest.timeLeft)))
+            GameTooltip:AddDoubleLine(L["Quest:"], string_format("|cffffffff%s|r", self.activeQuest.title or L["Timed Quest"]))
+            GameTooltip:AddDoubleLine(L["Time Remaining:"], string_format("|cffffd100%s|r", FormatTimeLeft(self.activeQuest.timeLeft)))
         else
-            GameTooltip:AddLine("No active timed quest (Preview Mode)", 0.8, 0.8, 0.8)
+            GameTooltip:AddLine(L["No active timed quest (Preview Mode)"], 0.8, 0.8, 0.8)
         end
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("|cff00c0ffLeft-Click:|r View Quest in Log", 0.2, 0.8, 1.0)
-        GameTooltip:AddLine("|cff00c0ffRight-Click:|r Open Settings & Options", 0.7, 0.7, 0.7)
+        GameTooltip:AddLine("|cff00c0ff" .. L["Left-Click:"] .. "|r " .. L["View Quest in Log"], 0.2, 0.8, 1.0)
+        GameTooltip:AddLine("|cff00c0ff" .. L["Right-Click:"] .. "|r " .. L["Open Settings"], 0.7, 0.7, 0.7)
         GameTooltip:Show()
     end)
     f:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1543,7 +1429,7 @@ end
 
 function DataBarsModule:UpdateTimerDocking()
     if not timerFrame then return end
-    local db = (ns.db and ns.db.databars) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.databars)
+    local db = ns.db.databars
     if not db then return end
 
     local height = db.timerHeight or 22
@@ -1592,7 +1478,7 @@ function DataBarsModule:UpdateTimerDocking()
 end
 
 function DataBarsModule:IsHiddenWithTracker()
-    local db = (ns.db and ns.db.databars) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.databars)
+    local db = ns.db.databars
     local hideWithTracker = not (db and db.hideWithTracker == false)
     return hideWithTracker and (ns.Tracker and ns.Tracker.isHidden == true)
 end
@@ -1604,7 +1490,7 @@ function DataBarsModule:UpdateAllDocking()
 end
 
 function DataBarsModule:UpdateTimerBar(force)
-    local db = (ns.db and ns.db.databars) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.databars)
+    local db = ns.db.databars
     local isTimerEnabled = not (db and db.enableTimerBar == false)
     local isCombatHidden = db and db.hideInCombat and (self.inCombat or (InCombatLockdown and InCombatLockdown()))
     if not isTimerEnabled or isCombatHidden or self:IsHiddenWithTracker() then
@@ -1664,7 +1550,7 @@ function DataBarsModule:UpdateTimerBar(force)
 
         local showTitle = not (db and db.timerShowTitle == false)
         local formattedTime = string_format("%s%s|r", timeColorCode, timeStr)
-        local displayText = showTitle and string_format("%s: %s", timedQuest.title or "Quest", formattedTime) or formattedTime
+        local displayText = showTitle and string_format("%s: %s", timedQuest.title or L["Quest"], formattedTime) or formattedTime
         timerFrame.text:SetText(displayText)
 
         timerFrame:Show()
@@ -1679,7 +1565,7 @@ function DataBarsModule:UpdateTimerBar(force)
         timerFrame.statusBar:SetStatusBarColor(tCol.r, tCol.g, tCol.b, 0.50)
         timerFrame:SetBackdropBorderColor(tCol.r, tCol.g, tCol.b, 0.85)
         local showTitle = not (db and db.timerShowTitle == false)
-        local displayText = showTitle and "A Hot Mug (Preview): |cffffd10004:32|r" or "|cffffd10004:32|r"
+        local displayText = showTitle and (L["A Hot Mug (Preview)"] .. ": |cffffd10004:32|r") or "|cffffd10004:32|r"
         timerFrame.text:SetText(displayText)
         timerFrame:Show()
         self:StopTimerTicker()
@@ -1696,7 +1582,7 @@ end
 
 function DataBarsModule:UpdateEvents()
     if not self.eventFrame then return end
-    local db = (ns.db and ns.db.databars) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.databars)
+    local db = ns.db.databars
     local xpEnabled = db and db.enableXPBar
     local locEnabled = db and db.enableLocationBar
     local timerEnabled = not (db and db.enableTimerBar == false)
@@ -1736,9 +1622,7 @@ function DataBarsModule:UpdateEvents()
 end
 
 function DataBarsModule:ApplyTypography(overrideFontPath)
-    local curDB = (ns.db and ns.db.databars)
-        or (ns.dbObject and ns.dbObject.profile and ns.dbObject.profile.databars)
-        or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.databars)
+    local curDB = ns.db.databars
     local fontPath = overrideFontPath or GetLSMFont()
     local xpSize = (curDB and curDB.xpFontSize) or 11
     local xpOutline = (curDB and curDB.xpFontOutline) or "OUTLINE"
@@ -1791,7 +1675,7 @@ function DataBarsModule:ApplyTypography(overrideFontPath)
 end
 
 function DataBarsModule:ApplyVisuals()
-    local db = (ns.db and ns.db.databars) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.databars)
+    local db = ns.db.databars
     if not db then return end
 
     if xpFrame then
@@ -1815,7 +1699,7 @@ function DataBarsModule:ApplyVisuals()
 end
 
 function DataBarsModule:RefreshBars()
-    local db = (ns.db and ns.db.databars) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.databars)
+    local db = ns.db.databars
     if not db then return end
 
     self:ApplyTypography()
@@ -1865,9 +1749,25 @@ function DataBarsModule:RefreshBars()
     self:UpdateEvents()
 end
 
-function DataBarsModule:Initialize()
-    local db = (ns.db and ns.db.databars) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.databars)
+local questRefreshPending = false
+local function RunQuestRefresh()
+    questRefreshPending = false
+    if xpFrame and xpFrame:IsShown() then
+        DataBarsModule:UpdateXPBar()
+    end
+    local curDB = ns.db.databars
+    if curDB.enableTimerBar ~= false and not DataBarsModule.inCombat and not DataBarsModule:IsHiddenWithTracker() then
+        DataBarsModule:UpdateTimerBar()
+    end
+end
 
+function DataBarsModule:RequestQuestRefresh()
+    if questRefreshPending then return end
+    questRefreshPending = true
+    C_Timer.After(0.1, RunQuestRefresh)
+end
+
+function DataBarsModule:Initialize()
     -- Event listener for player, quest log, and combat changes
     local eventFrame = CreateFrame("Frame")
     eventFrame:SetScript("OnEvent", function(_, event, arg1)
@@ -1897,7 +1797,7 @@ function DataBarsModule:Initialize()
 
         if event == "QUEST_TIMER_UPDATE" or event == "QUEST_TIMERS_UPDATE" then
             local curDB = (ns.db and ns.db.databars)
-            if curDB and curDB.enableTimerBar and not DataBarsModule.inCombat and not DataBarsModule:IsHiddenWithTracker() then
+            if curDB and curDB.enableTimerBar ~= false and not DataBarsModule.inCombat and not DataBarsModule:IsHiddenWithTracker() then
                 DataBarsModule:UpdateTimerBar()
             end
             return
@@ -1908,13 +1808,7 @@ function DataBarsModule:Initialize()
                 DataBarsModule:UpdateLocationBar()
             end
         else
-            if xpFrame and xpFrame:IsShown() then
-                DataBarsModule:UpdateXPBar()
-            end
-            local curDB = (ns.db and ns.db.databars)
-            if curDB and curDB.enableTimerBar and not DataBarsModule.inCombat and not DataBarsModule:IsHiddenWithTracker() then
-                DataBarsModule:UpdateTimerBar()
-            end
+            DataBarsModule:RequestQuestRefresh()
         end
     end)
     self.eventFrame = eventFrame
@@ -1923,13 +1817,7 @@ function DataBarsModule:Initialize()
     -- Register callback for tracker redraws / width changes so bars snap seamlessly
     if ns.RegisterCallback then
         ns:RegisterCallback("QUEST_DATA_CHANGED", function()
-            if xpFrame and xpFrame:IsShown() then
-                DataBarsModule:UpdateXPBar()
-            end
-            local curDB = (ns.db and ns.db.databars)
-            if curDB and curDB.enableTimerBar and not DataBarsModule.inCombat and not DataBarsModule:IsHiddenWithTracker() then
-                DataBarsModule:UpdateTimerBar()
-            end
+            DataBarsModule:RequestQuestRefresh()
         end)
         ns:RegisterCallback("TRACKER_DOCKING_CHANGED", function()
             DataBarsModule:UpdateAllDocking()

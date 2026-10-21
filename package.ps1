@@ -1,99 +1,105 @@
 <#
-    Automated Packaging Script for Bleakfiber Addons
+    Packaging script for Bleakfiber's Quest Tracker - Forever
+
+    Builds zips/<AddonName> <Version>.zip with a single top-level addon folder.
+    The repository-root CHANGELOG.md is the only changelog; it is copied into
+    the packaged addon folder so players get it inside the zip.
+
     Usage:
         .\package.ps1
-        .\package.ps1 -Version "1.0.18" -Notes "Feature update description"
+        .\package.ps1 -Version "1.2.1" -Notes "Short summary for a new changelog entry"
+        .\package.ps1 -SourceDir ".\1.2.0_refactor\BleakfibersQuestTracker-Forever"
 #>
 
 param (
     [string]$Version,
-    [string]$Notes
+    [string]$Notes,
+    [string]$SourceDir
 )
 
 $ErrorActionPreference = "Stop"
 $rootDir = $PSScriptRoot
 
-# Locate the nested addon distribution subfolder
-$addonDirs = Get-ChildItem -Directory -Path $rootDir | Where-Object { 
-    Test-Path (Join-Path $_.FullName "$($_.Name).toc") 
+# Locate the addon folder (explicit -SourceDir, or the root subfolder with a matching .toc)
+if ($SourceDir) {
+    $addonDir = (Resolve-Path $SourceDir).Path
+} else {
+    $candidate = Get-ChildItem -Directory -Path $rootDir | Where-Object {
+        Test-Path (Join-Path $_.FullName "$($_.Name).toc")
+    } | Select-Object -First 1
+    if (-not $candidate) {
+        Write-Error "Could not find an addon subfolder with a matching .toc file."
+    }
+    $addonDir = $candidate.FullName
 }
-
-if (-not $addonDirs) {
-    Write-Error "Could not find a valid addon subfolder with a matching .toc file."
-    exit 1
-}
-
-$addonDir = $addonDirs[0].FullName
-$addonName = $addonDirs[0].Name
+$addonName = Split-Path $addonDir -Leaf
 $tocFile = Join-Path $addonDir "$addonName.toc"
-$changelogFile = Join-Path $addonDir "CHANGELOG.md"
-if (-not (Test-Path $changelogFile)) {
-    $changelogFile = Join-Path $rootDir "CHANGELOG.md"
+if (-not (Test-Path $tocFile)) {
+    Write-Error "Missing $addonName.toc in $addonDir"
 }
+$changelogFile = Join-Path $rootDir "CHANGELOG.md"
 
-# Version Update
+# Version: update the .toc when given, otherwise read it
 if ($Version) {
     Write-Host "Updating version to $Version..." -ForegroundColor Cyan
-    (Get-Content $tocFile) -replace '^## Version: .*$', "## Version: $Version" | Set-Content $tocFile
+    $toc = (Get-Content $tocFile) -replace '^## Version: .*$', "## Version: $Version"
+    [System.IO.File]::WriteAllLines($tocFile, $toc)
 } else {
     $tocContent = Get-Content $tocFile -Raw
     if ($tocContent -match '## Version:\s*([^\r\n]+)') {
         $Version = $matches[1].Trim()
     } else {
-        $Version = "1.0.18"
+        Write-Error "No '## Version:' line in $tocFile"
     }
 }
 
-Write-Host "Packaging $addonName v$Version..." -ForegroundColor Green
+Write-Host "Packaging $addonName v$Version from $addonDir" -ForegroundColor Green
 
-# Changelog Entry
+# Changelog: add an entry only when -Notes is given; otherwise just warn if the version is missing
 if (Test-Path $changelogFile) {
     $changelog = Get-Content $changelogFile -Raw
-    if ($changelog -notmatch "\[$Version\]") {
-        $dateStr = (Get-Date).ToString("yyyy-MM-dd")
-        $noteBody = if ($Notes) { "- $Notes" } else { "- Native Dark Slate & Gold configuration GUI, dynamic element reflow, and auto-hiding scrollbar." }
-        $entry = @"
-
-## [$Version] - $dateStr
-
-### Changed
-$noteBody
-
-"@
-        if ($changelog -match "(# Changelog[\s\S]*?\n\n)") {
-            $header = $matches[1]
-            $changelog = $changelog.Replace($header, $header + $entry.TrimStart() + "`n")
+    $escaped = [regex]::Escape($Version)
+    if ($changelog -notmatch "## \[$escaped\]") {
+        if ($Notes) {
+            $dateStr = (Get-Date).ToString("yyyy-MM-dd")
+            $entry = "## [$Version] - $dateStr`n`n### Changed`n- $Notes`n`n"
+            $firstEntry = $changelog.IndexOf("## [")
+            if ($firstEntry -ge 0) {
+                $changelog = $changelog.Insert($firstEntry, $entry)
+            } else {
+                $changelog = $changelog.TrimEnd() + "`n`n" + $entry
+            }
+            [System.IO.File]::WriteAllText($changelogFile, $changelog)
+            Write-Host "Recorded [$Version] in CHANGELOG.md" -ForegroundColor Yellow
         } else {
-            $changelog = $entry + "`n" + $changelog
+            Write-Warning "CHANGELOG.md has no [$Version] entry. Add one (or pass -Notes) before releasing."
         }
-        Set-Content -Path $changelogFile -Value $changelog -NoNewline
-        Write-Host "Recorded [$Version] in CHANGELOG.md" -ForegroundColor Yellow
     }
+} else {
+    Write-Warning "No CHANGELOG.md found at the repository root."
 }
 
-# Ensure \zips directory exists
-$zipsDir = Join-Path $rootDir "zips"
-if (-not (Test-Path $zipsDir)) {
-    New-Item -ItemType Directory -Path $zipsDir -Force | Out-Null
-}
-
-# Zip Archive Generation directly in \zips
-$zipName = "$addonName $Version.zip"
-$zipPath = Join-Path $zipsDir $zipName
-
-Write-Host "Creating archive zips/$zipName..." -ForegroundColor Cyan
-Compress-Archive -Path $addonDir -DestinationPath $zipPath -Force
-
-# Clean up duplicate / legacy zip archives in root
-Get-ChildItem -Path $rootDir -Filter "*.zip" -File | ForEach-Object {
-    $targetInZips = Join-Path $zipsDir $_.Name
-    if (-not (Test-Path $targetInZips)) {
-        Move-Item -Path $_.FullName -Destination $targetInZips -Force
-        Write-Host "Moved legacy archive to zips/$($_.Name)" -ForegroundColor Cyan
-    } else {
-        Remove-Item -Path $_.FullName -Force
-        Write-Host "Removed duplicate root archive: $($_.Name)" -ForegroundColor Yellow
+# Stage a clean copy so the changelog can be added without touching the source folder
+$stageRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("bfq-package-" + [guid]::NewGuid().ToString("N"))
+$stageAddon = Join-Path $stageRoot $addonName
+New-Item -ItemType Directory -Path $stageRoot -Force | Out-Null
+try {
+    Copy-Item -Path $addonDir -Destination $stageAddon -Recurse
+    if (Test-Path $changelogFile) {
+        Copy-Item -Path $changelogFile -Destination (Join-Path $stageAddon "CHANGELOG.md") -Force
     }
+
+    $zipsDir = Join-Path $rootDir "zips"
+    if (-not (Test-Path $zipsDir)) {
+        New-Item -ItemType Directory -Path $zipsDir -Force | Out-Null
+    }
+    $zipName = "$addonName $Version.zip"
+    $zipPath = Join-Path $zipsDir $zipName
+
+    Write-Host "Creating archive zips/$zipName..." -ForegroundColor Cyan
+    Compress-Archive -Path $stageAddon -DestinationPath $zipPath -Force
+} finally {
+    Remove-Item -Path $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host "Successfully packaged: zips/$zipName" -ForegroundColor Green

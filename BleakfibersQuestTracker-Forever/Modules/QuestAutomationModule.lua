@@ -1,12 +1,11 @@
 local addonName, ns = ...
 
 -- Localized Lua & WoW API bindings for performance
-local pairs, ipairs, tonumber, select, pcall = pairs, ipairs, tonumber, select, pcall
-local C_Timer, CreateFrame = C_Timer, CreateFrame
+local CreateFrame = CreateFrame
 local IsShiftKeyDown = IsShiftKeyDown
-local IsInGroup, GetNumGroupMembers = IsInGroup, GetNumGroupMembers
-local AcceptQuest, CompleteQuest, GetQuestReward = AcceptQuest, CompleteQuest, GetQuestReward
-local GetNumQuestChoices, SelectAvailableQuest, SelectActiveQuest = GetNumQuestChoices, SelectAvailableQuest, SelectActiveQuest
+local IsInGroup = IsInGroup
+
+local API = ns.API
 
 local QuestAutomationModule = {}
 ns.QuestAutomationModule = QuestAutomationModule
@@ -16,18 +15,17 @@ local eventFrame = CreateFrame("Frame")
 QuestAutomationModule.eventFrame = eventFrame
 QuestAutomationModule.isEnabled = false
 
-local function GetAutomationCfg()
-    local qa = (ns.db and ns.db.questAutomation) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.questAutomation) or {}
-    local soc = (ns.db and ns.db.social) or (ns.defaultDB and ns.defaultDB.profile and ns.defaultDB.profile.social) or {}
-    local cfg = {}
-    for k, v in pairs(soc) do cfg[k] = v end
-    for k, v in pairs(qa) do cfg[k] = v end
-    return cfg
+local function GetConfig()
+    return ns.db.questAutomation
 end
 
-local function IsBypassed()
-    local cfg = GetAutomationCfg()
-    return (cfg.shiftBypass ~= false and IsShiftKeyDown())
+local function IsBypassed(cfg)
+    return cfg.shiftBypass ~= false and IsShiftKeyDown()
+end
+
+-- A quest offered by another player (party share) rather than by an NPC or object
+local function IsSharedQuestOffer()
+    return UnitExists("questnpc") and UnitIsPlayer("questnpc") and true or false
 end
 
 -- ===========================================================================
@@ -35,83 +33,77 @@ end
 -- ===========================================================================
 
 local function OnQuestAccepted(questID)
-    local cfg = GetAutomationCfg()
-    if not cfg.autoShare or IsBypassed() then return end
+    local cfg = GetConfig()
+    if not cfg.autoShare or IsBypassed(cfg) or not questID then return end
+    if not (IsInGroup and IsInGroup()) then return end
 
-    local inGroup = IsInGroup and IsInGroup()
-    local numMembers = (GetNumGroupMembers and GetNumGroupMembers()) or 0
-    if not inGroup and numMembers <= 0 then return end
-
-    if C_QuestLog and C_QuestLog.PushQuestToParty and questID then
-        C_QuestLog.PushQuestToParty(questID)
-    elseif QuestLogPushQuest and GetQuestLogIndexByID and questID then
-        local index = GetQuestLogIndexByID(questID)
-        if index and index > 0 and SelectQuestLogEntry then
-            SelectQuestLogEntry(index)
-            QuestLogPushQuest()
+    -- Share shortly after accepting so the quest log has the new entry
+    C_Timer.After(0.3, function()
+        if API.IsQuestPushable(questID) then
+            API.ShareQuest(questID)
         end
-    end
+    end)
 end
 
 local function OnQuestDetail()
-    local cfg = GetAutomationCfg()
-    if IsBypassed() then return end
+    local cfg = GetConfig()
+    if IsBypassed(cfg) then return end
+    if QuestFlagsPVP and QuestFlagsPVP() then return end -- PvP-flagging quests always need a confirmation
 
-    local isNPC = not (QuestGetAutoAccept and QuestGetAutoAccept())
-    if QuestIsFromAreaTrigger and QuestIsFromAreaTrigger() then
-        isNPC = false
+    -- Auto-accept quests are already accepted by the server; acknowledging just closes the dialog
+    if QuestGetAutoAccept and QuestGetAutoAccept() then
+        if cfg.autoAcceptNPC and AcknowledgeAutoAcceptQuest then
+            AcknowledgeAutoAcceptQuest()
+        end
+        return
     end
 
-    if isNPC and cfg.autoAcceptNPC then
-        AcceptQuest()
-    elseif (not isNPC) and cfg.autoAcceptShared then
+    if IsSharedQuestOffer() then
+        if cfg.autoAcceptShared then
+            AcceptQuest()
+        end
+    elseif cfg.autoAcceptNPC then
         AcceptQuest()
     end
 end
 
 local function OnQuestProgress()
-    local cfg = GetAutomationCfg()
-    if not cfg.autoTurnIn or IsBypassed() then return end
-
+    local cfg = GetConfig()
+    if not cfg.autoTurnIn or IsBypassed(cfg) then return end
     if IsQuestCompletable and IsQuestCompletable() then
         CompleteQuest()
     end
 end
 
 local function OnQuestComplete()
-    local cfg = GetAutomationCfg()
-    if not cfg.autoTurnIn or IsBypassed() then return end
+    local cfg = GetConfig()
+    if not cfg.autoTurnIn or IsBypassed(cfg) then return end
 
+    -- Quests that cost money ask for confirmation in Blizzard's UI; leave those to the player
+    if GetQuestMoneyToGet and (GetQuestMoneyToGet() or 0) > 0 then return end
+
+    -- Multiple reward choices: pause so the player can pick their reward
     local numChoices = (GetNumQuestChoices and GetNumQuestChoices()) or 0
-    if numChoices <= 1 then
-        GetQuestReward(1)
-    else
-        -- Multiple choice rewards: pause for player selection unless choice protection is explicitly disabled
-        if cfg.rewardChoiceProtection ~= false then
-            -- Pause safely and let player select their gear reward
-            return
-        else
-            GetQuestReward(1)
-        end
-    end
+    if numChoices > 1 then return end
+
+    -- Matches Blizzard's QuestRewardCompleteButton: index 1 for a single choice, 0 when there is none
+    GetQuestReward(numChoices == 1 and 1 or 0)
 end
 
 local function OnGossipShow()
-    local cfg = GetAutomationCfg()
-    if not cfg.autoAcceptNPC or IsBypassed() then return end
-
+    local cfg = GetConfig()
+    if not cfg.autoAcceptNPC or IsBypassed(cfg) then return end
     if C_GossipInfo and C_GossipInfo.GetAvailableQuests then
-        local availableQuests = C_GossipInfo.GetAvailableQuests()
-        if availableQuests and #availableQuests == 1 and not availableQuests[1].isTrivial then
-            C_GossipInfo.SelectAvailableQuest(availableQuests[1].questID)
+        local available = C_GossipInfo.GetAvailableQuests()
+        if available and #available == 1 and not available[1].isTrivial then
+            C_GossipInfo.SelectAvailableQuest(available[1].questID)
         end
     end
 end
 
 local function OnQuestGreeting()
-    local cfg = GetAutomationCfg()
-    if not cfg.autoAcceptNPC or IsBypassed() then return end
-
+    local cfg = GetConfig()
+    if not cfg.autoAcceptNPC or IsBypassed(cfg) then return end
     if GetNumAvailableQuests and GetNumAvailableQuests() == 1 then
         SelectAvailableQuest(1)
     end
@@ -121,45 +113,41 @@ end
 -- Lifecycle & Event Handlers
 -- ===========================================================================
 
-local function OnEvent(self, event, arg1, ...)
-    if event == "QUEST_ACCEPTED" then
-        OnQuestAccepted(arg1)
-    elseif event == "QUEST_DETAIL" then
-        OnQuestDetail()
-    elseif event == "QUEST_PROGRESS" then
-        OnQuestProgress()
-    elseif event == "QUEST_COMPLETE" then
-        OnQuestComplete()
-    elseif event == "GOSSIP_SHOW" then
-        OnGossipShow()
-    elseif event == "QUEST_GREETING" then
-        OnQuestGreeting()
-    end
+local handlers = {
+    QUEST_ACCEPTED = function(arg1, arg2)
+        -- Modern clients pass questID; older clients pass (questLogIndex, questID)
+        OnQuestAccepted(arg2 or arg1)
+    end,
+    QUEST_DETAIL = OnQuestDetail,
+    QUEST_PROGRESS = OnQuestProgress,
+    QUEST_COMPLETE = OnQuestComplete,
+    GOSSIP_SHOW = OnGossipShow,
+    QUEST_GREETING = OnQuestGreeting,
+}
+
+local function OnEvent(_, event, ...)
+    local handler = handlers[event]
+    if handler then handler(...) end
 end
 
 function QuestAutomationModule:Enable()
     if self.isEnabled then return end
     self.isEnabled = true
-
-    eventFrame:RegisterEvent("QUEST_ACCEPTED")
-    eventFrame:RegisterEvent("QUEST_DETAIL")
-    eventFrame:RegisterEvent("QUEST_PROGRESS")
-    eventFrame:RegisterEvent("QUEST_COMPLETE")
-    eventFrame:RegisterEvent("GOSSIP_SHOW")
-    eventFrame:RegisterEvent("QUEST_GREETING")
+    for event in pairs(handlers) do
+        eventFrame:RegisterEvent(event)
+    end
     eventFrame:SetScript("OnEvent", OnEvent)
 end
 
 function QuestAutomationModule:Disable()
     if not self.isEnabled then return end
     self.isEnabled = false
-
     eventFrame:UnregisterAllEvents()
     eventFrame:SetScript("OnEvent", nil)
 end
 
 function QuestAutomationModule:Initialize()
-    if ns.IsModuleEnabled and not ns.IsModuleEnabled("QuestAutomationModule") then
+    if not ns.IsModuleEnabled("questAutomation") then
         self:Disable()
         return
     end

@@ -2,35 +2,129 @@
 
 All notable changes to **Bleakfiber's Quest Tracker - Forever** are documented below.
 
-## [1.1.19] - 2026-10-18: Live Combat Progress, Safer Quest Item Button, Smarter Automation, and Slash Command Fixes
+## [1.2.3] - 2026-10-20: Markers for Quests New in WoW Forever
+
+### Added
+- **See which quests are new in WoW Forever**:
+  - Quests that were not in original Classic now get a small infinity marker on their title in the tracker.
+  - Hovering one of these quests shows a **New in WoW Forever** line in its tooltip.
+  - The list of new quests was gathered directly from the WoW game clients, by comparing the quest data in the WoW Forever client with the quest data in the original Classic (Classic Era) client. It covers 1,808 quests and does not rely on any other addon.
+- **Marker settings** in **Settings > Quests & Items > Forever Quests**:
+  - Turn the marker on or off, place it before or after the quest name, and choose the infinity icon or a **[F]** text badge.
+  - Pick its size and color, and optionally tint the whole quest name in the marker color.
+- **New command `/bfq questid`**: hover a quest in the tracker (or type a quest ID after the command) to see the quest's ID and whether it is new in WoW Forever. Handy for reporting a quest that looks wrongly marked.
+
+## [1.2.2] - 2026-10-19: Quest Action Buttons, Classic Quest Log Support, and No More Dead Space
+
+### Added
+- **Quest action buttons** (optional, off by default):
+  - Small buttons at the right end of each quest title: **Set Active**, **Show on Map**, **Share** (only while you are in a group and the quest can be shared) and **Open Quest**.
+  - Choose **Off**, **Show on Hover** or **Always** in **Settings > Quests & Items > Quest Action Buttons**, set the button size, and switch each button on or off.
+  - The buttons always sit to the left of the quest item button and never cover it.
+  - **Open Quest**: left-click opens the quest on the world map, right-click opens it in a classic quest log addon.
+  - Show on Map and Open Quest are greyed out in combat, because the game does not allow opening those windows during a fight.
+- **Choose where quests open**:
+  - New **Open Quests In** setting: **World Map (Blizzard)**, **Classic Quest Log** or **Both**.
+  - It applies to Ctrl+Click on a quest, **Show in Quest Log** in the quest menu, and the **[Log]** button in the header.
+  - Classic Quest Log works with classic-style quest log addons such as *Kerzo's Classic Quest Log*. If none is installed, the world map opens instead.
+- **Bottom Padding** setting in **Settings > General** to choose how much space is left under the last quest (0 to 20 px).
+- **Test quest item button**:
+  - Turn on **Show Test Quest Item Button** in **Settings > Quests & Items**, or type `/bfq testitem`, to place a test button on one of your quests.
+  - Use it to check the button's position, size and your **Quest Item Key** without needing a quest item. Clicking it or pressing the key shows a confirmation and a short cooldown sweep. It never uses an item.
+  - It can be moved and re-docked like a real quest item button, and it turns off when you reload.
 
 ### Fixed
-- **Objective Progress Updates During Combat**:
-  - Kill counts and collection progress (e.g. "3/8 Wolves") now update instantly while you are in combat. Previously the tracker waited until combat ended before showing new progress.
-  - The full layout refresh (new quests, completed quests) still waits until combat ends, so protected quest item buttons are never touched mid-fight.
-- **Quest Item Button Always Uses the Right Item**:
-  - The quest item button now uses the quest item by its ID instead of by bag position. It works even before the item name is loaded, and it can never use a different item if your bags shift during combat.
-- **Party Quest Auto-Accept**:
-  - "Auto-Accept Shared Quests" now correctly detects quests shared by party members. Before, shared quests were treated like NPC quests, so the two options did not behave as labeled.
-  - Quests that the game accepts automatically are now acknowledged the same way the default UI does it, and PvP-flagged quests always show their confirmation.
-- **Fast Auto Loot Respects Your Auto-Loot Setting**:
-  - Fast Auto Loot now only speeds up looting when the game's own auto-loot is active (including holding the auto-loot modifier key). If you loot manually, the loot window behaves normally again.
-  - Each loot window is processed once instead of twice.
-- **Active Quest Kept When Filtering by Zone**:
-  - Using the "Zone" filter no longer clears your super-tracked quest and Wayfinder arrow when you travel to another zone. The active quest is only cleared once it leaves your quest log or you untrack it.
-- **Small Inline Arrow Sizes Now Save**:
-  - Inline arrow sizes from 14 to 17 px are no longer reset to 22 px at every login.
-- **Slash Commands**:
-  - `/bfq` commands that report information (`/bfq pos`, `/bfq profile`, `/bfq sharetest`, the help list) now print their replies again. Automatic chat messages stay silent.
-  - `/bfq debug` now actually shows debug messages while it is turned on.
-  - `/bfq arrow`, `/bfq cway`, and `/bfq paste` now reach the Wayfinder module as intended.
-  - When TomTom is installed, the tracker no longer competes with it for `/way` and `/cway`. Use `/bfqway`, `/waypoint`, or `/closestway` instead.
-- **Keybinding Labels**: Removed a duplicate set of keybinding labels.
+- **Empty space at the bottom of the tracker**:
+  - The tracker no longer adds spacing after the last quest, so the frame now ends right under it.
+  - When the list is longer than the tracker, it now ends on a whole quest instead of cutting a line in half.
+  - The tracker never grows past the edge of the screen.
+- **Scrolling long lists**: the mouse wheel now moves one quest or zone at a time.
+
+### Changed
+- The **Double-Click Sets Active Quest** setting now mentions that you can turn it off for instant single clicks if you use the Set Active button.
+
+## [1.2.1] - 2026-10-19: Double-Click to Set Active Quest and Inline Arrow Size Fix
+
+### Added
+- **Double-click to set the active quest**:
+  - Double-click any quest in the tracker to make it your active quest. The Wayfinder arrows then point to it.
+  - A single click still collapses or expands the quest. It now waits 0.25 seconds first, to tell a single click from a double-click.
+  - Turn it off with **Double-Click Sets Active Quest** in **Settings > Headers & Sort**. It has no effect while *Left-Click Sets Active Quest* is on.
+
+### Fixed
+- **Inline Wayfinder arrow too small**:
+  - With *Align Quest Titles* turned on (the default), the small arrow next to your active quest was squeezed to 16 px. The *Inline Arrow Size* slider had almost no effect.
+  - The title column now widens to fit the arrow at the size you choose, so the slider works across its full 14 to 32 px range again. Quest titles stay neatly aligned.
+
+## [1.2.0] - 2026-10-18: One Settings Window, Language Packs, Combat-Safe Quest Items, and a Leaner Core
+
+### Added
+- **Languages**:
+  - Choose a language in **Settings > General > Language**. *Automatic* follows your game client.
+  - Included languages: Deutsch, English, Español (España), Español (Latinoamérica), Français, Italiano, Português (Brasil), Русский, 한국어, 简体中文 and 繁體中文.
+  - Every language pack covers the whole addon: the tracker, its menus and tooltips, the DataBars, Wayfinder, the setup walkthrough and the complete settings window.
+  - The translations are machine-assisted. Corrections are welcome.
+  - Change the language with `/bfq lang <code>` (for example `/bfq lang deDE` or `/bfq lang auto`). Reload the interface afterwards so every window picks it up.
+  - Other addons can add or improve a language with `BleakfibersQuestTrackerForever:RegisterLanguagePack(code, name, strings)`.
+- **Debug & Chat Output toggle**:
+  - The tracker no longer writes anything to your chat window unless **Settings > General > Debug & Chat Output** is on. It is off by default.
+  - Feedback for your own actions (locking the tracker, sharing a quest, applying a preset) now appears briefly at the top of the screen.
+  - `/bfq debug` turns chat output on or off.
+- **Settings in the Blizzard AddOns panel**: the settings are also available under **Esc > Options > AddOns > Bleakfiber's Quest Tracker**.
+- **More settings in the settings window**: these were only in the old Blizzard panel and are now in the main window:
+  - Quests: quest filter mode, cross-zone objective tracking, timers in objective text, the best-sell reward highlight, the active quest marker and the quest item key.
+  - Appearance: background on/off, border thickness, corner size and DataBar docking spacing.
+  - Headers: header color sharing, the quest counter format and the collapsed tracker text.
+  - Wayfinder: arrow lock and backdrop, destination name and format, text outlines, distance, ETA, map pins, map coordinates, auto-track, inline arrow position, arrival distance and the waypoint clear delay.
+  - DataBars: shared appearance, the XP bar text and texture options, the Location Bar format and size, and every Quest Timer Bar option, plus border, background and color settings for each bar.
+- **Quest filter in the quick menu**: the header's quick menu can now switch between All Quests, Current Zone Only and Watched Only.
+- **Settings that now work**: Tracker Alpha, Collapse Tracker In Combat, and the quest item button options (show buttons, button size, auto-detect quest items) were listed in the settings but had no effect before.
+
+### Changed
+- **One settings window**:
+  - The old Blizzard (Ace3) options panel has been removed.
+  - The same settings window now opens from `/bfq`, inside Bleakfiber's Addon Config, and in the Blizzard AddOns panel.
+  - Switching, copying or resetting a profile updates every open settings window right away.
+- **Quest item buttons and combat**:
+  - The tracker keeps updating during combat. New objectives, completions and reordering all show immediately.
+  - Quest item buttons keep working in combat. They stay where they are while you fight and move to their new place when combat ends.
+  - With *Hide Tracker In Combat* on, the item buttons hide together with the tracker, so no invisible buttons are left on screen.
+- **Keybindings**: the quest item and hide/show tracker keys now use secure click bindings, so they work in combat. Your existing key bindings are moved to the new bindings automatically.
+- **Settings are stored in one place**:
+  - The backup copies (`BleakfiberTrackerBackupDB` and `BleakfiberTrackerCharDB`) are gone.
+  - Your existing settings are upgraded automatically the first time you log in.
+  - Party members' quest progress is no longer saved between sessions.
+- **Slash commands**:
+  - `/bfqway`, `/bfqcway` and `/bfqpaste` always work.
+  - `/way`, `/cway` and `/waypaste` are only added when no other addon (such as TomTom) already uses them.
+  - Diagnostic commands (`/bfq pos`, `/bfq sharetest`, `/bfq poi`) print to chat while chat output is on, and remind you how to turn it on when it is off.
+- **Fast Auto Loot** only speeds up looting when the game's own auto loot is active, including while you hold the auto-loot modifier key.
+
+### Fixed
+- **Quest item buttons**:
+  - Quest item buttons use the item by its ID, so they never use a different item when your bags change.
+  - The bound quest item key no longer fires twice.
+- **Quest automation**:
+  - *Auto Accept Shared Quests* and *Auto Accept NPC Quests* now each apply only to their own kind of quest.
+  - Quests the game accepts automatically are acknowledged the way the default UI does it.
+  - PvP-flagged quests always ask for confirmation.
+  - Auto turn-in now completes quests that have no reward choice. It skips quests that ask for gold.
+- **Merchants**: selling junk and repairing run once per merchant visit instead of several times.
+- **Zone filter**: the active quest and the Wayfinder arrow are kept when you change zones while filtering by zone.
+- **Inline arrow**: sizes from 14 to 17 px are no longer reset at login.
+- **DataBars**:
+  - *Reset Free Loc Position* now moves the Location Bar back.
+  - The territory color now uses your real faction.
+- **Restore Untracked Quests** refreshes the tracker straight away.
+- **Keybindings**: removed duplicate keybinding labels.
+- **Login**: fixed a possible error while loading settings when a saved tracker position had no anchor point.
 
 ### Performance
-- Timed quests no longer rebuild the whole tracker every second; only the countdown text is rewritten.
-- The settings backup copy now runs only when a setting has changed (with a safety copy every 5 minutes), instead of copying all settings every 30 seconds.
-- Removed a full bag scan from every quest item button refresh, and stopped listening to redundant bag and addon-message events.
+- **Timed quests**: only the countdown text is redrawn each second instead of the whole tracker.
+- **Coalesced refreshes**: quest log, completion and DataBars refreshes triggered close together now run once.
+- **Settings sliders**: dragging a slider applies the change once when you settle instead of on every step.
+- **Fewer events**: stopped listening to redundant bag and addon-message events.
+- **Smaller install**: removed the unused bundled libraries (AceAddon, AceConfig, AceGUI, AceComm, AceEvent, AceTimer and others), the unused Target Marker module, and unused textures. The addon now loads less code and uses less memory.
 
 ## [1.1.18] - 2026-10-18: Context Menu Tooltip Suppression, Title Column Alignment, Zone Collapse Shapes, Hover Colors, and Completed Quest Styling
 
