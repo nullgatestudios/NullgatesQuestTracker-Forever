@@ -1,71 +1,48 @@
-  local addonName, ns = ...
+local addonName, ns = ...
 
 -- Localized Lua & WoW API bindings for performance & garbage reduction
 local pairs, ipairs, type, tostring, tonumber, select, pcall, next = pairs, ipairs, type, tostring, tonumber, select, pcall, next
 local string_format = string.format
-local table_insert, table_remove = table.insert, table.remove
-local wipe = table.wipe or wipe or function(t) for k in pairs(t) do t[k] = nil end return t end
+local table_insert = table.insert
 local math_floor, math_max, math_min, math_abs = math.floor, math.max, math.min, math.abs
 local UnitClass, UnitFactionGroup, UnitLevel = UnitClass, UnitFactionGroup, UnitLevel
-local CreateFrame = CreateFrame
-local C_QuestLog = C_QuestLog
-local GetNumQuestLogEntries = GetNumQuestLogEntries
-local GetQuestLogTitle = GetQuestLogTitle
-local GetNumQuestLeaderBoards = GetNumQuestLeaderBoards
-local GetQuestLogLeaderBoard = GetQuestLogLeaderBoard
-local GetQuestDifficultyColor = GetQuestDifficultyColor
-local GetDifficultyColor = GetDifficultyColor
-local SelectQuestLogEntry = SelectQuestLogEntry
-local QuestLogPushQuest = QuestLogPushQuest
+local CreateFrame, GetTime, InCombatLockdown = CreateFrame, GetTime, InCombatLockdown
 
--- Keybinding Global Strings for Blizzard Keybindings Menu (loaded immediately)
+local API = ns.API
+local L = ns.L
+
+-- ---------------------------------------------------------------------------
+-- Key Bindings (Blizzard Key Bindings menu)
+-- ---------------------------------------------------------------------------
+-- Both bindings are secure CLICK bindings: the game clicks the secure button
+-- directly, so they keep working during combat lockdown.
+ns.BINDING_QUEST_ITEM = "CLICK BleakfiberQuestItemButton1:LeftButton"
+ns.BINDING_TOGGLE_TRACKER = "CLICK BleakfiberTrackerToggleButton:LeftButton"
+
 _G["BINDING_HEADER_BLEAKFIBER_TRACKER"] = "Bleakfiber's Quest Tracker"
-_G["HEADER_BLEAKFIBER_TRACKER"] = "Bleakfiber's Quest Tracker"
-_G["BINDING_CATEGORY_BLEAKFIBER_TRACKER"] = "Bleakfiber's Quest Tracker"
-_G["BINDING_CATEGORY_Bleakfiber's Quest Tracker"] = "Bleakfiber's Quest Tracker"
-_G["BINDING_NAME_BLEAKFIBER_USE_QUEST_ITEM"] = "Use Active Quest Item"
-_G["BINDING_NAME_BLEAKFIBER_TOGGLE_TRACKER_VISIBILITY"] = "Toggle Tracker Visibility (Hide/Show)"
+_G["BINDING_NAME_" .. ns.BINDING_QUEST_ITEM] = L["Use Active Quest Item"]
+_G["BINDING_NAME_" .. ns.BINDING_TOGGLE_TRACKER] = L["Toggle Tracker Visibility (Hide/Show)"]
 
-function Bleakfiber_UseQuestItem()
-    local btn = _G["BleakfiberQuestItemButton1"]
-    if btn and btn:IsShown() then
-        btn:Click("LeftButton")
-    end
-end
-_G["Bleakfiber_UseQuestItem"] = Bleakfiber_UseQuestItem
-
+-- Macro-friendly global helpers (/run Bleakfiber_ToggleTracker())
 function Bleakfiber_ToggleTracker()
     if ns.Tracker and ns.Tracker.ToggleVisibility then
         ns.Tracker:ToggleVisibility()
     end
 end
-_G["Bleakfiber_ToggleTracker"] = Bleakfiber_ToggleTracker
-_G["Bleakfiber_ToggleTrackerVisibility"] = Bleakfiber_ToggleTracker
 
 function Bleakfiber_HideTracker()
     if ns.Tracker and ns.Tracker.HideTracker then
         ns.Tracker:HideTracker()
     end
 end
-_G["Bleakfiber_HideTracker"] = Bleakfiber_HideTracker
 
 function Bleakfiber_ShowTracker()
     if ns.Tracker and ns.Tracker.ShowTracker then
         ns.Tracker:ShowTracker()
     end
 end
-_G["Bleakfiber_ShowTracker"] = Bleakfiber_ShowTracker
 
--- Safe API caller wrapper
-local function SafeCall(fn, ...)
-    if not fn then return nil end
-    local ok, res1, res2, res3 = pcall(fn, ...)
-    if ok then return res1, res2, res3 end
-    return nil
-end
-ns.SafeCall = SafeCall
-
--- Safe number converter (discards any secondary return values to avoid base-out-of-range errors)
+-- Safe number converter (discards any secondary return values)
 local function ToNumber(val)
     if val == nil then return nil end
     return tonumber(val)
@@ -75,11 +52,72 @@ ns.ToNumber = ToNumber
 -- Addon metadata & global access
 ns.addonName = addonName
 ns.title = "|cff00c0ffBleakfiber's Quest Tracker - Forever|r"
-ns.version = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version")) 
-    or (GetAddOnMetadata and GetAddOnMetadata(addonName, "Version")) 
-    or "1.1.0"
+ns.version = API.GetAddOnMetadata(addonName, "Version") or "1.2.0"
 
--- Public Module API & Global Exports for Centralized Config Addons
+-- ---------------------------------------------------------------------------
+-- Chat Output (debug & status) - silent unless the user enables it
+-- ---------------------------------------------------------------------------
+local PRINT_PREFIX = "|cff00c0ff[Bleakfiber's Quest Tracker]|r"
+
+function ns.IsChatOutputEnabled()
+    local global = ns.dbObject and ns.dbObject.global
+    return global and global.chatOutput == true or false
+end
+
+local function GetChatFrame()
+    if SELECTED_CHAT_FRAME and SELECTED_CHAT_FRAME.AddMessage then
+        return SELECTED_CHAT_FRAME
+    end
+    return DEFAULT_CHAT_FRAME
+end
+ns.GetActiveChatFrame = GetChatFrame
+
+local function JoinArgs(...)
+    local n = select("#", ...)
+    if n == 0 then return "" end
+    local parts = {}
+    for i = 1, n do
+        parts[i] = tostring((select(i, ...)))
+    end
+    return table.concat(parts, " ")
+end
+
+-- Status / informational messages (only when chat output is enabled)
+function ns.Print(...)
+    if not ns.IsChatOutputEnabled() then return end
+    local frame = GetChatFrame()
+    if frame then
+        frame:AddMessage(PRINT_PREFIX .. " " .. JoinArgs(...))
+    end
+end
+
+-- Verbose diagnostics (only when chat output is enabled)
+function ns.Debug(...)
+    if not ns.IsChatOutputEnabled() then return end
+    local frame = GetChatFrame()
+    if frame then
+        frame:AddMessage("|cff888888[BFQ Debug]|r " .. JoinArgs(...))
+    end
+end
+
+-- Short on-screen feedback for direct user actions (never written to chat)
+function ns.Notify(message, r, g, b)
+    if UIErrorsFrame and UIErrorsFrame.AddMessage and message then
+        UIErrorsFrame:AddMessage(message, r or 1.0, g or 0.82, b or 0.0, 1.0)
+    end
+end
+
+-- Tells the user (once per session) how to see output from a typed command
+local chatHintShown = false
+function ns.HintChatOutput()
+    if ns.IsChatOutputEnabled() or chatHintShown then return end
+    chatHintShown = true
+    ns.Notify(L["Chat output is off. Enable it in Settings > General > Debug & Chat Output."])
+end
+
+-- ---------------------------------------------------------------------------
+-- Public API (used by Bleakfiber's Addon Config & external language packs)
+-- ---------------------------------------------------------------------------
 local PublicAPI = _G["BleakfibersQuestTrackerForever"] or {}
 _G["BleakfibersQuestTrackerForever"] = PublicAPI
 _G["BleakfiberQuestTracker"] = PublicAPI
@@ -88,46 +126,20 @@ PublicAPI.addonName = addonName
 PublicAPI.version = ns.version
 
 function PublicAPI:GetDB()
-    return ns.db or _G["BleakfiberTrackerDB"]
+    return ns.db
+end
+
+function PublicAPI:RegisterLanguagePack(code, displayName, strings)
+    return ns.RegisterLanguagePack(code, displayName, strings)
+end
+
+-- True when the quest is new in WoW Forever (not part of original Classic)
+function PublicAPI:IsForeverQuest(questID)
+    return API.IsForeverQuest(questID)
 end
 
 function PublicAPI:ApplySettings()
-    -- 1. Tracker frame, typography, backdrops & headers
-    if ns.Tracker then
-        if ns.Tracker.UpdateBackdrop then ns.Tracker:UpdateBackdrop() end
-        if ns.Tracker.UpdateTypography then ns.Tracker:UpdateTypography() end
-        if ns.Tracker.UpdateSettings then ns.Tracker:UpdateSettings() end
-        if ns.Tracker.UpdateVisibility then ns.Tracker:UpdateVisibility() end
-        if ns.Tracker.UpdateFilterButtons then ns.Tracker:UpdateFilterButtons() end
-    end
-
-    -- 2. Quest entries and item buttons
-    if ns.StandaloneTracker then
-        if ns.StandaloneTracker.UpdateItemButton then ns.StandaloneTracker:UpdateItemButton() end
-        if ns.StandaloneTracker.RequestUpdate then ns.StandaloneTracker:RequestUpdate(true) end
-        if ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
-    end
-
-    -- 3. Wayfinder navigation and map pins
-    if ns.WayfinderModule and ns.WayfinderModule.RefreshState then
-        ns.WayfinderModule:RefreshState()
-    end
-
-    -- 4. DataBars (XP, Coordinates, Quest Timer)
-    if ns.DataBarsModule then
-        if ns.DataBarsModule.RefreshBars then ns.DataBarsModule:RefreshBars() end
-        if ns.DataBarsModule.ApplyTypography then ns.DataBarsModule:ApplyTypography() end
-    end
-
-    -- 5. Social & Automation events
-    if ns.SocialModule and ns.SocialModule.UpdateLootEvents then
-        ns.SocialModule:UpdateLootEvents()
-    end
-
-    -- 6. Immediate multi-layer persistence flush
-    if ns.FlushDBToGlobals then
-        ns.FlushDBToGlobals()
-    end
+    ns.ApplyAllSettings()
 end
 
 function PublicAPI:OpenSettings()
@@ -136,201 +148,155 @@ function PublicAPI:OpenSettings()
     end
 end
 
-function PublicAPI:RegisterWithMasterConfig()
-    if BleakfibersAddonConfigForever and BleakfibersAddonConfigForever.RegisterModule then
-        BleakfibersAddonConfigForever:RegisterModule("BleakfibersQuestTracker", {
-            id = "BleakfibersQuestTracker",
-            name = "Quest Tracker",
-            sidebarName = "Quest Tracker",
-            version = ns.version or "1.1.0",
-            author = "Bleakfiber",
-            isBleakfiber = true,
-            db = ns.db or _G["BleakfiberTrackerDB"],
-            getDB = function() return ns.db or _G["BleakfiberTrackerDB"] end,
-            profiles = {
-                GetCurrent = function()
-                    return (ns.dbObject and ns.dbObject.GetCurrentProfile and ns.dbObject:GetCurrentProfile()) or "Default"
-                end,
-                SetCurrent = function(profileKey)
-                    if not profileKey or profileKey == "" then return end
-                    if ns.dbObject and ns.dbObject.SetProfile then
-                        local current = ns.dbObject:GetCurrentProfile()
-                        if current == profileKey then return end
-
-                        local exists = false
-                        if ns.dbObject.GetProfiles then
-                            local list = ns.dbObject:GetProfiles()
-                            if type(list) == "table" then
-                                for _, p in ipairs(list) do
-                                    if p == profileKey then exists = true; break end
-                                end
-                            end
-                        end
-
-                        if exists then
-                            -- Profile already exists: DO NOT OVERWRITE, just switch to it!
-                            ns.dbObject:SetProfile(profileKey)
-                        else
-                            -- New profile: switch to it and copy from current so settings are captured!
-                            ns.dbObject:SetProfile(profileKey)
-                            if current and current ~= profileKey and ns.dbObject.CopyProfile then
-                                ns.dbObject:CopyProfile(current)
-                            end
-                        end
-                    else
-                        ns.pendingProfileSync = profileKey
-                    end
-                end,
-                Create = function(profileKey, fromProfile)
-                    if not profileKey or profileKey == "" then return end
-                    if ns.dbObject and ns.dbObject.SetProfile then
-                        local current = fromProfile or (ns.dbObject.GetCurrentProfile and ns.dbObject:GetCurrentProfile())
-                        local exists = false
-                        if ns.dbObject.GetProfiles then
-                            local list = ns.dbObject:GetProfiles()
-                            if type(list) == "table" then
-                                for _, p in ipairs(list) do
-                                    if p == profileKey then exists = true; break end
-                                end
-                            end
-                        end
-
-                        if exists then
-                            -- Do not overwrite existing profile!
-                            ns.dbObject:SetProfile(profileKey)
-                        else
-                            -- Capture current settings into new profile
-                            ns.dbObject:SetProfile(profileKey)
-                            if current and current ~= profileKey and ns.dbObject.CopyProfile then
-                                ns.dbObject:CopyProfile(current)
-                            end
-                        end
-                    else
-                        ns.pendingProfileSync = profileKey
-                    end
-                end,
-                SaveCurrentAs = function(profileKey)
-                    if not profileKey or profileKey == "" then return end
-                    if ns.dbObject and ns.dbObject.SetProfile then
-                        local current = ns.dbObject:GetCurrentProfile()
-                        ns.dbObject:SetProfile(profileKey)
-                        if current and current ~= profileKey and ns.dbObject.CopyProfile then
-                            ns.dbObject:CopyProfile(current)
-                        end
-                    else
-                        ns.pendingProfileSync = profileKey
-                    end
-                end,
-                List = function()
-                    if ns.dbObject and ns.dbObject.GetProfiles then
-                        return ns.dbObject:GetProfiles()
-                    end
-                    return { "Default" }
-                end,
-                Delete = function(profileKey)
-                    if not profileKey or profileKey == "Default" then return end
-                    if ns.dbObject and ns.dbObject.DeleteProfile then
-                        ns.dbObject:DeleteProfile(profileKey)
-                    end
-                end,
-                Copy = function(fromKey, toKey)
-                    if not fromKey or not toKey then return end
-                    if ns.dbObject and ns.dbObject.SetProfile and ns.dbObject.CopyProfile then
-                        ns.dbObject:SetProfile(toKey)
-                        ns.dbObject:CopyProfile(fromKey)
-                    end
-                end,
-                Reset = function(profileKey)
-                    if ns.dbObject and ns.dbObject.ResetProfile then
-                        if profileKey and ns.dbObject:GetCurrentProfile() ~= profileKey then
-                            ns.dbObject:SetProfile(profileKey)
-                        end
-                        ns.dbObject:ResetProfile()
-                    end
-                end,
-            },
-            refresh = function()
-                PublicAPI:ApplySettings()
-            end,
-            toggleMovers = function(enable)
-                if ns.Tracker and ns.Tracker.SetLocked then
-                    if enable ~= nil then
-                        ns.Tracker:SetLocked(not enable)
-                    else
-                        ns.Tracker:SetLocked(not (ns.db and ns.db.isLocked))
-                    end
-                end
-            end,
-            isMoversUnlocked = function()
-                return ns.db and not ns.db.isLocked
-            end,
-            openStandalone = function()
-                PublicAPI:OpenSettings()
-            end,
-            buildUI = function(parentContainer)
-                if PublicAPI.BuildMasterConfigUI then
-                    PublicAPI:BuildMasterConfigUI(parentContainer)
-                end
-            end,
-        })
+-- Re-applies every visual setting across the tracker and all modules
+-- SETTINGS_UPDATED listeners refresh the tracker frame, quest list, and Wayfinder HUD
+function ns.ApplyAllSettings()
+    ns:FireCallback("SETTINGS_UPDATED")
+    local st = ns.StandaloneTracker
+    if st then
+        if st.ApplyHighlightColors then st:ApplyHighlightColors() end
+        if st.UpdateItemButtonStrata then st:UpdateItemButtonStrata() end
+    end
+    if ns.WayfinderModule and ns.IsModuleEnabled("wayfinder") and ns.WayfinderModule.RefreshState then
+        ns.WayfinderModule:RefreshState()
+    end
+    if ns.DataBarsModule and ns.IsModuleEnabled("databars") and ns.DataBarsModule.RefreshBars then
+        ns.DataBarsModule:RefreshBars()
     end
 end
 
--- Active Chat Frame Resolver (Outputs to currently selected chat tab instead of only ChatFrame1)
-local function GetActiveChatFrame()
-    if SELECTED_CHAT_FRAME and SELECTED_CHAT_FRAME.AddMessage then
-        return SELECTED_CHAT_FRAME
+-- Profile helpers (shared by the native Profiles tab and the master config hub)
+local function ProfileExists(name)
+    local list = ns.dbObject and ns.dbObject:GetProfiles()
+    if type(list) ~= "table" then return false end
+    for _, p in ipairs(list) do
+        if p == name then return true end
     end
-    if FCF_GetCurrentChatFrame then
-        local cf = FCF_GetCurrentChatFrame()
-        if cf and cf.AddMessage then
-            return cf
+    return false
+end
+ns.ProfileExists = ProfileExists
+
+-- Switches to `name`; a brand-new profile starts as a copy of `copyFrom` (or the current profile)
+local function SwitchToProfile(name, copyFrom)
+    if type(name) ~= "string" or name == "" then return end
+    local dbObject = ns.dbObject
+    if not dbObject then
+        ns.pendingProfileSync = name
+        return
+    end
+    local current = dbObject:GetCurrentProfile()
+    if name == current then return end
+    local isNew = not ProfileExists(name)
+    dbObject:SetProfile(name)
+    if isNew then
+        local source = copyFrom or current
+        if source and source ~= name and ProfileExists(source) then
+            dbObject:CopyProfile(source)
         end
     end
-    if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
-        return DEFAULT_CHAT_FRAME
-    end
-    return nil
 end
-ns.GetActiveChatFrame = GetActiveChatFrame
+ns.SwitchToProfile = SwitchToProfile
 
-local function FormatChatArgs(prefix, ...)
-    local n = select("#", ...)
-    if n == 0 then return prefix end
-    local parts = { prefix }
-    for i = 1, n do
-        parts[i + 1] = tostring(select(i, ...))
-    end
-    return table.concat(parts, " ")
+function PublicAPI:RegisterWithMasterConfig()
+    local hub = _G.BleakfibersAddonConfigForever
+    if not (hub and hub.RegisterModule) or self.registeredWithHub then return end
+    self.registeredWithHub = true
+    hub:RegisterModule("BleakfibersQuestTracker", {
+        id = "BleakfibersQuestTracker",
+        name = L["Quest Tracker"],
+        sidebarName = L["Quest Tracker"],
+        version = ns.version,
+        author = "Bleakfiber",
+        isBleakfiber = true,
+        db = ns.db,
+        getDB = function() return ns.db end,
+        profiles = {
+            GetCurrent = function()
+                return (ns.dbObject and ns.dbObject:GetCurrentProfile()) or "Default"
+            end,
+            SetCurrent = function(profileKey) SwitchToProfile(profileKey) end,
+            Create = function(profileKey, fromProfile) SwitchToProfile(profileKey, fromProfile) end,
+            SaveCurrentAs = function(profileKey)
+                local dbObject = ns.dbObject
+                if not dbObject or type(profileKey) ~= "string" or profileKey == "" then return end
+                local current = dbObject:GetCurrentProfile()
+                if current == profileKey then return end
+                dbObject:SetProfile(profileKey)
+                dbObject:CopyProfile(current)
+            end,
+            List = function()
+                return (ns.dbObject and ns.dbObject:GetProfiles()) or { "Default" }
+            end,
+            Delete = function(profileKey)
+                if ns.dbObject and profileKey and profileKey ~= "Default" and profileKey ~= ns.dbObject:GetCurrentProfile() then
+                    ns.dbObject:DeleteProfile(profileKey)
+                end
+            end,
+            Copy = function(fromKey, toKey)
+                local dbObject = ns.dbObject
+                if not dbObject or not fromKey or not toKey or fromKey == toKey then return end
+                dbObject:SetProfile(toKey)
+                dbObject:CopyProfile(fromKey)
+            end,
+            Reset = function(profileKey)
+                local dbObject = ns.dbObject
+                if not dbObject then return end
+                if profileKey and dbObject:GetCurrentProfile() ~= profileKey then
+                    dbObject:SetProfile(profileKey)
+                end
+                dbObject:ResetProfile()
+            end,
+        },
+        refresh = function() ns.ApplyAllSettings() end,
+        toggleMovers = function(enable)
+            if ns.Tracker and ns.Tracker.SetLocked then
+                if enable ~= nil then
+                    ns.Tracker:SetLocked(not enable)
+                else
+                    ns.Tracker:SetLocked(not (ns.db and ns.db.isLocked))
+                end
+            end
+        end,
+        isMoversUnlocked = function()
+            return ns.db and not ns.db.isLocked
+        end,
+        openStandalone = function() PublicAPI:OpenSettings() end,
+        buildUI = function(parentContainer)
+            if PublicAPI.BuildMasterConfigUI then
+                PublicAPI:BuildMasterConfigUI(parentContainer)
+            end
+        end,
+    })
 end
 
--- Print helper with colored prefix (outputs to active chat tab)
-function ns.Print(...)
-    -- Suppressed all chat outputs per user preference
-end
-
--- Debug helper (silenced all debug chat outputs)
-ns.debugMode = false
-function ns.Debug(...)
-    -- Suppressed all debug chat outputs per user preference
-end
+-- ---------------------------------------------------------------------------
+-- Generic helpers
+-- ---------------------------------------------------------------------------
 
 -- Pixel-Grid Coordinate Snapper (Eliminates sub-pixel text & shadow distortion)
 function ns.SnapToPixel(val, region)
     if not val then return 0 end
     local scale = (region and region.GetEffectiveScale and region:GetEffectiveScale())
-        or (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale())
+        or (UIParent and UIParent:GetEffectiveScale())
         or 1
     if not scale or scale <= 0 then scale = 1 end
     return math_floor(val * scale + 0.5) / scale
 end
 
--- Player Class & Faction Color Helpers (Cached to eliminate repetitive table churn)
+-- Converts a { r, g, b } color table into a |cffRRGGBB escape
+function ns.ColorToHex(c, dr, dg, db)
+    local r = (c and c.r) or dr or 1
+    local g = (c and c.g) or dg or 1
+    local b = (c and c.b) or db or 1
+    return string_format("|cff%02x%02x%02x", math_floor(r * 255 + 0.5), math_floor(g * 255 + 0.5), math_floor(b * 255 + 0.5))
+end
+
+-- Player Class & Faction Color Helpers (cached)
 local cachedClassColor = nil
 function ns.GetClassColor()
     if cachedClassColor then return cachedClassColor end
     local _, classFilename = UnitClass("player")
-    local c = (CUSTOM_CLASS_COLORS and CUSTOM_CLASS_COLORS[classFilename]) 
+    local c = (CUSTOM_CLASS_COLORS and CUSTOM_CLASS_COLORS[classFilename])
         or (RAID_CLASS_COLORS and RAID_CLASS_COLORS[classFilename])
     if c then
         cachedClassColor = { r = c.r, g = c.g, b = c.b }
@@ -354,26 +320,9 @@ function ns.GetFactionColor()
     return cachedFactionColor
 end
 
--- Cross-version Quest API Helpers (WoW Forever 1.60.1+ / Classic Era 1.15+)
-function ns.GetNumQuestLogEntries()
-    if C_QuestLog and C_QuestLog.GetNumQuestLogEntries then
-        local numEntries = C_QuestLog.GetNumQuestLogEntries() or 0
-        local numQuests = 0
-        for i = 1, numEntries do
-            local info = C_QuestLog.GetInfo and C_QuestLog.GetInfo(i)
-            if info and not info.isHeader and not info.isHidden then
-                numQuests = numQuests + 1
-            end
-        end
-        return numEntries, numQuests
-    elseif GetNumQuestLogEntries then
-        local entries, quests = GetNumQuestLogEntries()
-        return entries or 0, quests or 0
-    end
-    return 0, 0
-end
-
--- Static Difficulty Colors (Eliminates table churn in high-frequency tracker redraws)
+-- ---------------------------------------------------------------------------
+-- Quest difficulty colors
+-- ---------------------------------------------------------------------------
 local DIFF_COLOR_WHITE  = { r = 1.00, g = 1.00, b = 1.00 }
 local DIFF_COLOR_RED    = { r = 1.00, g = 0.12, b = 0.12 }
 local DIFF_COLOR_ORANGE = { r = 1.00, g = 0.50, b = 0.25 }
@@ -381,64 +330,13 @@ local DIFF_COLOR_YELLOW = { r = 1.00, g = 1.00, b = 0.00 }
 local DIFF_COLOR_GREEN  = { r = 0.25, g = 1.00, b = 0.25 }
 local DIFF_COLOR_GRAY   = { r = 0.60, g = 0.60, b = 0.60 }
 
-function ns.GetDifficultyColor(level, playerLevelOverride, questID)
-    level = tonumber(level) or 0
-
-    local curPlayerLevel = (UnitEffectiveLevel and UnitEffectiveLevel("player")) or (UnitLevel and UnitLevel("player")) or 1
-    local playerLevel = playerLevelOverride or curPlayerLevel
-
-    -- 1. Exact Parity with Quest Log: Query C_PlayerInfo for relative content difficulty
-    if questID and (not playerLevelOverride or playerLevelOverride == curPlayerLevel) then
-        if C_PlayerInfo and C_PlayerInfo.GetContentDifficultyQuestForPlayer then
-            local diffEnum = C_PlayerInfo.GetContentDifficultyQuestForPlayer(questID)
-            if diffEnum ~= nil then
-                local blizzColor = (GetDifficultyColor and GetDifficultyColor(diffEnum))
-                    or (DifficultyUtil and DifficultyUtil.GetDifficultyColor and DifficultyUtil.GetDifficultyColor(diffEnum))
-                if blizzColor and blizzColor.r and blizzColor.g and blizzColor.b then
-                    return blizzColor
-                end
-            end
-        end
-    end
-
-    if level <= 0 then
-        return DIFF_COLOR_WHITE
-    end
-
-    -- 2. Native GetQuestDifficultyColor API
-    if (not playerLevelOverride or playerLevelOverride == curPlayerLevel) then
-        local blizzQuestColorFn = GetQuestDifficultyColor or (DifficultyUtil and DifficultyUtil.GetQuestDifficultyColor)
-        if blizzQuestColorFn then
-            local c = blizzQuestColorFn(level, false, questID)
-            if c and c.r and c.g and c.b then
-                return c
-            end
-        end
-    end
-
-    -- 3. Dynamic Relative Difficulty calculation fallback
-    local levelDiff = level - playerLevel
-    if levelDiff >= 5 then
-        return (QuestDifficultyColors and QuestDifficultyColors["impossible"]) or DIFF_COLOR_RED
-    elseif levelDiff >= 3 then
-        return (QuestDifficultyColors and QuestDifficultyColors["verydifficult"]) or DIFF_COLOR_ORANGE
-    elseif levelDiff >= -4 then
-        return (QuestDifficultyColors and QuestDifficultyColors["difficult"]) or DIFF_COLOR_YELLOW
-    else
-        local trivialRange = (UnitQuestTrivialLevelRange and UnitQuestTrivialLevelRange("player"))
-            or (GetQuestGreenRange and (GetQuestGreenRange("player") or GetQuestGreenRange()))
-            or ns.GetGreyThreshold(playerLevel)
-        if -levelDiff <= trivialRange then
-            return (QuestDifficultyColors and QuestDifficultyColors["standard"]) or DIFF_COLOR_GREEN
-        else
-            return (QuestDifficultyColors and QuestDifficultyColors["trivial"]) or DIFF_COLOR_GRAY
-        end
-    end
+local function GetPlayerLevel()
+    return (UnitEffectiveLevel and UnitEffectiveLevel("player")) or (UnitLevel and UnitLevel("player")) or 1
 end
 
 -- Grey / Trivial Quest Level Threshold Calculation
 function ns.GetGreyThreshold(playerLevel)
-    playerLevel = tonumber(playerLevel) or (UnitEffectiveLevel and UnitEffectiveLevel("player")) or (UnitLevel and UnitLevel("player")) or 1
+    playerLevel = tonumber(playerLevel) or GetPlayerLevel()
     if UnitQuestTrivialLevelRange then
         local r = UnitQuestTrivialLevelRange("player")
         if r and r > 0 then
@@ -451,616 +349,183 @@ function ns.GetGreyThreshold(playerLevel)
         return math_floor(playerLevel / 10) + 5
     elseif playerLevel <= 59 then
         return math_floor(playerLevel / 5) + 1
-    else
-        return 9
     end
+    return 9
+end
+
+function ns.GetDifficultyColor(level, playerLevelOverride, questID)
+    level = tonumber(level) or 0
+    local curPlayerLevel = GetPlayerLevel()
+    local playerLevel = playerLevelOverride or curPlayerLevel
+    local isCurrentLevel = (not playerLevelOverride or playerLevelOverride == curPlayerLevel)
+
+    -- 1. Exact parity with the quest log: relative content difficulty
+    if questID and isCurrentLevel and C_PlayerInfo and C_PlayerInfo.GetContentDifficultyQuestForPlayer then
+        local diffEnum = C_PlayerInfo.GetContentDifficultyQuestForPlayer(questID)
+        if diffEnum ~= nil then
+            local blizzColor = (GetDifficultyColor and GetDifficultyColor(diffEnum))
+                or (DifficultyUtil and DifficultyUtil.GetDifficultyColor and DifficultyUtil.GetDifficultyColor(diffEnum))
+            if blizzColor and blizzColor.r then
+                return blizzColor
+            end
+        end
+    end
+
+    if level <= 0 then
+        return DIFF_COLOR_WHITE
+    end
+
+    -- 2. Native GetQuestDifficultyColor API
+    if isCurrentLevel then
+        local blizzQuestColorFn = GetQuestDifficultyColor or (DifficultyUtil and DifficultyUtil.GetQuestDifficultyColor)
+        if blizzQuestColorFn then
+            local c = blizzQuestColorFn(level, false, questID)
+            if c and c.r then
+                return c
+            end
+        end
+    end
+
+    -- 3. Relative difficulty fallback
+    local levelDiff = level - playerLevel
+    local colors = QuestDifficultyColors
+    if levelDiff >= 5 then
+        return (colors and colors["impossible"]) or DIFF_COLOR_RED
+    elseif levelDiff >= 3 then
+        return (colors and colors["verydifficult"]) or DIFF_COLOR_ORANGE
+    elseif levelDiff >= -4 then
+        return (colors and colors["difficult"]) or DIFF_COLOR_YELLOW
+    elseif -levelDiff <= ns.GetGreyThreshold(playerLevel) then
+        return (colors and colors["standard"]) or DIFF_COLOR_GREEN
+    end
+    return (colors and colors["trivial"]) or DIFF_COLOR_GRAY
 end
 
 function ns.IsQuestGrey(questLevel, playerLevel, questID)
-    if questID and C_PlayerInfo and C_PlayerInfo.GetContentDifficultyQuestForPlayer then
-        local curPlayerLevel = (UnitEffectiveLevel and UnitEffectiveLevel("player")) or (UnitLevel and UnitLevel("player")) or 1
-        if not playerLevel or playerLevel == curPlayerLevel then
-            local diffEnum = C_PlayerInfo.GetContentDifficultyQuestForPlayer(questID)
-            if diffEnum ~= nil and Enum and Enum.RelativeContentDifficulty then
-                return diffEnum == Enum.RelativeContentDifficulty.Trivial
-            end
+    local curPlayerLevel = GetPlayerLevel()
+    if questID and C_PlayerInfo and C_PlayerInfo.GetContentDifficultyQuestForPlayer
+        and (not playerLevel or playerLevel == curPlayerLevel) then
+        local diffEnum = C_PlayerInfo.GetContentDifficultyQuestForPlayer(questID)
+        if diffEnum ~= nil and Enum and Enum.RelativeContentDifficulty then
+            return diffEnum == Enum.RelativeContentDifficulty.Trivial
         end
     end
     questLevel = tonumber(questLevel) or 0
-    playerLevel = tonumber(playerLevel) or (UnitEffectiveLevel and UnitEffectiveLevel("player")) or (UnitLevel and UnitLevel("player")) or 1
+    playerLevel = tonumber(playerLevel) or curPlayerLevel
     if questLevel <= 0 then return false end
     local levelDiff = questLevel - playerLevel
     if levelDiff >= -4 then return false end
-    local trivialRange = (UnitQuestTrivialLevelRange and UnitQuestTrivialLevelRange("player")) or ns.GetGreyThreshold(playerLevel)
-    return (-levelDiff > trivialRange)
+    return (-levelDiff > ns.GetGreyThreshold(playerLevel))
 end
 
-function ns.IsQuestComplete(questID, questLogIndex, objectives)
-    if questID and C_QuestLog and C_QuestLog.IsComplete then
-        local complete = C_QuestLog.IsComplete(questID)
-        if complete == true or complete == 1 then
-            return true
-        end
-    end
+-- ---------------------------------------------------------------------------
+-- Quest Timer Engine
+-- Keeps timers stable through hover, tooltips and combat without re-scanning
+-- the whole quest log. Entries are reused in place (zero allocation per tick).
+-- ---------------------------------------------------------------------------
+local timerCache = {}
+ns.questTimerCache = timerCache
 
-    if questID and C_QuestLog and C_QuestLog.ReadyForTurnIn then
-        local ready = C_QuestLog.ReadyForTurnIn(questID)
-        if ready == true or ready == 1 then
-            return true
-        end
-    end
-
-    if questLogIndex and ns.GetQuestLogTitle then
-        local _, _, _, _, _, isComplete = ns.GetQuestLogTitle(questLogIndex)
-        if isComplete == 1 or isComplete == true then
-            return true
-        end
-    end
-
-    if objectives and #objectives > 0 then
-        local allDone = true
-        for _, obj in ipairs(objectives) do
-            if not obj.finished then
-                allDone = false
-                break
-            end
-        end
-        if allDone then
-            return true
-        end
-    end
-
-    if questLogIndex and GetNumQuestLeaderBoards and GetQuestLogLeaderBoard then
-        local numLeaderBoards = GetNumQuestLeaderBoards(questLogIndex) or 0
-        if (numLeaderBoards == 0) and SelectQuestLogEntry then
-            local prev = GetQuestLogSelection and GetQuestLogSelection()
-            SelectQuestLogEntry(questLogIndex)
-            numLeaderBoards = GetNumQuestLeaderBoards() or 0
-            if numLeaderBoards > 0 then
-                local allDone = true
-                for j = 1, numLeaderBoards do
-                    local _, _, done = GetQuestLogLeaderBoard(j)
-                    if not done then allDone = false break end
-                end
-                if prev and prev > 0 then SelectQuestLogEntry(prev) end
-                if allDone then return true end
-            elseif prev and prev > 0 then
-                SelectQuestLogEntry(prev)
-            end
-        elseif numLeaderBoards > 0 then
-            local allDone = true
-            for j = 1, numLeaderBoards do
-                local _, _, done = GetQuestLogLeaderBoard(j, questLogIndex)
-                if not done then
-                    allDone = false
-                    break
-                end
-            end
-            if allDone then
-                return true
-            end
-        end
-    end
-
-    return false
+local function GetTimerDB()
+    local profile = ns.db
+    return profile and profile.databars
 end
-
-function ns.IsQuestFailed(questID, questLogIndex, objectives)
-    if questID and C_QuestLog and C_QuestLog.IsFailed then
-        local failed = SafeCall(C_QuestLog.IsFailed, questID)
-        if failed == true or failed == 1 then
-            return true
-        end
-    end
-    if questLogIndex and questLogIndex > 0 then
-        if C_QuestLog and C_QuestLog.GetInfo then
-            local info = SafeCall(C_QuestLog.GetInfo, questLogIndex)
-            if info and (info.isFailed == true or info.isFailed == 1 or info.isComplete == -1) then
-                return true
-            end
-        end
-        if GetQuestLogTitle then
-            local _, _, _, _, _, isComplete = SafeCall(GetQuestLogTitle, questLogIndex)
-            if isComplete == -1 then
-                return true
-            end
-        end
-    end
-    if objectives and #objectives > 0 then
-        for _, obj in ipairs(objectives) do
-            if obj.failed or obj.isFailed then
-                return true
-            end
-            if obj.text and (obj.text:find("%(Failed%)") or obj.text:find("%(failed%)")) then
-                return true
-            end
-        end
-    end
-    if questID and ns.GetQuestLogIndexForQuestID then
-        local idx = ns.GetQuestLogIndexForQuestID(questID)
-        if idx and idx > 0 and idx ~= questLogIndex then
-            return ns.IsQuestFailed(nil, idx, objectives)
-        end
-    end
-    return false
-end
-
-function ns.GetQuestLogTitle(i)
-    if not i or i <= 0 then return nil end
-
-    local title, level, suggestedGroup, isHeader, isCollapsed, isComplete, frequency, questID
-
-    if C_QuestLog and C_QuestLog.GetInfo then
-        local info = C_QuestLog.GetInfo(i)
-        if info then
-            title = info.title
-            level = info.level
-            suggestedGroup = info.suggestedGroup
-            isHeader = (info.isHeader == 1 or info.isHeader == true)
-            isCollapsed = (info.isCollapsed == 1 or info.isCollapsed == true)
-            frequency = info.frequency
-            questID = info.questID
-            if info.isComplete == 1 or info.isComplete == true then
-                isComplete = 1
-            elseif info.isComplete == -1 then
-                isComplete = -1
-            else
-                isComplete = 0
-            end
-        end
-    end
-
-    if not title and GetQuestLogTitle then
-        local numRet = select("#", GetQuestLogTitle(i))
-        if numRet >= 9 then
-            -- WotLK 3.3.5 / WoW Forever 16001:
-            -- 1:title, 2:level, 3:questTag, 4:suggestedGroup, 5:isHeader, 6:isCollapsed, 7:isComplete, 8:isDaily, 9:questID
-            local qTitle, qLevel, qTag, qGroup, qHdr, qCol, qComp, qDaily, qID = GetQuestLogTitle(i)
-            title = qTitle
-            level = qLevel
-            suggestedGroup = qTag or qGroup
-            isHeader = (qHdr == 1 or qHdr == true)
-            isCollapsed = (qCol == 1 or qCol == true)
-            isComplete = (qComp == 1 or qComp == true) and 1 or (qComp == -1 and -1 or 0)
-            frequency = qDaily
-            questID = tonumber(qID)
-        elseif numRet >= 7 then
-            -- Classic Era / Modern:
-            -- 1:title, 2:level, 3:suggestedGroup, 4:isHeader, 5:isCollapsed, 6:isComplete, 7:frequency, 8:questID
-            local qTitle, qLevel, qGroup, qHdr, qCol, qComp, qFreq, qID = GetQuestLogTitle(i)
-            title = qTitle
-            level = qLevel
-            suggestedGroup = qGroup
-            isHeader = (qHdr == 1 or qHdr == true)
-            isCollapsed = (qCol == 1 or qCol == true)
-            isComplete = (qComp == 1 or qComp == true) and 1 or (qComp == -1 and -1 or 0)
-            frequency = qFreq
-            questID = tonumber(qID)
-        elseif numRet >= 4 then
-            -- Vanilla 1.12:
-            -- 1:title, 2:level, 3:questTag, 4:isHeader, 5:isCollapsed, 6:isComplete
-            local qTitle, qLevel, qTag, qHdr, qCol, qComp = GetQuestLogTitle(i)
-            title = qTitle
-            level = qLevel
-            suggestedGroup = qTag
-            isHeader = (qHdr == 1 or qHdr == true)
-            isCollapsed = (qCol == 1 or qCol == true)
-            isComplete = (qComp == 1 or qComp == true) and 1 or (qComp == -1 and -1 or 0)
-        end
-    end
-
-    if not title then return nil end
-
-    -- Ensure questID is resolved
-    if not questID or questID <= 0 then
-        if C_QuestLog and C_QuestLog.GetQuestIDForLogIndex then
-            questID = C_QuestLog.GetQuestIDForLogIndex(i)
-        end
-    end
-    if (not questID or questID <= 0) and GetQuestLink then
-        local link = GetQuestLink(i)
-        if link then
-            local id = link:match("quest:(%d+)")
-            if id then questID = tonumber(id) end
-        end
-    end
-    if not questID or questID <= 0 then
-        questID = i
-    end
-
-    return title, level, suggestedGroup, isHeader or false, isCollapsed or false, isComplete or 0, frequency or 0, questID
-end
-
-function ns.GetQuestLogIndexForQuestID(questID)
-    if not questID or questID <= 0 then return nil end
-    if C_QuestLog and C_QuestLog.GetLogIndexForQuestID then
-        local idx = SafeCall(C_QuestLog.GetLogIndexForQuestID, questID)
-        if idx and idx > 0 then return idx end
-    end
-    local numEntries = (C_QuestLog and C_QuestLog.GetNumQuestLogEntries and SafeCall(C_QuestLog.GetNumQuestLogEntries))
-        or (GetNumQuestLogEntries and SafeCall(GetNumQuestLogEntries)) or 0
-    for i = 1, numEntries do
-        local qInfo = C_QuestLog and C_QuestLog.GetInfo and SafeCall(C_QuestLog.GetInfo, i)
-        local qID = qInfo and qInfo.questID
-        if not qID and ns.GetQuestLogTitle then
-            local _, _, _, _, _, _, _, id = ns.GetQuestLogTitle(i)
-            qID = id
-        end
-        if qID and qID == questID then
-            return i
-        end
-    end
-    return nil
-end
-
--- Objective Object Recycling Pool (Eliminates GC overhead during quest redraws)
-local objectiveObjPool = {}
-local function AcquireObjectiveObj()
-    local obj = table_remove(objectiveObjPool)
-    if not obj then
-        obj = {}
-    else
-        wipe(obj)
-    end
-    return obj
-end
-
-function ns.ReleaseObjectiveObjs(list)
-    if not list then return end
-    for i = 1, #list do
-        local obj = list[i]
-        if obj then
-            table_insert(objectiveObjPool, obj)
-            list[i] = nil
-        end
-    end
-end
-
-function ns.GetQuestObjectives(questID, questLogIndex, outList)
-    local objectives = outList or {}
-    if outList then
-        ns.ReleaseObjectiveObjs(objectives)
-    end
-
-    -- If questLogIndex is missing but questID is provided, find questLogIndex
-    local targetLogIndex = questLogIndex
-    if not targetLogIndex and questID then
-        local num = (C_QuestLog and C_QuestLog.GetNumQuestLogEntries and SafeCall(C_QuestLog.GetNumQuestLogEntries))
-            or (GetNumQuestLogEntries and select(1, GetNumQuestLogEntries())) or 0
-        for i = 1, num do
-            local qInfo = C_QuestLog and C_QuestLog.GetInfo and SafeCall(C_QuestLog.GetInfo, i)
-            local foundQID = (qInfo and qInfo.questID) or (ns.GetQuestLogTitle and select(8, ns.GetQuestLogTitle(i)))
-            if foundQID == questID then
-                targetLogIndex = i
-                break
-            end
-        end
-    end
-
-    if questID and C_QuestLog and C_QuestLog.GetQuestObjectives then
-        local list = C_QuestLog.GetQuestObjectives(questID)
-        if list and #list > 0 then
-            for _, obj in ipairs(list) do
-                local entry = AcquireObjectiveObj()
-                entry.text = obj.text or ""
-                entry.finished = obj.finished or false
-                entry.type = obj.type or ""
-                entry.numFulfilled = obj.numFulfilled
-                entry.numRequired = obj.numRequired
-                table_insert(objectives, entry)
-            end
-            return objectives
-        end
-    end
-
-    if targetLogIndex and GetNumQuestLeaderBoards and GetQuestLogLeaderBoard then
-        local numLeaderBoards = GetNumQuestLeaderBoards(targetLogIndex) or 0
-        if (numLeaderBoards == 0) and SelectQuestLogEntry then
-            local prev = GetQuestLogSelection and GetQuestLogSelection()
-            SelectQuestLogEntry(targetLogIndex)
-            numLeaderBoards = GetNumQuestLeaderBoards() or 0
-            for j = 1, numLeaderBoards do
-                local desc, objType, done = GetQuestLogLeaderBoard(j)
-                if not desc then
-                    desc, objType, done = GetQuestLogLeaderBoard(j, targetLogIndex)
-                end
-                if desc then
-                    local entry = AcquireObjectiveObj()
-                    entry.text = desc
-                    entry.finished = done or false
-                    entry.type = objType or ""
-                    local c, m = desc:match("(%d+)%s*/%s*(%d+)")
-                    if c and m then
-                        entry.numFulfilled = tonumber(c)
-                        entry.numRequired = tonumber(m)
-                    end
-                    table_insert(objectives, entry)
-                end
-            end
-            if prev and prev > 0 then SelectQuestLogEntry(prev) end
-            return objectives
-        elseif numLeaderBoards > 0 then
-            for j = 1, numLeaderBoards do
-                local desc, objType, done = GetQuestLogLeaderBoard(j, targetLogIndex)
-                if desc then
-                    local entry = AcquireObjectiveObj()
-                    entry.text = desc
-                    entry.finished = done or false
-                    entry.type = objType or ""
-                    local c, m = desc:match("(%d+)%s*/%s*(%d+)")
-                    if c and m then
-                        entry.numFulfilled = tonumber(c)
-                        entry.numRequired = tonumber(m)
-                    end
-                    table_insert(objectives, entry)
-                end
-            end
-            return objectives
-        end
-    end
-    return objectives
-end
-
-function ns.IsQuestPushable(questID, questLogIndex)
-    if questID and C_QuestLog and C_QuestLog.SetSelectedQuest then
-        C_QuestLog.SetSelectedQuest(questID)
-    end
-    if questLogIndex and SelectQuestLogEntry then
-        SelectQuestLogEntry(questLogIndex)
-    end
-    if questID and C_QuestLog and C_QuestLog.IsPushableQuest then
-        local pushable = C_QuestLog.IsPushableQuest(questID)
-        if pushable ~= nil then return pushable end
-    end
-    if GetQuestLogPushable then
-        return GetQuestLogPushable() and true or false
-    end
-    return false
-end
-
-function ns.ShareQuest(questID, questLogIndex)
-    if questID and C_QuestLog and C_QuestLog.SetSelectedQuest then
-        C_QuestLog.SetSelectedQuest(questID)
-    end
-    if questLogIndex and SelectQuestLogEntry then
-        SelectQuestLogEntry(questLogIndex)
-    end
-    if questID and C_QuestLog and C_QuestLog.ShareQuest then
-        C_QuestLog.ShareQuest(questID)
-        return true
-    end
-    if QuestLogPushQuest then
-        QuestLogPushQuest()
-        return true
-    end
-    return false
-end
-
--- ===========================================================================
--- Quest Timer Active Cache Engine
--- Keeps timers rock-solid during hover, tooltip inspection, combat, and reload
--- ===========================================================================
-ns.questTimerCache = ns.questTimerCache or {}
 
 function ns.RecordQuestTimer(questID, timeLeft, maxTime)
     if not questID or not timeLeft or timeLeft <= 0 then return end
-    local now = GetTime()
-    local nowEpoch = time()
-    local existing = ns.questTimerCache[questID]
-    local mTime = maxTime or (existing and existing.maxTime) or timeLeft
+    local entry = timerCache[questID]
+    if not entry then
+        entry = {}
+        timerCache[questID] = entry
+    end
+    local mTime = maxTime or entry.maxTime or timeLeft
     if mTime <= 0 then mTime = timeLeft end
+    entry.maxTime = mTime
+    entry.expiresAt = GetTime() + timeLeft
 
-    -- Update in-memory monotonic countdown cache
-    ns.questTimerCache[questID] = {
-        questID = questID,
-        timeLeft = timeLeft,
-        maxTime = mTime,
-        expiresAt = now + timeLeft,
-        expiresAtEpoch = nowEpoch + timeLeft,
-    }
-
-    -- Persist maxTime and active timer epoch to SavedVariables (throttled to avoid per-second disk flushes)
-    local curDB = (ns.db and ns.db.databars)
-    if curDB then
-        curDB.timerMaxValues = curDB.timerMaxValues or {}
-        if curDB.timerMaxValues[questID] ~= mTime then
-            curDB.timerMaxValues[questID] = mTime
-        end
-        curDB.timerActiveQuests = curDB.timerActiveQuests or {}
-        local saved = curDB.timerActiveQuests[questID]
-        local newEpoch = nowEpoch + timeLeft
-        if not saved or not saved.expiresAtEpoch or math.abs(saved.expiresAtEpoch - newEpoch) > 3 then
-            curDB.timerActiveQuests[questID] = {
-                maxTime = mTime,
-                expiresAtEpoch = newEpoch,
-            }
-            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+    local tdb = GetTimerDB()
+    if tdb then
+        tdb.timerMaxValues = tdb.timerMaxValues or {}
+        if tdb.timerMaxValues[questID] ~= mTime then
+            tdb.timerMaxValues[questID] = mTime
         end
     end
-end
-
-function ns.GetCachedQuestTimer(questID)
-    if not questID then return nil, nil end
-    if ns.IsQuestFailed and ns.IsQuestFailed(questID) then
-        ns.ClearQuestTimer(questID)
-        return nil, nil
-    end
-    local validQIDs = ns.GetActiveBlizzardTimerQuestIDs and ns.GetActiveBlizzardTimerQuestIDs()
-    if not validQIDs or not validQIDs[questID] then
-        ns.ClearQuestTimer(questID)
-        return nil, nil
-    end
-    local cached = ns.questTimerCache[questID]
-    if cached and cached.expiresAt then
-        local now = GetTime()
-        local remaining = math.max(0, math.floor(cached.expiresAt - now))
-        if remaining > 0 then
-            cached.timeLeft = remaining
-            return remaining, cached.maxTime
-        else
-            ns.ClearQuestTimer(questID)
-            return nil, nil
-        end
-    end
-    return nil, nil
 end
 
 function ns.ClearQuestTimer(questID)
     if not questID then return end
-    ns.questTimerCache[questID] = nil
-    local curDB = (ns.db and ns.db.databars)
-    if curDB and curDB.timerActiveQuests and curDB.timerActiveQuests[questID] then
-        curDB.timerActiveQuests[questID] = nil
-        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
+    timerCache[questID] = nil
+    local tdb = GetTimerDB()
+    if tdb and tdb.timerMaxValues then
+        tdb.timerMaxValues[questID] = nil
     end
 end
 
--- Query Blizzard's active timers directly to establish authoritative timed quest IDs
-function ns.GetActiveBlizzardTimerQuestIDs()
-    local validQIDs = {}
-    -- Modern WoW Retail API: C_QuestLog.GetTimeAllowed across quest log entries
-    if C_QuestLog and C_QuestLog.GetTimeAllowed then
-        local numEntries = (C_QuestLog.GetNumQuestLogEntries and SafeCall(C_QuestLog.GetNumQuestLogEntries))
-            or (GetNumQuestLogEntries and SafeCall(GetNumQuestLogEntries)) or 0
-        for i = 1, numEntries do
-            local qInfo = C_QuestLog.GetInfo and SafeCall(C_QuestLog.GetInfo, i)
-            local qID = qInfo and qInfo.questID
-            if not qID and ns.GetQuestLogTitle then
-                local _, _, _, _, _, _, _, id = ns.GetQuestLogTitle(i)
-                qID = id
-            end
-            if qID and qID > 0 and (not qInfo or not qInfo.isHeader) then
-                local ok, totalTime, elapsedTime = pcall(C_QuestLog.GetTimeAllowed, qID)
-                if ok and totalTime then
-                    local tot = ToNumber(totalTime)
-                    local elap = ToNumber(elapsedTime) or 0
-                    if tot and tot > 0 and (tot - elap) > 0 then
-                        validQIDs[qID] = true
-                    end
-                end
-            end
-        end
-    end
-    -- Modern C_QuestLog.GetQuestTimers()
-    if C_QuestLog and C_QuestLog.GetQuestTimers then
-        local ok, timers = pcall(C_QuestLog.GetQuestTimers)
-        if ok and type(timers) == "table" then
-            for _, info in ipairs(timers) do
-                if type(info) == "table" then
-                    local qID = info.questID or info.id
-                    if qID and qID > 0 then validQIDs[qID] = true end
-                end
-            end
-        end
-    end
-    return validQIDs
-end
-
--- Purge any stale, non-timed, expired, or failed quests from timer memory and SavedVariables
+-- Drops cached timers for quests that are gone, failed, or no longer timed
 function ns.PurgeInvalidTimerCache()
-    local validQIDs = ns.GetActiveBlizzardTimerQuestIDs()
-
-    if ns.questTimerCache then
-        for qID in pairs(ns.questTimerCache) do
-            if not validQIDs[qID] then
-                ns.questTimerCache[qID] = nil
-            end
+    for questID in pairs(timerCache) do
+        local total = API.GetQuestTimeAllowed(questID)
+        if not API.IsQuestInLog(questID) or API.IsQuestFailed(questID) or not (total and total > 0) then
+            timerCache[questID] = nil
         end
     end
-    local curDB = (ns.db and ns.db.databars)
-    if curDB then
-        local changed = false
-        if curDB.timerActiveQuests then
-            for qID in pairs(curDB.timerActiveQuests) do
-                if not validQIDs[qID] then
-                    curDB.timerActiveQuests[qID] = nil
-                    changed = true
-                end
+    local tdb = GetTimerDB()
+    if tdb and tdb.timerMaxValues then
+        for questID in pairs(tdb.timerMaxValues) do
+            if not timerCache[questID] and not API.IsQuestInLog(questID) then
+                tdb.timerMaxValues[questID] = nil
             end
-        end
-        if curDB.timerMaxValues then
-            for qID in pairs(curDB.timerMaxValues) do
-                if not validQIDs[qID] then
-                    curDB.timerMaxValues[qID] = nil
-                    changed = true
-                end
-            end
-        end
-        if changed and ns.FlushDBToGlobals then
-            ns.FlushDBToGlobals()
         end
     end
 end
 
--- ===========================================================================
--- Quest Timer Information (Modern WoW Retail Engine C_QuestLog.GetTimeAllowed)
--- ===========================================================================
+-- Returns timeLeft, maxTime (seconds) for a timed quest, or nil
 function ns.GetQuestTimeInfo(questID, questLogIndex)
-    if not questID and not questLogIndex then return nil, nil end
-
-    -- 1. Resolve questID if only questLogIndex is provided
-    if (not questID or questID <= 0) and questLogIndex and questLogIndex > 0 then
-        if C_QuestLog and C_QuestLog.GetInfo then
-            local info = SafeCall(C_QuestLog.GetInfo, questLogIndex)
-            if info and info.questID and info.questID > 0 then
-                questID = info.questID
-            end
-        end
-        if (not questID or questID <= 0) and C_QuestLog and C_QuestLog.GetQuestIDForLogIndex then
-            local qID = SafeCall(C_QuestLog.GetQuestIDForLogIndex, questLogIndex)
-            if qID and qID > 0 then questID = qID end
-        end
-        if (not questID or questID <= 0) and ns.GetQuestLogTitle then
-            local _, _, _, _, _, _, _, tQID = ns.GetQuestLogTitle(questLogIndex)
-            if tQID and tQID > 0 then
-                questID = tQID
-            end
-        end
+    if (not questID or questID <= 0) and questLogIndex then
+        local info = API.GetQuestInfo(questLogIndex, {})
+        questID = info and info.questID
     end
+    if not questID or questID <= 0 then return nil end
 
-    if not questID or questID <= 0 then return nil, nil end
-
-    if ns.IsQuestFailed and ns.IsQuestFailed(questID, questLogIndex) then
+    if API.IsQuestFailed(questID) then
         ns.ClearQuestTimer(questID)
-        return nil, nil
+        return nil
     end
 
-    -- 2. Modern WoW Retail API: C_QuestLog.GetTimeAllowed(questID)
-    -- In modern WoW, C_QuestLog.GetTimeAllowed(questID) returns (totalTime, elapsedTime)
-    if C_QuestLog and C_QuestLog.GetTimeAllowed then
-        local ok, totalTime, elapsedTime = pcall(C_QuestLog.GetTimeAllowed, questID)
-        if ok and totalTime then
-            local tot = ToNumber(totalTime)
-            local elap = ToNumber(elapsedTime) or 0
-            if tot and tot > 0 then
-                local tLeft = tot - elap
-                if tLeft > 0 then
-                    ns.RecordQuestTimer(questID, tLeft, tot)
-                    return tLeft, tot
-                else
-                    ns.ClearQuestTimer(questID)
-                    return nil, nil
-                end
-            end
+    local total, elapsed = API.GetQuestTimeAllowed(questID)
+    if total and total > 0 then
+        local left = total - (elapsed or 0)
+        if left > 0 then
+            ns.RecordQuestTimer(questID, left, total)
+            return left, total
+        end
+        ns.ClearQuestTimer(questID)
+        return nil
+    end
+
+    -- Monotonic cache fallback for clients that briefly report no timer data
+    local cached = timerCache[questID]
+    if cached and cached.expiresAt and API.IsQuestInLog(questID) then
+        local remaining = math_floor(cached.expiresAt - GetTime())
+        if remaining > 0 then
+            return remaining, cached.maxTime
         end
     end
-
-    -- 3. Monotonic cache fallback (only if this quest is authoritatively verified by Blizzard)
-    if ns.questTimerCache and ns.questTimerCache[questID] then
-        local cachedTime, cachedMax = ns.GetCachedQuestTimer(questID)
-        if cachedTime and cachedTime > 0 then
-            return cachedTime, cachedMax
-        end
-    end
-
-    -- If no Blizzard timer detected, ensure this quest is cleared from cache
     ns.ClearQuestTimer(questID)
-    return nil, nil
+    return nil
 end
 ns.GetQuestTimeLeft = ns.GetQuestTimeInfo
 
+-- ---------------------------------------------------------------------------
 -- Default Settings
+-- ---------------------------------------------------------------------------
+ns.DB_VERSION = 2
+
 ns.defaultDB = {
+    global = {
+        language = "auto",      -- "auto" (game client) or a language pack code such as "deDE"
+        chatOutput = false,     -- Debug & status messages in chat (off by default)
+    },
     profile = {
         -- Positioning & Sizing
         framePosition = nil,
@@ -1068,14 +533,40 @@ ns.defaultDB = {
         width = 280,
         maxHeight = 600,
         scale = 1.0,
-        itemButtonPosition = nil, -- Dragged quest item button position
+        alpha = 1.0,
+        isLocked = false,
+        itemButtonPosition = nil,             -- Dragged quest item button position
+        trackerBottomPadding = 4,             -- 0 to 20 px under the last quest
+        foreverMarker = {                     -- marks quests that are new in WoW Forever
+            enabled = true,
+            position = "after",               -- "after" or "before" the quest name
+            style = "icon",                   -- "icon" or "text"
+            size = 12,
+            color = { r = 0.60, g = 0.90, b = 0.95, a = 1 },
+            tintTitle = false,
+        },
+        questOpenMode = "world",              -- "world", "classic", "both"
+        questButtons = {
+            mode = "off",                     -- "off", "hover", "always"
+            size = 16,
+            setActive = true,
+            map = true,
+            share = true,
+            log = true,
+        },
         itemButtonPlacement = "inside_right", -- "inside_right", "outside_left"
-        itemButtonStrata = "MEDIUM", -- "LOW", "MEDIUM", "HIGH", "DIALOG"
+        itemButtonStrata = "MEDIUM",          -- "LOW", "MEDIUM", "HIGH", "DIALOG"
+        itemButtons = {
+            enabled = true,     -- Show usable quest item buttons
+            size = 26,          -- Button size in pixels
+            autoDetect = true,  -- Also detect usable quest items in bags
+        },
         showTimerInObjectives = true,         -- Show countdown timer in quest objective descriptions
         onboardingCompleted = false,          -- First-time account onboarding wizard status
         collapsedQuests = {},     -- [questID or title] = true when user collapsed the quest
         collapsedZones = {},      -- [zoneName] = true when user collapsed a zone header
         activeQuestIcon = "star", -- "star", "arrow", "blizz", "pointer", "none"
+        configWindow = {},
 
         -- Modular Architecture (Live Enable/Disable)
         modules = {
@@ -1085,7 +576,7 @@ ns.defaultDB = {
             qol = true,
         },
 
-        -- Dedicated Quest Automation Settings
+        -- Quest Automation
         questAutomation = {
             autoAcceptNPC = false,
             autoAcceptShared = false,
@@ -1094,10 +585,9 @@ ns.defaultDB = {
             shiftBypass = true,
         },
 
-        -- Quality of Life Settings
+        -- Quality of Life
         qol = {
-            fastAutoLoot = true,
-            autoVendorGreys = false,
+            fastAutoLoot = true,   -- Only speeds up looting when the game's auto loot is active
             autoSellJunk = false,
             autoRepair = false,
             useGuildRepair = false,
@@ -1106,49 +596,45 @@ ns.defaultDB = {
 
         -- Headers Configuration
         headers = {
-            -- Main Tracker Header Bar
             texture = "flat",              -- "none", "flat", "gradient", "blizzard"
-            statusbarTexture = "Solid",    -- Statusbar texture used by bars/headers
+            statusbarTexture = "Solid",
             textureColor = { r = 0.05, g = 0.08, b = 0.12, a = 0.85 },
-            textureColorShare = false,     -- Share color with tracker border
+            textureColorShare = false,
             textColor = nil,               -- Defaults dynamically to player's Class Color
-            textColorShare = false,        -- Share text color with tracker border
+            textColorShare = false,
             buttonColor = nil,             -- Defaults dynamically to player's Class Color
-            buttonColorShare = false,      -- Share button color with tracker border
-            countFormat = "short",         -- "none", "short" ((5/40)), "full" ((5/40 Quests))
+            buttonColorShare = false,
+            countFormat = "short",         -- "none", "short", "full"
             collapsedText = "counter",     -- "none", "counter", "title"
-            showQuestLogBtn = true,        -- [Log] button that toggles QuestLogFrame
-            showZoneBtn = true,            -- [Zone] filter toggle button
-            showAllBtn = true,             -- [All] filter toggle button
-            showMenuBtn = true,            -- [...] options menu button
-            showCollapseBtn = true,        -- [-] collapse button
+            showQuestLogBtn = true,
+            showZoneBtn = true,
+            showAllBtn = true,
+            showMenuBtn = true,
+            showCollapseBtn = true,
 
-            -- Zone / Section Headers in Tracker
-            showZoneHeaders = true,        -- Group quests under collapsible Zone headers
-            showZoneCount = true,          -- Show count e.g. Durotar (3)
-            zoneHeaderTexture = "gradient", -- "none", "flat", "gradient", "blizzard"
-            zoneHeaderColor = { r = 1.0, g = 0.82, b = 0.0, a = 1.0 }, -- Classic gold
-            zoneTextColor = nil,           -- Optional custom Zone Header text color (defaults to zoneHeaderColor if nil)
-            zoneHeaderColorShare = false,  -- Share with border color
-            showCompleteIcon = true,       -- Show Blizzard gold ? in front of completed quests
-            separateClassHeader = true,    -- Separate class quests into their own header and keep them visible across zones
-            zoneCollapseIcon = "arrow",    -- "arrow" (triangle), "plusminus" ([-]/[+]), "circle" (●/○), "square" (■/□), "star" (★/☆), "none"
-            zoneCollapseIconColor = nil,   -- Optional custom color for zone collapse indicator (nil = inherit zone text color)
+            showZoneHeaders = true,
+            showZoneCount = true,
+            zoneHeaderTexture = "gradient",
+            zoneHeaderColor = { r = 1.0, g = 0.82, b = 0.0, a = 1.0 },
+            zoneTextColor = nil,
+            zoneHeaderColorShare = false,
+            showCompleteIcon = true,
+            separateClassHeader = true,
+            zoneCollapseIcon = "arrow",    -- "arrow", "plusminus", "none"
+            zoneCollapseIconColor = nil,
         },
 
         -- Appearance & Backdrop
         backdrop = {
             show = true,
-            borderStyle = "flat", -- "flat" (1px), "tooltip" (Blizzard rounded), "dialog", "toast", "none"
-            bgTexture = "solid",  -- "solid", "tooltip", "marble", "rock", "parchment"
-            bgFile = "Solid", -- Default or SharedMedia
-            edgeFile = "Solid",
+            borderStyle = "flat", -- "flat", "tooltip", "dialog", "toast", "thin", "none"
+            bgTexture = "solid",  -- "solid", "tooltip", "marble", "rock", "parchment", "parchment_clean"
             edgeSize = 1,
             borderWidth = 1,
             insets = 0,
             bgColor = { r = 0.05, g = 0.05, b = 0.05, a = 0.65 },
             borderColor = { r = 0.15, g = 0.15, b = 0.15, a = 0.9 },
-            classColorBorder = false,      -- Auto-color tracker border by character class
+            classColorBorder = false,
             padding = 8,
         },
 
@@ -1164,205 +650,186 @@ ns.defaultDB = {
             objectiveOutline = "",
             enableTextShadow = true,
             colorDifficulty = true,
-            titleColor = { r = 1.00, g = 0.82, b = 0.00 },             -- Custom Quest Title color (when Color by Difficulty is off)
-            objectiveColor = { r = 0.80, g = 0.80, b = 0.80 },         -- Incomplete Objective text color (#CCCCCC)
-            completedObjectiveColor = { r = 0.00, g = 1.00, b = 0.00 },-- Completed Objective / Ready text color (#00FF00)
-            menuScale = 1.0,                                            -- Scale for right-click context menu and quick menu (0.8 to 1.6)
-            completedQuestBg = true,                                    -- Subtle background tint behind completed quests (Ready for turn-in)
-            completedQuestBgColor = { r = 0.00, g = 0.80, b = 0.20, a = 0.14 }, -- Tint color for completed quest rows
-            completedTitleColorMode = "difficulty",                     -- "difficulty" (keep level difficulty color), "turnin" (turn-in green), "custom"
-            completedTitleCustomColor = { r = 0.00, g = 1.00, b = 0.00 }, -- Custom completed quest title color
-            questHoverColor = { r = 1.00, g = 1.00, b = 1.00, a = 0.08 }, -- Mouseover highlight color for quest rows
-            zoneHoverColor = { r = 1.00, g = 0.82, b = 0.00, a = 0.12 },  -- Mouseover highlight color for zone headers
+            titleColor = { r = 1.00, g = 0.82, b = 0.00 },
+            objectiveColor = { r = 0.80, g = 0.80, b = 0.80 },
+            completedObjectiveColor = { r = 0.00, g = 1.00, b = 0.00 },
+            menuScale = 1.0,
+            completedQuestBg = true,
+            completedQuestBgColor = { r = 0.00, g = 0.80, b = 0.20, a = 0.14 },
+            completedTitleColorMode = "difficulty", -- "difficulty", "turnin", "custom"
+            completedTitleCustomColor = { r = 0.00, g = 1.00, b = 0.00 },
+            questHoverColor = { r = 1.00, g = 1.00, b = 1.00, a = 0.08 },
+            zoneHoverColor = { r = 1.00, g = 0.82, b = 0.00, a = 0.12 },
         },
 
         -- Filtering & Behavior
         filtering = {
             filterMode = "all", -- "all", "zone", "watched"
-            zoneOnly = false,
-            enableCrossZone = true, -- Multi-zone objective and turn-in tracking
+            enableCrossZone = true,
             autoHideInInstances = false,
             autoHideEmpty = false,
             collapseInCombat = false,
-            hideInCombat = false, -- Automatically hide quest tracker in combat (default: off)
-            untrackedQuests = {}, -- [questID] = true for quests manually hidden/untracked by the player
-            alwaysShowClassQuests = true, -- Always keep class quests visible across zones under Class Quests header
+            hideInCombat = false,
+            untrackedQuests = {},
+            alwaysShowClassQuests = true,
         },
 
         -- Sorting
         sorting = {
             mode = "level", -- "level", "zone"
-            moveCompletedToBottom = false, -- Push "Ready for turn-in" quests to bottom of tracker
-            activeOnTop = true,            -- Pin active quest (*) to the very top of tracker
-            showGroupTags = true,          -- Show [11+] elite/group and dungeon badges
-            leftClickSetsActive = false,   -- Left-click sets active quest & moves to top (default: false, click only expands/collapses in place)
-            alignQuestTitles = true,       -- Align all quest titles in a uniform column even without icons/arrows (default: true)
+            moveCompletedToBottom = false,
+            activeOnTop = true,
+            showGroupTags = true,
+            leftClickSetsActive = false,
+            doubleClickSetsActive = true, -- double-click a quest to make it active
+            alignQuestTitles = true,
         },
 
-        -- Social & Quest Automation
+        -- Party announcements (automation lives in questAutomation / qol)
         social = {
-            autoShare = false,           -- Auto-share quests to party upon accept
-            autoAcceptNPC = false,       -- Auto-accept quests from NPCs
-            autoAcceptShared = false,    -- Auto-accept quests shared by party members
-            autoTurnIn = false,          -- Auto-turnin quests with 0 or 1 reward choice
-            fastAutoLoot = true,         -- Fast Auto Loot (instantly loots all items; enabled by default)
-            shiftBypass = true,          -- Hold Shift to temporarily bypass automation
-            announceToParty = false,     -- Announce objective/quest completion to party chat
-            announceQuestComplete = true,      -- Announce quest completion to party chat
-            announceObjectiveProgress = false, -- Announce objective progress (N/X) to party chat
-            announceObjectiveComplete = true,  -- Announce individual objective completion to party chat
+            announceToParty = false,
+            announceQuestComplete = true,
+            announceObjectiveProgress = false,
+            announceObjectiveComplete = true,
         },
 
         -- Tooltips & Mouseover Rewards
         tooltips = {
-            showRewards = true,          -- Show quest rewards (XP, money, items) on mouseover
-            showXpPercent = true,        -- Show XP reward percentage toward current level
-            showUsableGear = true,       -- Highlight class-usable equipment rewards
-            showBestSell = true,         -- Mark highest vendor resale choice reward
-            showPartyStatus = true,      -- Show party members on quest in tooltip
-            showMissingParty = true,     -- Show party members missing the quest in tooltip
-            classColorParty = true,      -- Color party member names with class color
-            showPartyBadge = false,      -- Append group icon count badge next to quest title
+            showRewards = true,
+            showXpPercent = true,
+            showUsableGear = true,
+            showBestSell = true,
+            showPartyStatus = true,
+            showMissingParty = true,
+            classColorParty = true,
+            showPartyBadge = false,
         },
 
         -- Audio & Sounds
         sound = {
-            enableCompleteSound = true,        -- Play sound on full quest complete (Work complete!)
-            soundChoice = "peon",              -- "peon", "quest_complete", "level_up", "raid_warning", "ready_check", "map_ping", "pvp_horn", "beep", "click", or custom sounds
-            customSoundsList = {},             -- Registered custom sound filenames, e.g. {"fart.wav", "cheer.wav"}
-            completeSoundChannel = "Master",   -- "Master", "SFX", "Ambience"
-            completeSoundVolume = 100,         -- Playback volume percentage (5 to 100)
-            useCustomCompleteSound = false,
-            customCompleteSoundChoice = "beep",-- legacy fallback
-            customCompleteSoundPath = "Interface\\AddOns\\BleakfibersQuestTracker-Forever\\Media\\Sounds\\beep.wav",
-
-            enableObjectiveSound = true,       -- Play sound when an objective updates (e.g. 3/4 Raptor Horns)
-            objectiveSoundChoice = "whisper_ping", -- "whisper_ping", "coins", "loot_clink", "map_ping", "item_click", "beep", "click", "custom1".."custom99"
-            objectiveSoundChannel = "Master",  -- "Master", "SFX", "Ambience"
-            objectiveSoundVolume = 100,        -- Playback volume percentage (5 to 100)
-            useCustomObjectiveSound = false,
-            customObjectiveSoundChoice = "beep", -- "beep", "click", "custom1" through "custom99" (.wav)
-            customObjectiveSoundPath = "Interface\\AddOns\\BleakfibersQuestTracker-Forever\\Media\\Sounds\\beep.wav",
+            enableCompleteSound = true,
+            soundChoice = "peon",
+            customSoundsList = {},
+            completeSoundChannel = "Master",
+            completeSoundVolume = 100,
+            enableObjectiveSound = true,
+            objectiveSoundChoice = "whisper_ping",
+            objectiveSoundChannel = "Master",
+            objectiveSoundVolume = 100,
         },
-
 
         -- Wayfinder (Waypoint Navigation & Directional Arrows)
         wayfinder = {
-            enableHUDArrow = true,        -- Floating HUD Arrow toggle (enabled by default)
-            enableInlineArrow = true,     -- Inline Tracker Mini Arrow toggle (enabled by default)
-            inlineArrowPosition = "left", -- "left" (in front of title) or "right" (tracker margin)
-            inlineArrowSize = 22,         -- Inline Tracker Arrow Size in pixels (14 to 32, default 22)
-            autoTrackActiveQuest = true,  -- Automatically point to ns.activeQuestID
-            showDistance = true,          -- Show yards/meters below arrow / tooltip
-            distanceUnit = "imperial",    -- "imperial" (yards/miles) or "metric" (meters/kilometers)
-            arrowScale = 1.0,             -- Scale (0.6 to 1.6)
-            textDistance = 12,            -- Vertical distance between HUD arrow and text (5 to 50px, default 12)
-            arrivalThreshold = 15,        -- Yards to consider "Arrived"
-            arrivalClearDelay = 5,        -- Seconds to display "Arrived!" before auto-clearing (0-30, default 5)
-            playArrivalSound = true,      -- Chime when arrived
-            hudPosition = nil,            -- Saved frame position { point = "CENTER", x = 0, y = 150 }
-            locked = false,               -- Lock HUD arrow position
-            showBackdrop = false,         -- Semi-transparent circular backdrop behind floating HUD arrow (default: off)
-            arrowStyle = "auto",          -- Arrow graphic style: "auto" (default: Modern Minimalist), "minimal", or "classic"
-            hideInCombat = true,          -- Hide waypoint arrow during combat (default: true)
-            showETA = false,              -- Show Estimated Time of Arrival (ETA) countdown (optional)
-            showMapPins = true,           -- Show pin icons on World Map & Minimap for custom waypoints (optional)
-            showCoordinates = false,      -- Show Player & Cursor coordinates display on World Map (optional)
-            savedWaypoints = {},          -- Persistent custom waypoints across game sessions
-            hudFontSize = 11,             -- Floating HUD arrow distance text size (8 to 18px)
-            hudFontOutline = "OUTLINE",   -- Floating HUD arrow distance text outline
-            showDestination = true,       -- Show target/quest/flight destination name above distance readout
-            hudTitleFormat = "zone",      -- "zone" (e.g. Westfall), "quest" (e.g. The People's Militia), or "both" (Westfall - The People's Militia)
-            hudTitleFontSize = 11,        -- Floating HUD arrow destination text size (8 to 18px)
-            hudTitleFontOutline = "OUTLINE", -- Floating HUD arrow destination text outline
-            arrowAheadColor = { r = 0.10, g = 1.00, b = 0.20, a = 1.0 }, -- Arrow Color when facing objective
-            arrowAngleColor = { r = 1.00, g = 0.85, b = 0.10, a = 1.0 }, -- Arrow Color when angled / off-course
-            arrowBehindColor = { r = 1.00, g = 0.25, b = 0.25, a = 1.0 },-- Arrow Color when facing away / behind
-            arrowArrivedColor = { r = 0.10, g = 1.00, b = 0.20, a = 1.0 },-- Arrow Color when arrived at destination
-            destTextColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.0 },   -- HUD Destination Title text color
-            distTextColor = { r = 1.00, g = 1.00, b = 1.00, a = 1.0 },   -- HUD Distance readout text color
+            enableHUDArrow = true,
+            enableInlineArrow = true,
+            inlineArrowPosition = "left", -- "left" or "right"
+            inlineArrowSize = 22,         -- 14 to 32
+            autoTrackActiveQuest = true,
+            showDistance = true,
+            distanceUnit = "imperial",    -- "imperial" or "metric"
+            arrowScale = 1.0,
+            textDistance = 12,
+            arrivalThreshold = 15,
+            arrivalClearDelay = 5,
+            playArrivalSound = true,
+            hudPosition = nil,
+            locked = false,
+            showBackdrop = false,
+            arrowStyle = "auto",          -- "auto", "minimal", "classic", "3d_modern", "3d_classic"
+            hideInCombat = true,
+            showETA = false,
+            showMapPins = true,
+            showCoordinates = false,
+            savedWaypoints = {},
+            hudFontSize = 11,
+            hudFontOutline = "OUTLINE",
+            showDestination = true,
+            hudTitleFormat = "zone",      -- "zone", "quest", "both"
+            hudTitleFontSize = 11,
+            hudTitleFontOutline = "OUTLINE",
+            arrowAheadColor = { r = 0.10, g = 1.00, b = 0.20, a = 1.0 },
+            arrowAngleColor = { r = 1.00, g = 0.85, b = 0.10, a = 1.0 },
+            arrowBehindColor = { r = 1.00, g = 0.25, b = 0.25, a = 1.0 },
+            arrowArrivedColor = { r = 0.10, g = 1.00, b = 0.20, a = 1.0 },
+            destTextColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.0 },
+            distTextColor = { r = 1.00, g = 1.00, b = 1.00, a = 1.0 },
         },
 
-        -- DataBars: XP / Quest Log Progress Bar & Location Header Bar
+        -- DataBars: XP / Location / Quest Timer
         databars = {
-            hideInCombat = false,              -- Hide DataBars (XP & Location bar) while in combat (default: off)
-            hideWithTracker = true,            -- Hide all DataBars when the quest tracker is hidden via keybind/command (default: on)
-            useTrackerAppearance = true,       -- Follow tracker frame backdrop, border, and texture style (default: true)
-            dockSpacing = 0,                   -- Spacing in pixels between tracker frame and docked DataBars (default: 0)
-            -- Experience & Completed Quest Log XP Progress Bar
-            enableXPBar = false,               -- Standalone XP / Quest Log progress bar
-            xpDockMode = "tracker_bottom",     -- "tracker_bottom" (snaps to tracker, default), "default_bar", "free"
-            xpHeight = 14,                     -- Bar height (8 to 32px)
-            xpWidth = 512,                     -- Bar width when in default_bar or free mode
-            xpFontSize = 11,                   -- XP bar text font size (8 to 18px)
-            xpFontOutline = "OUTLINE",         -- XP bar text outline
-            xpBorderStyle = "flat",            -- "flat", "tooltip", "dialog", "toast", "none"
-            xpBorderWidth = 1,                 -- Border thickness in px
+            hideInCombat = false,
+            hideWithTracker = true,
+            useTrackerAppearance = true,
+            dockSpacing = 0,
+            enableXPBar = false,
+            xpDockMode = "tracker_bottom",     -- "tracker_bottom", "default_bar", "free"
+            xpHeight = 14,
+            xpWidth = 512,
+            xpFontSize = 11,
+            xpFontOutline = "OUTLINE",
+            xpBorderStyle = "flat",
+            xpBorderWidth = 1,
             xpBorderColor = { r = 0.12, g = 0.12, b = 0.16, a = 0.95 },
-            xpBgTexture = "solid",             -- "solid", "tooltip", "marble", "rock", "parchment"
-            xpBarTexture = "Solid",            -- Statusbar texture for XP bar
-            hideBlizzardXPBar = true,          -- Suppress Blizzard's default XP status tracking bar (default: true)
-            replaceBlizzardXP = true,          -- Compatibility alias for hideBlizzardXPBar
-            showCompletedQuestXP = true,       -- Show completed quest turn-in XP overlay (ghost bar)
-            showAllQuestXP = false,            -- Show all active quests XP overlay (ghost bar behind completed XP, default off)
-            hideQuestXPText = false,           -- Hide (+Done) and (+All) quest XP bonus text from on-bar readout (ghost bars & tooltip remain)
-            showDingReadyText = true,          -- Show [Ding Ready!] indicator when turn-in XP exceeds level requirement
-            showRestedXP = true,               -- Show rested XP bonus segment
-            showReputationAtMax = true,        -- Automatically transition to watched reputation at max level
+            xpBgTexture = "solid",
+            xpBarTexture = "Solid",
+            hideBlizzardXPBar = true,
+            showCompletedQuestXP = true,
+            showAllQuestXP = false,
+            hideQuestXPText = false,
+            showDingReadyText = true,
+            showRestedXP = true,
+            showReputationAtMax = true,
             xpTextFormat = "smart",            -- "smart", "cur_max", "cur_pct", "remain", "none"
-            xpFreePosition = nil,              -- Saved position for "free" docking mode
-            xpBgColor = { r = 0.05, g = 0.05, b = 0.05, a = 0.65 },     -- Base color
-            xpColor = { r = 0.58, g = 0.00, b = 0.83, a = 1.00 },       -- Actual XP (Default Purple)
-            restedColor = { r = 0.00, g = 0.44, b = 0.88, a = 1.00 },   -- Rested XP (Default Blue, high z draw order)
-            allQuestXPColor = { r = 0.12, g = 0.45, b = 0.25, a = 0.80 }, -- Full Questlog XP (Default Darker Green 80% opacity)
-            questXPColor = { r = 0.25, g = 0.85, b = 0.45, a = 0.65 },  -- Completed Quest Log XP (Default Lighter Green lower opacity)
-            dingReadyColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 },-- Gold ([Ding Ready!] Alert)
+            xpFreePosition = nil,
+            xpBgColor = { r = 0.05, g = 0.05, b = 0.05, a = 0.65 },
+            xpColor = { r = 0.58, g = 0.00, b = 0.83, a = 1.00 },
+            restedColor = { r = 0.00, g = 0.44, b = 0.88, a = 1.00 },
+            allQuestXPColor = { r = 0.12, g = 0.45, b = 0.25, a = 0.80 },
+            questXPColor = { r = 0.25, g = 0.85, b = 0.45, a = 0.65 },
+            dingReadyColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 },
 
-            -- Location & Precision Coordinates Header Bar
-            enableLocationBar = false,         -- Location & Precision coordinates header bar
-            locDockMode = "tracker_top",       -- "tracker_top" (snaps above tracker), "minimap_top", "free"
-            locHeight = 22,                    -- Bar height (16 to 36px)
-            locWidth = 280,                    -- Bar width when in free mode
-            locFontSize = 11,                  -- Location bar text font size (8 to 18px)
-            locFontOutline = "OUTLINE",        -- Location bar text outline
-            locBorderStyle = "flat",           -- "flat", "tooltip", "dialog", "toast", "none"
-            locBorderWidth = 1,                -- Border thickness in px
-            locBgTexture = "solid",            -- "solid", "tooltip", "marble", "rock", "parchment"
+            enableLocationBar = false,
+            locDockMode = "tracker_top",       -- "tracker_top", "minimap_top", "free"
+            locHeight = 22,
+            locWidth = 280,
+            locFontSize = 11,
+            locFontOutline = "OUTLINE",
+            locBorderStyle = "flat",
+            locBorderWidth = 1,
+            locBgTexture = "solid",
             locBgColor = { r = 0.06, g = 0.08, b = 0.12, a = 0.90 },
             locBorderColor = { r = 0.15, g = 0.55, b = 0.95, a = 0.85 },
-            locCustomTextColor = false,        -- Override PvP territory coloring with custom text color
-            locTextColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 }, -- Custom text color
-            coordsColor = { r = 1.00, g = 1.00, b = 1.00, a = 1.00 },  -- Precision coordinates text color
-            hideMinimapHeader = true,          -- Suppress default Minimap header (MinimapCluster.ZoneTextButton / BorderTop)
-            hideDefaultCoordinates = false,    -- Suppress default map coordinates
-            colorTerritory = true,             -- Color zone/subzone by PvP status (Sanctuary, Friendly, Contested, Hostile)
-            showSubzone = true,                -- Show subzone text alongside zone name
-            locFormat = "subzone_only",        -- "subzone_only" (shows subzone when in a landmark, zone in wild), "smart", "zone_only", "both"
-            showCoords = true,                 -- Show player coordinates (XX.X, YY.Y)
-            locFreePosition = nil,             -- Saved position for "free" docking mode
+            locCustomTextColor = false,
+            locTextColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 },
+            coordsColor = { r = 1.00, g = 1.00, b = 1.00, a = 1.00 },
+            hideMinimapHeader = true,
+            colorTerritory = true,
+            showSubzone = true,
+            locFormat = "subzone_only",        -- "subzone_only", "smart", "zone_only", "both"
+            showCoords = true,
+            locFreePosition = nil,
 
-            -- Quest Timer DataBar (Timed Quests)
-            enableTimerBar = true,             -- Quest Timer standalone data bar for timed quests (default: true)
-            timerDockMode = "tracker_top",     -- "tracker_top" (snaps above tracker), "tracker_bottom", "free"
-            timerHeight = 22,                  -- Bar height (16 to 36px)
-            timerWidth = 220,                  -- Bar width
-            timerFontSize = 11,                -- Timer text font size (8 to 18px)
-            timerFontOutline = "OUTLINE",      -- Timer text font outline
-            timerBorderStyle = "flat",         -- "flat", "tooltip", "dialog", "toast", "none"
-            timerBorderWidth = 1,              -- Border thickness in px
-            timerBgTexture = "solid",          -- "solid", "tooltip", "marble", "rock", "parchment"
+            enableTimerBar = true,
+            timerDockMode = "tracker_top",     -- "tracker_top", "tracker_bottom", "free"
+            timerHeight = 22,
+            timerWidth = 220,
+            timerFontSize = 11,
+            timerFontOutline = "OUTLINE",
+            timerBorderStyle = "flat",
+            timerBorderWidth = 1,
+            timerBgTexture = "solid",
             timerBgColor = { r = 0.06, g = 0.08, b = 0.12, a = 0.90 },
             timerBorderColor = { r = 1.00, g = 0.82, b = 0.00, a = 0.85 },
-            timerBarTexture = "Solid",         -- Statusbar texture for timer bar
-            timerShowTitle = true,             -- Show quest title alongside timer (e.g. "A Hot Mug: 04:12")
-            timerFreePosition = nil,           -- Saved position for "free" docking mode
-            timerColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 }, -- Classic gold statusbar / text
-            timerMaxValues = {},               -- Persisted maximum durations for timed quests across /reload
+            timerBarTexture = "Solid",
+            timerShowTitle = true,
+            timerFreePosition = nil,
+            timerColor = { r = 1.00, g = 0.82, b = 0.00, a = 1.00 },
+            timerMaxValues = {},
         },
     },
 }
 
--- Recursive table copy for defaults merging
+-- Recursive table copy for defaults merging (fills only missing keys)
 local function CopyDefaults(src, dest)
     if type(src) ~= "table" then return {} end
     if type(dest) ~= "table" then dest = {} end
@@ -1377,40 +844,43 @@ local function CopyDefaults(src, dest)
 end
 ns.CopyDefaults = CopyDefaults
 
--- Full recursive deep copy (clones ALL keys, not just missing ones — used for backup/restore)
+-- Full recursive deep copy
 local function DeepCopy(src)
     if type(src) ~= "table" then return src end
     local copy = {}
     for k, v in pairs(src) do
-        if type(v) == "table" then
-            copy[k] = DeepCopy(v)
-        else
-            copy[k] = v
-        end
+        copy[k] = DeepCopy(v)
     end
     return copy
 end
 ns.DeepCopy = DeepCopy
 
--- Simple internal event/callback bus
+-- ---------------------------------------------------------------------------
+-- Internal callback bus
+-- ---------------------------------------------------------------------------
 ns.callbacks = {}
 
 function ns:RegisterCallback(event, func)
-    if not self.callbacks[event] then
-        self.callbacks[event] = {}
+    local list = self.callbacks[event]
+    if not list then
+        list = {}
+        self.callbacks[event] = list
     end
-    table.insert(self.callbacks[event], func)
+    table_insert(list, func)
 end
 
 function ns:FireCallback(event, ...)
-    if self.callbacks[event] then
-        for _, func in ipairs(self.callbacks[event]) do
-            func(...)
+    local list = self.callbacks[event]
+    if list then
+        for i = 1, #list do
+            list[i](...)
         end
     end
 end
 
+-- ---------------------------------------------------------------------------
 -- Module Management System
+-- ---------------------------------------------------------------------------
 ns.modules = {}
 
 local moduleKeyMap = {
@@ -1431,384 +901,311 @@ function ns:GetModule(name)
 end
 
 function ns.IsModuleEnabled(moduleKey)
-    local db = ns.db and ns.db.modules
-    if not db then return true end
+    local mods = ns.db and ns.db.modules
+    if not mods then return true end
     local key = moduleKeyMap[moduleKey] or moduleKey
-    if db[key] == nil then return true end
-    return db[key] ~= false
+    return mods[key] ~= false
+end
+
+local function GetModuleInstance(key)
+    if key == "wayfinder" then return ns.WayfinderModule end
+    if key == "databars" then return ns.DataBarsModule end
+    if key == "questAutomation" then return ns.QuestAutomationModule end
+    if key == "qol" then return ns.QoLModule end
+end
+
+local function ReportError(context, err)
+    local handler = geterrorhandler and geterrorhandler()
+    if handler then
+        handler(string_format("%s: %s", context, tostring(err)))
+    end
 end
 
 function ns.SetModuleEnabled(moduleKey, enabled)
     if not ns.db then return end
-    if not ns.db.modules then ns.db.modules = {} end
     ns.db.modules[moduleKey] = enabled and true or false
 
-    local moduleInstances = {
-        wayfinder = ns.WayfinderModule,
-        databars = ns.DataBarsModule,
-        questAutomation = ns.QuestAutomationModule,
-        qol = ns.QoLModule,
-    }
-    local mod = moduleInstances[moduleKey]
-    if mod then
-        if enabled then
-            if mod.Enable then
-                pcall(mod.Enable, mod)
-            elseif mod.Initialize then
-                pcall(mod.Initialize, mod)
-            end
-        else
-            if mod.Disable then
-                pcall(mod.Disable, mod)
-            end
-        end
-    end
-
-    if ns.FlushDBToGlobals then
-        ns.FlushDBToGlobals()
+    local mod = GetModuleInstance(moduleKey)
+    if not mod then return end
+    local fn = enabled and (mod.Enable or mod.Initialize) or mod.Disable
+    if fn then
+        local ok, err = pcall(fn, mod)
+        if not ok then ReportError(addonName .. " module " .. moduleKey, err) end
     end
 end
 
 function ns:InitializeModules()
     for name, mod in pairs(self.modules) do
         local key = moduleKeyMap[name]
-        local isEnabled = true
-        if key then
-            isEnabled = ns.IsModuleEnabled(key)
-        end
+        local isEnabled = (not key) or ns.IsModuleEnabled(key)
         if isEnabled and type(mod.Initialize) == "function" then
-            local success, err = pcall(mod.Initialize, mod)
-            if not success then
-                print("|cffff3333[" .. addonName .. " Error]|r Failed to initialize module '" .. name .. "': " .. tostring(err))
+            local ok, err = pcall(mod.Initialize, mod)
+            if not ok then
+                ReportError(addonName .. " failed to initialize module '" .. name .. "'", err)
             end
         end
     end
 end
 
--- Keybinding Global Strings for Game Key Bindings Menu
-_G["BINDING_HEADER_BLEAKFIBER_TRACKER"] = "Bleakfiber's Quest Tracker"
-_G["HEADER_BLEAKFIBER_TRACKER"] = "Bleakfiber's Quest Tracker"
-_G["BINDING_CATEGORY_BLEAKFIBER_TRACKER"] = "Bleakfiber's Quest Tracker"
-_G["BINDING_CATEGORY_Bleakfiber's Quest Tracker"] = "Bleakfiber's Quest Tracker"
-_G["BINDING_NAME_BLEAKFIBER_USE_QUEST_ITEM"] = "Use Active Quest Item"
+-- ---------------------------------------------------------------------------
+-- Settings Migrations
+-- Steps run once per saved profile, directly on the raw SavedVariables tables
+-- (before AceDB fills in defaults) so only values the player actually chose are
+-- touched. Progress is tracked with profile.dbVersion.
+-- ---------------------------------------------------------------------------
+local function Sub(t, key)
+    local v = t[key]
+    if type(v) ~= "table" then return nil end
+    return v
+end
 
--- Database Initialization (Event-Safe across ADDON_LOADED, VARIABLES_LOADED, and PLAYER_LOGIN)
-local dbInitialized = false
-local function InitializeDB(triggerEvent)
-    if dbInitialized then return end
-
-    local rawExists = _G["BleakfiberTrackerDB"] ~= nil
-    -- If triggered early at ADDON_LOADED but SavedVariables haven't loaded yet, wait for VARIABLES_LOADED/PLAYER_LOGIN
-    if not rawExists and triggerEvent == "ADDON_LOADED" then
-        return
+local function Ensure(t, key)
+    local v = t[key]
+    if type(v) ~= "table" then
+        v = {}
+        t[key] = v
     end
+    return v
+end
 
-    dbInitialized = true
-
-    -- WoW Forever SavedVariables Backup Restore:
-    -- WoW Forever creates a duplicate 70/ folder for SavedVariables which can cause
-    -- settings to revert to defaults on reload/relog. If the primary DB is empty but
-    -- our backup has real data, restore from backup before AceDB touches anything.
-    local function HasAnyProfileData(db)
-        if not db or type(db) ~= "table" then return false end
-        if type(db.profiles) == "table" then
-            for _, pTable in pairs(db.profiles) do
-                if type(pTable) == "table" and next(pTable) then
-                    return true
-                end
-            end
+local MIGRATIONS = {
+    -- v1: one-time cleanup of settings from releases before 1.2.0
+    [1] = function(p)
+        local sorting = Sub(p, "sorting")
+        if sorting and sorting.mode == "distance" then
+            sorting.mode = "level"
         end
-        if type(db.profile) == "table" and next(db.profile) then
-            return true
+
+        -- Legacy position fields -> framePosition
+        if not p.framePosition and (p.xOfs or (p.point and p.point ~= "TOPRIGHT")) then
+            p.framePosition = {
+                point = p.point or "TOPRIGHT",
+                relativePoint = p.relativePoint or p.point or "TOPRIGHT",
+                x = p.xOfs or -250,
+                y = p.yOfs or -200,
+            }
         end
-        return false
-    end
+        p.point, p.relativePoint, p.xOfs, p.yOfs = nil, nil, nil, nil
 
-    local backupDB = _G["BleakfiberTrackerBackupDB"]
-    local primaryDB = _G["BleakfiberTrackerDB"]
-    local primaryHasProfiles = HasAnyProfileData(primaryDB)
-    local backupHasProfiles = HasAnyProfileData(backupDB)
-
-    if not primaryHasProfiles and backupHasProfiles then
-        -- Primary DB is empty/default but backup has real data — restore it
-        ns.Debug("[Backup Restore] Primary DB empty, restoring from BleakfiberTrackerBackupDB")
-        _G["BleakfiberTrackerDB"] = DeepCopy(backupDB)
-        primaryDB = _G["BleakfiberTrackerDB"]
-        rawExists = true
-    elseif primaryHasProfiles and not backupHasProfiles then
-        -- Backup is stale/empty — update it from primary
-        ns.Debug("[Backup Restore] Backup empty, seeding from primary DB")
-        _G["BleakfiberTrackerBackupDB"] = DeepCopy(primaryDB)
-    elseif primaryHasProfiles and backupHasProfiles then
-        -- Both exist — keep backup in sync with primary (primary wins on load)
-        _G["BleakfiberTrackerBackupDB"] = DeepCopy(primaryDB)
-    end
-
-    local hasProfiles = rawExists and type(_G["BleakfiberTrackerDB"].profiles) == "table"
-    local defProfile = hasProfiles and _G["BleakfiberTrackerDB"].profiles["Default"]
-    local defPos = defProfile and defProfile.framePosition
-    ns.Debug(string.format("[DB Init via %s] RawDB=%s, HasProfiles=%s, SavedPos=%s", 
-        tostring(triggerEvent),
-        tostring(rawExists), 
-        tostring(hasProfiles), 
-        defPos and (defPos.point .. " (" .. tostring(defPos.x) .. ", " .. tostring(defPos.y) .. ")") or "none"))
-
-    -- Migrate legacy profile structure if present
-    if BleakfiberTrackerDB and BleakfiberTrackerDB.profile then
-        if not BleakfiberTrackerDB.profiles then
-            BleakfiberTrackerDB.profiles = { ["Default"] = BleakfiberTrackerDB.profile }
-        elseif not BleakfiberTrackerDB.profiles["Default"] or not next(BleakfiberTrackerDB.profiles["Default"]) then
-            BleakfiberTrackerDB.profiles["Default"] = BleakfiberTrackerDB.profile
+        -- Quest item placement: fold legacy left/right options into the two supported placements
+        local legacy = Sub(p, "itemButtons")
+        local placement = p.itemButtonPlacement
+        if legacy and legacy.position == "right" and (placement == nil or placement == "outside_left") then
+            placement = "inside_right"
+        elseif legacy and legacy.position == "left" and placement == nil then
+            placement = "outside_left"
         end
-        BleakfiberTrackerDB.profile = nil
-    end
+        if placement == "inside_left" then
+            placement = "outside_left"
+        elseif placement == "outside_right" then
+            placement = "inside_right"
+        end
+        if placement ~= nil and placement ~= "outside_left" and placement ~= "inside_right" then
+            placement = nil
+        end
+        p.itemButtonPlacement = placement
 
-    local AceDB = LibStub and LibStub("AceDB-3.0", true)
-    if AceDB then
-        -- "Default" as third argument ensures all characters share "Default" by default
-        local dbObject = AceDB:New("BleakfiberTrackerDB", ns.defaultDB, "Default")
-        ns.dbObject = dbObject
-        ns.db = dbObject.profile
-
-        local function OnProfileChanged()
-            ns.db = dbObject.profile
-            if not ns.db.collapsedQuests then
-                ns.db.collapsedQuests = {}
+        -- Legacy cyan header defaults now follow the class color
+        local h = Sub(p, "headers")
+        if h then
+            local tc = h.textColor
+            if type(tc) == "table" and tc.r == 0.0 and tc.g and math_abs(tc.g - 0.75) < 0.01 and tc.b == 1.0 then
+                h.textColor = nil
             end
-            if ns.db.sorting and ns.db.sorting.mode == "distance" then
-                ns.db.sorting.mode = "level"
-            end
-            if ns.db.itemButtons and ns.db.itemButtons.position == "right" and (not ns.db.itemButtonPlacement or ns.db.itemButtonPlacement == "outside_left") then
-                ns.db.itemButtonPlacement = "inside_right"
-            elseif ns.db.itemButtons and ns.db.itemButtons.position == "left" and not ns.db.itemButtonPlacement then
-                ns.db.itemButtonPlacement = "outside_left"
-            end
-            if ns.db.itemButtonPlacement == "inside_left" or ns.db.itemButtonPlacement == "outside_right" then
-                ns.db.itemButtonPlacement = (ns.db.itemButtonPlacement == "inside_left") and "outside_left" or "inside_right"
-            elseif ns.db.itemButtonPlacement ~= "outside_left" and ns.db.itemButtonPlacement ~= "inside_right" then
-                ns.db.itemButtonPlacement = "inside_right"
-            end
-            if ns.Tracker and ns.Tracker.UpdateSettings then
-                ns.Tracker:UpdateSettings()
-            end
-            if ns.SocialModule and ns.SocialModule.UpdateLootEvents then
-                ns.SocialModule:UpdateLootEvents()
-            end
-            ns:FireCallback("SETTINGS_UPDATED")
-            ns:FireCallback("QUEST_DATA_CHANGED")
-
-            local ACR = LibStub and LibStub("AceConfigRegistry-3.0", true)
-            if ACR then
-                ACR:NotifyChange("BleakfiberQuestTracker")
-                ACR:NotifyChange("BleakfiberQuestTracker_Profiles")
+            local bc = h.buttonColor
+            if type(bc) == "table" and bc.r == 0.0 and bc.g and math_abs(bc.g - 0.75) < 0.01 and bc.b == 1.0 then
+                h.buttonColor = nil
             end
         end
 
-        dbObject:RegisterCallback("OnProfileChanged", OnProfileChanged)
-        dbObject:RegisterCallback("OnProfileCopied", OnProfileChanged)
-        dbObject:RegisterCallback("OnProfileReset", OnProfileChanged)
+        local f = Sub(p, "fonts")
+        if f then
+            if f.objectiveOutline == "NONE" then f.objectiveOutline = "" end
+            if f.headerOutline == "NONE" then f.headerOutline = "" end
+            if f.font == "" then f.font = nil end
+            if f.headerFont == "" then f.headerFont = nil end
+            if f.objectiveFont == "" then f.objectiveFont = nil end
+        end
 
-        if ns.pendingProfileSync then
-            local pending = ns.pendingProfileSync
-            ns.pendingProfileSync = nil
-            local exists = false
-            if dbObject.GetProfiles then
-                local list = dbObject:GetProfiles()
-                if type(list) == "table" then
-                    for _, p in ipairs(list) do
-                        if p == pending then exists = true; break end
+        -- Legacy "custom" sound entries pointed at a secondary choice field
+        local s = Sub(p, "sound")
+        if s then
+            if s.soundChoice == "custom" then
+                local alt = s.customCompleteSoundChoice
+                s.soundChoice = (alt and alt ~= "custom" and alt ~= "") and alt or nil
+            end
+            if s.objectiveSoundChoice == "custom" then
+                local alt = s.customObjectiveSoundChoice
+                s.objectiveSoundChoice = (alt and alt ~= "custom" and alt ~= "") and alt or nil
+            end
+            s.useCustomCompleteSound, s.useCustomObjectiveSound = nil, nil
+            s.customCompleteSoundChoice, s.customObjectiveSoundChoice = nil, nil
+            s.customCompleteSoundPath, s.customObjectiveSoundPath = nil, nil
+        end
+    end,
+
+    -- v2 (1.2.0): one home for every setting
+    [2] = function(p)
+        -- Quest automation & fast loot used to be duplicated under "social"
+        local social = Sub(p, "social")
+        if social then
+            local qa
+            for _, key in ipairs({ "autoAcceptNPC", "autoAcceptShared", "autoTurnIn", "autoShare", "shiftBypass" }) do
+                if social[key] ~= nil then
+                    qa = qa or Ensure(p, "questAutomation")
+                    if qa[key] == nil then
+                        qa[key] = social[key]
                     end
+                    social[key] = nil
                 end
             end
-            local current = dbObject:GetCurrentProfile()
-            if exists then
-                dbObject:SetProfile(pending)
-            else
-                dbObject:SetProfile(pending)
-                if current and current ~= pending and dbObject.CopyProfile then
-                    dbObject:CopyProfile(current)
+            if social.fastAutoLoot ~= nil then
+                local qol = Ensure(p, "qol")
+                if qol.fastAutoLoot == nil then
+                    qol.fastAutoLoot = social.fastAutoLoot
                 end
+                social.fastAutoLoot = nil
             end
         end
-    else
-        if not BleakfiberTrackerDB then
-            BleakfiberTrackerDB = {}
-        end
-        BleakfiberTrackerDB = CopyDefaults(ns.defaultDB, BleakfiberTrackerDB)
-        ns.db = BleakfiberTrackerDB.profile
-    end
 
-    -- Migrate legacy position fields
-    if ns.db and not ns.db.framePosition and (ns.db.xOfs or (ns.db.point and ns.db.point ~= "TOPRIGHT")) then
-        ns.db.framePosition = {
-            point = ns.db.point or "TOPRIGHT",
-            relativePoint = ns.db.relativePoint or ns.db.point or "TOPRIGHT",
-            x = ns.db.xOfs or -250,
-            y = ns.db.yOfs or -200,
-        }
-        ns.db.point = nil
-        ns.db.relativePoint = nil
-        ns.db.xOfs = nil
-        ns.db.yOfs = nil
-    end
+        -- Junk selling had two aliases
+        local qol = Sub(p, "qol")
+        if qol then
+            if qol.autoVendorGreys == true then
+                qol.autoSellJunk = true
+            end
+            qol.autoVendorGreys = nil
+        end
 
-    -- Initialize per-character storage for frame position
-    if not _G["BleakfiberTrackerCharDB"] then
-        _G["BleakfiberTrackerCharDB"] = {}
-    end
-    ns.charDB = (ns.dbObject and ns.dbObject.char) or _G["BleakfiberTrackerCharDB"]
+        -- Quest item placement aliases were folded into itemButtonPlacement (v1)
+        local items = Sub(p, "itemButtons")
+        if items then
+            items.position, items.placement = nil, nil
+        end
 
-    -- Restore from per-character backup if profile framePosition is missing
-    if ns.db and not ns.db.framePosition and _G["BleakfiberTrackerCharDB"].framePosition then
-        ns.db.framePosition = _G["BleakfiberTrackerCharDB"].framePosition
-    end
+        local bars = Sub(p, "databars")
+        if bars then
+            if bars.replaceBlizzardXP == false then
+                bars.hideBlizzardXPBar = false
+            end
+            bars.replaceBlizzardXP = nil
+            bars.timerActiveQuests = nil
+        end
 
-    if not ns.db.collapsedQuests then
-        ns.db.collapsedQuests = {}
-    end
-    if ns.db.sorting and ns.db.sorting.mode == "distance" then
-        ns.db.sorting.mode = "level"
-    end
-    if ns.db and ns.db.itemButtons and ns.db.itemButtons.position == "right" and (not ns.db.itemButtonPlacement or ns.db.itemButtonPlacement == "outside_left") then
-        ns.db.itemButtonPlacement = "inside_right"
-    elseif ns.db and ns.db.itemButtons and ns.db.itemButtons.position == "left" and not ns.db.itemButtonPlacement then
-        ns.db.itemButtonPlacement = "outside_left"
-    end
-    if ns.db and (ns.db.itemButtonPlacement == "inside_left" or ns.db.itemButtonPlacement == "outside_right") then
-        ns.db.itemButtonPlacement = (ns.db.itemButtonPlacement == "inside_left") and "outside_left" or "inside_right"
-    elseif ns.db and (ns.db.itemButtonPlacement ~= "outside_left" and ns.db.itemButtonPlacement ~= "inside_right") then
-        ns.db.itemButtonPlacement = "inside_right"
-    end
-    if not BleakfiberTrackerDB.partyQuestData then
-        BleakfiberTrackerDB.partyQuestData = {}
-    end
-    ns.partyQuestData = BleakfiberTrackerDB.partyQuestData
+        -- Zone filter flag -> filterMode
+        local filtering = Sub(p, "filtering")
+        if filtering then
+            if filtering.zoneOnly and filtering.filterMode == nil then
+                filtering.filterMode = "zone"
+            end
+            filtering.zoneOnly = nil
+        end
 
-    -- Initialize Wayfinder defaults for existing profiles
-    if ns.db and ns.db.wayfinder then
-        if not ns.db.wayfinder.initialized then
-            ns.db.wayfinder.enableHUDArrow = true
-            ns.db.wayfinder.enableInlineArrow = true
-            ns.db.wayfinder.initialized = true
+        -- Keep the player's arrow size; only clamp it to the supported range (14 - 32)
+        local wf = Sub(p, "wayfinder")
+        if wf then
+            local size = tonumber(wf.inlineArrowSize)
+            if size then
+                wf.inlineArrowSize = math_max(14, math_min(32, size))
+            end
+            wf.initialized = nil
         end
-        if not ns.db.wayfinder.inlineArrowSize or ns.db.wayfinder.inlineArrowSize < 18 then
-            ns.db.wayfinder.inlineArrowSize = 22
-        end
-        if not ns.db.wayfinder.inlineArrowPosition then
-            ns.db.wayfinder.inlineArrowPosition = "left"
-        end
-        if ns.db.wayfinder.arrivalClearDelay == nil then
-            ns.db.wayfinder.arrivalClearDelay = 5
-        end
-        if ns.db.wayfinder.showBackdrop == nil then
-            ns.db.wayfinder.showBackdrop = false
-        end
-        local validStyles = { ["auto"] = true, ["minimal"] = true, ["classic"] = true }
-        if not ns.db.wayfinder.arrowStyle or not validStyles[ns.db.wayfinder.arrowStyle] then
-            ns.db.wayfinder.arrowStyle = "auto"
-        end
-        if ns.db.wayfinder.hideInCombat == nil then
-            ns.db.wayfinder.hideInCombat = true
-        end
-        if ns.db.wayfinder.showETA == nil then
-            ns.db.wayfinder.showETA = false
-        end
-        if ns.db.wayfinder.showMapPins == nil then
-            ns.db.wayfinder.showMapPins = true
-        end
-        if ns.db.wayfinder.showCoordinates == nil then
-            ns.db.wayfinder.showCoordinates = false
-        end
-        if not ns.db.wayfinder.savedWaypoints then
-            ns.db.wayfinder.savedWaypoints = {}
+    end,
+}
+
+local function MigrateRawProfile(profile)
+    if type(profile) ~= "table" then return end
+    local version = tonumber(profile.dbVersion) or 0
+    for v = version + 1, ns.DB_VERSION do
+        local step = MIGRATIONS[v]
+        if step then
+            local ok, err = pcall(step, profile)
+            if not ok then ReportError(addonName .. " settings migration v" .. v, err) end
         end
     end
-
-    if ns.db and ns.db.sorting and ns.db.sorting.activeOnTop == nil then
-        ns.db.sorting.activeOnTop = true
-    end
-
-    -- Default Header Text and Buttons to player's Class Color if still using legacy cyan default
-    if ns.db and ns.db.headers then
-        local tc = ns.db.headers.textColor
-        if tc and tc.r == 0.0 and math.abs(tc.g - 0.75) < 0.01 and tc.b == 1.0 then
-            ns.db.headers.textColor = nil
-        end
-        local bc = ns.db.headers.buttonColor
-        if bc and bc.r == 0.0 and math.abs(bc.g - 0.75) < 0.01 and bc.b == 1.0 then
-            ns.db.headers.buttonColor = nil
-        end
-    end
-
-    -- Default typography: fallback only if unassigned
-    if ns.db and ns.db.fonts then
-        if not ns.db.fonts.font or ns.db.fonts.font == "" then
-            ns.db.fonts.font = "Nata Sans Bold"
-        end
-        if not ns.db.fonts.headerFont or ns.db.fonts.headerFont == "" then
-            ns.db.fonts.headerFont = "Nata Sans Bold"
-        end
-        if not ns.db.fonts.objectiveFont or ns.db.fonts.objectiveFont == "" then
-            ns.db.fonts.objectiveFont = "Nata Sans Regular"
-        end
-        if ns.db.fonts.objectiveOutline == "NONE" then
-            ns.db.fonts.objectiveOutline = ""
-        end
-        if ns.db.fonts.headerOutline == "NONE" then
-            ns.db.fonts.headerOutline = ""
-        end
-    end
-
-    -- Initialize Sound defaults for existing profiles
-    if ns.db then
-        if not ns.db.sound then
-            ns.db.sound = {}
-        end
-        if ns.db.sound.enableCompleteSound == nil then
-            ns.db.sound.enableCompleteSound = true
-        end
-        if not ns.db.sound.soundChoice then
-            ns.db.sound.soundChoice = "peon"
-        end
-        if not ns.db.sound.customCompleteSoundChoice then
-            ns.db.sound.customCompleteSoundChoice = "beep"
-        end
-        if not ns.db.sound.customCompleteSoundPath then
-            ns.db.sound.customCompleteSoundPath = "Interface\\AddOns\\BleakfibersQuestTracker-Forever\\Media\\Sounds\\beep.wav"
-        end
-        if ns.db.sound.enableObjectiveSound == nil then
-            ns.db.sound.enableObjectiveSound = true
-        end
-        if not ns.db.sound.objectiveSoundChoice then
-            ns.db.sound.objectiveSoundChoice = "whisper_ping"
-        end
-        if not ns.db.sound.customObjectiveSoundChoice then
-            ns.db.sound.customObjectiveSoundChoice = "beep"
-        end
-        if not ns.db.sound.customObjectiveSoundPath then
-            ns.db.sound.customObjectiveSoundPath = "Interface\\AddOns\\BleakfibersQuestTracker-Forever\\Media\\Sounds\\beep.wav"
-        end
-        if ns.db.sound.soundChoice == "custom" then
-            ns.db.sound.soundChoice = (ns.db.sound.customCompleteSoundChoice and ns.db.sound.customCompleteSoundChoice ~= "custom" and ns.db.sound.customCompleteSoundChoice) or "peon"
-            ns.db.sound.useCustomCompleteSound = false
-        end
-        if ns.db.sound.objectiveSoundChoice == "custom" then
-            ns.db.sound.objectiveSoundChoice = (ns.db.sound.customObjectiveSoundChoice and ns.db.sound.customObjectiveSoundChoice ~= "custom" and ns.db.sound.customObjectiveSoundChoice) or "whisper_ping"
-            ns.db.sound.useCustomObjectiveSound = false
-        end
-        if not ns.db.sound.customSoundsList then
-            ns.db.sound.customSoundsList = {}
-        end
-    end
-
-    local activeProf = (ns.dbObject and ns.dbObject.GetCurrentProfile and ns.dbObject:GetCurrentProfile()) or "none"
-    local pos = ns.db and ns.db.framePosition
-    ns.Debug(string.format("[DB Ready] profile=%s, pos=%s", 
-        tostring(activeProf), 
-        pos and (pos.point .. " (" .. tostring(pos.x) .. ", " .. tostring(pos.y) .. ")") or "default"))
+    profile.dbVersion = ns.DB_VERSION
 end
 
--- Color Picker Enhancements: Quick-select Class Color, Faction Color, Pure Black & Hex Input on any ColorPicker
+local VALID_ARROW_STYLES = { auto = true, minimal = true, classic = true, ["3d_modern"] = true, ["3d_classic"] = true }
+
+-- Repairs invalid values on the live profile (never resets a valid user choice)
+local function ValidateProfile(profile)
+    if not profile then return end
+    if rawget(profile, "dbVersion") == nil then
+        profile.dbVersion = ns.DB_VERSION -- brand-new profile: nothing to migrate
+    end
+    local wf = profile.wayfinder
+    if wf and not VALID_ARROW_STYLES[wf.arrowStyle] then
+        wf.arrowStyle = "auto"
+    end
+    local placement = profile.itemButtonPlacement
+    if placement ~= "outside_left" and placement ~= "inside_right" then
+        profile.itemButtonPlacement = "inside_right"
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- Database Initialization (SavedVariables are available at our ADDON_LOADED)
+-- ---------------------------------------------------------------------------
+local function OnProfileChanged()
+    ns.db = ns.dbObject.profile
+    ValidateProfile(ns.db)
+    ns:FireCallback("PROFILE_CHANGED")
+    ns:FireCallback("SETTINGS_UPDATED")
+    ns:FireCallback("QUEST_DATA_CHANGED")
+end
+
+local function InitializeDB()
+    if ns.dbObject then return end
+
+    local sv = _G["BleakfiberTrackerDB"]
+    if type(sv) == "table" then
+        -- Pre-AceDB single profile layout
+        if type(sv.profile) == "table" then
+            sv.profiles = sv.profiles or {}
+            if not sv.profiles["Default"] or not next(sv.profiles["Default"]) then
+                sv.profiles["Default"] = sv.profile
+            end
+            sv.profile = nil
+        end
+        -- Data that no longer belongs in SavedVariables
+        sv.partyQuestData = nil
+        sv.rawPosition = nil
+
+        if type(sv.profiles) == "table" then
+            for _, rawProfile in pairs(sv.profiles) do
+                MigrateRawProfile(rawProfile)
+            end
+        end
+    end
+
+    local AceDB = LibStub("AceDB-3.0")
+    -- "Default" as third argument ensures all characters share "Default" by default
+    local dbObject = AceDB:New("BleakfiberTrackerDB", ns.defaultDB, "Default")
+    ns.dbObject = dbObject
+    ns.db = dbObject.profile
+
+    ns.SetLanguage(dbObject.global.language)
+    ValidateProfile(ns.db)
+
+    dbObject.RegisterCallback(ns, "OnProfileChanged", OnProfileChanged)
+    dbObject.RegisterCallback(ns, "OnProfileCopied", OnProfileChanged)
+    dbObject.RegisterCallback(ns, "OnProfileReset", OnProfileChanged)
+
+    if ns.pendingProfileSync then
+        local pending = ns.pendingProfileSync
+        ns.pendingProfileSync = nil
+        SwitchToProfile(pending)
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- Color Picker Enhancements: Class Color, Faction Color, Pure Black & Hex Input
+-- ---------------------------------------------------------------------------
+local function HexFromRGB(r, g, b)
+    return string_format("#%02X%02X%02X", math_floor(r * 255 + 0.5), math_floor(g * 255 + 0.5), math_floor(b * 255 + 0.5))
+end
+
 local function SetupColorPickerEnhancements()
     if not ColorPickerFrame or ColorPickerFrame.BleakfiberEnhanced then return end
     ColorPickerFrame.BleakfiberEnhanced = true
@@ -1822,7 +1219,7 @@ local function SetupColorPickerEnhancements()
             bgFile = "Interface\\Buttons\\WHITE8x8",
             edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
             tile = false, tileSize = 0, edgeSize = 12,
-            insets = { left = 3, right = 3, top = 3, bottom = 3 }
+            insets = { left = 3, right = 3, top = 3, bottom = 3 },
         })
         bar:SetBackdropColor(0.06, 0.06, 0.08, 0.95)
         bar:SetBackdropBorderColor(0.35, 0.35, 0.40, 0.9)
@@ -1831,239 +1228,126 @@ local function SetupColorPickerEnhancements()
     local customHexEditBox
 
     local function ApplyColor(r, g, b)
-        r = math.max(0, math.min(1, r))
-        g = math.max(0, math.min(1, g))
-        b = math.max(0, math.min(1, b))
+        r = math_max(0, math_min(1, r))
+        g = math_max(0, math_min(1, g))
+        b = math_max(0, math_min(1, b))
 
-        local hexFormatted = string.format("#%02X%02X%02X", math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
         if customHexEditBox and not customHexEditBox:HasFocus() then
-            customHexEditBox:SetText(hexFormatted)
+            customHexEditBox:SetText(HexFromRGB(r, g, b))
         end
 
-        -- Detect current alpha if present
         local a = 1
         if ColorPickerFrame.GetColorAlpha then
             local ok, val = pcall(ColorPickerFrame.GetColorAlpha, ColorPickerFrame)
             if ok and type(val) == "number" then a = val end
-        elseif OpacitySliderFrame and OpacitySliderFrame.GetValue then
-            local ok, val = pcall(OpacitySliderFrame.GetValue, OpacitySliderFrame)
-            if ok and type(val) == "number" then a = val end
         end
 
-        local colorObj = nil
-        if CreateColor then
-            colorObj = CreateColor(r, g, b, a)
-        end
-
-        ColorPickerFrame.r = r
-        ColorPickerFrame.g = g
-        ColorPickerFrame.b = b
-        if colorObj then
-            ColorPickerFrame.color = colorObj
-        end
-
-        -- 1. Modern ColorPickerFrame (10.2.5+ / Dragonflight / 1.15.2+):
-        if colorObj and ColorPickerFrame.SetColor then
-            pcall(ColorPickerFrame.SetColor, ColorPickerFrame, colorObj)
-        end
-
-        local cp = ColorPickerFrame.Content and ColorPickerFrame.Content.ColorPicker
-        if cp then
-            if colorObj and cp.SetColor then
-                pcall(cp.SetColor, cp, colorObj)
-            end
+        local colorObj = CreateColor and CreateColor(r, g, b, a)
+        if colorObj and ColorPickerFrame.Content and ColorPickerFrame.Content.ColorPicker then
+            local cp = ColorPickerFrame.Content.ColorPicker
             if cp.SetColorRGB then
                 pcall(cp.SetColorRGB, cp, r, g, b)
             end
         end
-
-        -- 2. Classic ColorPickerFrame:
         if ColorPickerFrame.SetColorRGB then
             pcall(ColorPickerFrame.SetColorRGB, ColorPickerFrame, r, g, b)
         end
 
-        -- 3. Modern HexBox: set text AND trigger native OnEnterPressed / OnTextChanged
         local hexBox = ColorPickerFrame.Content and ColorPickerFrame.Content.HexBox
-        if hexBox then
-            local hexStr = string.format("%02X%02X%02X", math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
-            if hexBox.SetText then
-                pcall(hexBox.SetText, hexBox, hexStr)
-            end
+        if hexBox and hexBox.SetText then
+            pcall(hexBox.SetText, hexBox, HexFromRGB(r, g, b):sub(2))
             local onEnter = hexBox:GetScript("OnEnterPressed")
             if onEnter then
                 pcall(onEnter, hexBox)
             end
         end
 
-        -- 4. Color Swatches
-        if ColorSwatch then
-            if ColorSwatch.SetColorTexture then
-                pcall(ColorSwatch.SetColorTexture, ColorSwatch, r, g, b, a)
-            elseif ColorSwatch.SetVertexColor then
-                pcall(ColorSwatch.SetVertexColor, ColorSwatch, r, g, b)
-            end
-        end
-        local contentSwatch = ColorPickerFrame.Content and ColorPickerFrame.Content.ColorSwatch
-        if contentSwatch then
-            if contentSwatch.SetColorTexture then
-                pcall(contentSwatch.SetColorTexture, contentSwatch, r, g, b, a)
-            elseif contentSwatch.SetVertexColor then
-                pcall(contentSwatch.SetVertexColor, contentSwatch, r, g, b)
-            end
-        end
-
-        -- 5. Fire AceGUI / Blizzard callbacks with temporary GetColorRGB wrapper to guarantee no desync
+        -- Fire the color callbacks while GetColorRGB reports the chosen color
         local origGetColorRGB = ColorPickerFrame.GetColorRGB
         ColorPickerFrame.GetColorRGB = function() return r, g, b end
-
-        local origGetColor = ColorPickerFrame.GetColor
-        if colorObj and origGetColor then
-            ColorPickerFrame.GetColor = function() return colorObj end
-        end
-
-        if ColorPickerFrame.info and ColorPickerFrame.info.swatchFunc then
-            pcall(ColorPickerFrame.info.swatchFunc)
-        end
-        if ColorPickerFrame.swatchFunc then
+        local info = ColorPickerFrame.info
+        if info and info.swatchFunc then
+            pcall(info.swatchFunc)
+        elseif ColorPickerFrame.swatchFunc then
             pcall(ColorPickerFrame.swatchFunc)
-        end
-        if ColorPickerFrame.func then
+        elseif ColorPickerFrame.func then
             pcall(ColorPickerFrame.func)
         end
-
         ColorPickerFrame.GetColorRGB = origGetColorRGB
-        if origGetColor then
-            ColorPickerFrame.GetColor = origGetColor
-        end
     end
 
-    -- Row 1: Class Color Button & Faction Color Button
-    local btnClass = CreateFrame("Button", "BleakfiberColorPickerClassBtn", bar, "UIPanelButtonTemplate")
-    btnClass:SetSize(146, 24)
-    btnClass:SetPoint("TOPLEFT", bar, "TOPLEFT", 6, -5)
-    btnClass:SetText("")
+    local function CreateSwatchButton(name, point, x, y, onClick, tooltipTitle, tooltipText)
+        local btn = CreateFrame("Button", name, bar, "UIPanelButtonTemplate")
+        btn:SetSize(146, 24)
+        btn:SetPoint(point, bar, point, x, y)
+        btn:SetText("")
 
-    local classSwatchBorder = btnClass:CreateTexture(nil, "BACKGROUND")
-    classSwatchBorder:SetSize(16, 16)
-    classSwatchBorder:SetPoint("LEFT", btnClass, "LEFT", 6, 0)
-    classSwatchBorder:SetColorTexture(0, 0, 0, 1)
+        local border = btn:CreateTexture(nil, "BACKGROUND")
+        border:SetSize(16, 16)
+        border:SetPoint("LEFT", btn, "LEFT", 6, 0)
+        border:SetColorTexture(0, 0, 0, 1)
+        btn.swatchBorder = border
 
-    local classSwatch = btnClass:CreateTexture(nil, "ARTWORK")
-    classSwatch:SetSize(12, 12)
-    classSwatch:SetPoint("CENTER", classSwatchBorder, "CENTER", 0, 0)
+        local swatch = btn:CreateTexture(nil, "ARTWORK")
+        swatch:SetSize(12, 12)
+        swatch:SetPoint("CENTER", border, "CENTER", 0, 0)
+        btn.swatch = swatch
 
-    local classLabel = btnClass:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    classLabel:SetPoint("LEFT", classSwatchBorder, "RIGHT", 6, 0)
-    classLabel:SetPoint("RIGHT", btnClass, "RIGHT", -4, 0)
-    classLabel:SetJustifyH("LEFT")
-    classLabel:SetTextColor(1, 1, 1, 1)
-    if classLabel.SetShadowColor and classLabel.SetShadowOffset then
-        classLabel:SetShadowColor(0, 0, 0, 1)
-        classLabel:SetShadowOffset(1, -1)
+        local label = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        label:SetPoint("LEFT", border, "RIGHT", 6, 0)
+        label:SetPoint("RIGHT", btn, "RIGHT", -4, 0)
+        label:SetJustifyH("LEFT")
+        label:SetTextColor(1, 1, 1, 1)
+        label:SetShadowColor(0, 0, 0, 1)
+        label:SetShadowOffset(1, -1)
+        btn.label = label
+
+        btn:SetScript("OnClick", onClick)
+        btn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:AddLine(tooltipTitle(), 1, 1, 1)
+            GameTooltip:AddLine(tooltipText(), 0.85, 0.85, 0.85, true)
+            GameTooltip:Show()
+        end)
+        btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        return btn
     end
 
-    btnClass:SetScript("OnClick", function()
-        local c = ns.GetClassColor()
-        ApplyColor(c.r, c.g, c.b)
-    end)
-    btnClass:SetScript("OnEnter", function(self)
-        local curClass = UnitClass("player") or "Class"
-        local c = ns.GetClassColor()
-        GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:AddLine("Set to Class Color", 1, 1, 1)
-        GameTooltip:AddLine(string.format("Applies your %s color (|cff%02x%02x%02x#%02X%02X%02X|r) to this setting.",
-            curClass, c.r * 255, c.g * 255, c.b * 255, c.r * 255, c.g * 255, c.b * 255), 0.85, 0.85, 0.85, true)
-        GameTooltip:Show()
-    end)
-    btnClass:SetScript("OnLeave", function()
-        GameTooltip:Hide()
-    end)
+    local btnClass = CreateSwatchButton("BleakfiberColorPickerClassBtn", "TOPLEFT", 6, -5,
+        function()
+            local c = ns.GetClassColor()
+            ApplyColor(c.r, c.g, c.b)
+        end,
+        function() return L["Set to Class Color"] end,
+        function()
+            local c = ns.GetClassColor()
+            return string_format(L["Applies your %s color (%s) to this setting."], UnitClass("player") or "", HexFromRGB(c.r, c.g, c.b))
+        end)
 
-    local btnFaction = CreateFrame("Button", "BleakfiberColorPickerFactionBtn", bar, "UIPanelButtonTemplate")
-    btnFaction:SetSize(146, 24)
-    btnFaction:SetPoint("TOPRIGHT", bar, "TOPRIGHT", -6, -5)
-    btnFaction:SetText("")
+    local btnFaction = CreateSwatchButton("BleakfiberColorPickerFactionBtn", "TOPRIGHT", -6, -5,
+        function()
+            local c = ns.GetFactionColor()
+            ApplyColor(c.r, c.g, c.b)
+        end,
+        function() return L["Set to Faction Color"] end,
+        function()
+            local c = ns.GetFactionColor()
+            local _, localizedFaction = UnitFactionGroup("player")
+            return string_format(L["Applies your %s color (%s) to this setting."], localizedFaction or "", HexFromRGB(c.r, c.g, c.b))
+        end)
 
-    local factionSwatchBorder = btnFaction:CreateTexture(nil, "BACKGROUND")
-    factionSwatchBorder:SetSize(16, 16)
-    factionSwatchBorder:SetPoint("LEFT", btnFaction, "LEFT", 6, 0)
-    factionSwatchBorder:SetColorTexture(0, 0, 0, 1)
+    local btnBlack = CreateSwatchButton("BleakfiberColorPickerBlackBtn", "BOTTOMLEFT", 6, 5,
+        function()
+            ApplyColor(0, 0, 0)
+            if customHexEditBox then customHexEditBox:SetText("#000000") end
+        end,
+        function() return L["Set to Pure Black (#000000)"] end,
+        function() return L["Instantly sets the color to solid black (#000000) for maximum visual contrast."] end)
+    btnBlack.swatchBorder:SetColorTexture(0.65, 0.65, 0.65, 1)
+    btnBlack.swatch:SetColorTexture(0, 0, 0, 1)
+    btnBlack.label:SetText(L["Black (#000000)"])
 
-    local factionSwatch = btnFaction:CreateTexture(nil, "ARTWORK")
-    factionSwatch:SetSize(12, 12)
-    factionSwatch:SetPoint("CENTER", factionSwatchBorder, "CENTER", 0, 0)
-
-    local factionLabel = btnFaction:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    factionLabel:SetPoint("LEFT", factionSwatchBorder, "RIGHT", 6, 0)
-    factionLabel:SetPoint("RIGHT", btnFaction, "RIGHT", -4, 0)
-    factionLabel:SetJustifyH("LEFT")
-    factionLabel:SetTextColor(1, 1, 1, 1)
-    if factionLabel.SetShadowColor and factionLabel.SetShadowOffset then
-        factionLabel:SetShadowColor(0, 0, 0, 1)
-        factionLabel:SetShadowOffset(1, -1)
-    end
-
-    btnFaction:SetScript("OnClick", function()
-        local c = ns.GetFactionColor()
-        ApplyColor(c.r, c.g, c.b)
-    end)
-    btnFaction:SetScript("OnEnter", function(self)
-        local curFaction = UnitFactionGroup("player") or "Faction"
-        local c = ns.GetFactionColor()
-        GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:AddLine("Set to Faction Color", 1, 1, 1)
-        GameTooltip:AddLine(string.format("Applies your %s color (|cff%02x%02x%02x#%02X%02X%02X|r) to this setting.",
-            curFaction, c.r * 255, c.g * 255, c.b * 255, c.r * 255, c.g * 255, c.b * 255), 0.85, 0.85, 0.85, true)
-        GameTooltip:Show()
-    end)
-    btnFaction:SetScript("OnLeave", function()
-        GameTooltip:Hide()
-    end)
-
-    -- Row 2: Pure Black (#000000) Quick Button & Direct Hex Input (#000000)
-    local btnBlack = CreateFrame("Button", "BleakfiberColorPickerBlackBtn", bar, "UIPanelButtonTemplate")
-    btnBlack:SetSize(146, 24)
-    btnBlack:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 6, 5)
-    btnBlack:SetText("")
-
-    local blackSwatchBorder = btnBlack:CreateTexture(nil, "BACKGROUND")
-    blackSwatchBorder:SetSize(16, 16)
-    blackSwatchBorder:SetPoint("LEFT", btnBlack, "LEFT", 6, 0)
-    blackSwatchBorder:SetColorTexture(0.65, 0.65, 0.65, 1)
-
-    local blackSwatch = btnBlack:CreateTexture(nil, "ARTWORK")
-    blackSwatch:SetSize(12, 12)
-    blackSwatch:SetPoint("CENTER", blackSwatchBorder, "CENTER", 0, 0)
-    blackSwatch:SetColorTexture(0, 0, 0, 1)
-
-    local blackLabel = btnBlack:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    blackLabel:SetPoint("LEFT", blackSwatchBorder, "RIGHT", 6, 0)
-    blackLabel:SetPoint("RIGHT", btnBlack, "RIGHT", -4, 0)
-    blackLabel:SetJustifyH("LEFT")
-    blackLabel:SetTextColor(1, 1, 1, 1)
-    blackLabel:SetText("Black (#000000)")
-    if blackLabel.SetShadowColor and blackLabel.SetShadowOffset then
-        blackLabel:SetShadowColor(0, 0, 0, 1)
-        blackLabel:SetShadowOffset(1, -1)
-    end
-
-    btnBlack:SetScript("OnClick", function()
-        ApplyColor(0, 0, 0)
-        if customHexEditBox then
-            customHexEditBox:SetText("#000000")
-        end
-    end)
-    btnBlack:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:AddLine("Set to Pure Black (#000000)", 1, 1, 1)
-        GameTooltip:AddLine("Instantly sets the color to solid black (#000000) for maximum visual contrast.", 0.85, 0.85, 0.85, true)
-        GameTooltip:Show()
-    end)
-    btnBlack:SetScript("OnLeave", function()
-        GameTooltip:Hide()
-    end)
-
-    -- Direct Hex Input Box on the Color Picker Bar
+    -- Direct Hex Input Box
     local hexContainer = CreateFrame("Frame", nil, bar, BackdropTemplateMixin and "BackdropTemplate")
     hexContainer:SetSize(146, 24)
     hexContainer:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", -6, 5)
@@ -2072,7 +1356,7 @@ local function SetupColorPickerEnhancements()
             bgFile = "Interface\\Buttons\\WHITE8x8",
             edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
             tile = false, tileSize = 0, edgeSize = 10,
-            insets = { left = 2, right = 2, top = 2, bottom = 2 }
+            insets = { left = 2, right = 2, top = 2, bottom = 2 },
         })
         hexContainer:SetBackdropColor(0.03, 0.03, 0.05, 0.95)
         hexContainer:SetBackdropBorderColor(0.50, 0.42, 0.20, 0.85)
@@ -2080,7 +1364,7 @@ local function SetupColorPickerEnhancements()
 
     local hexTitle = hexContainer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     hexTitle:SetPoint("LEFT", hexContainer, "LEFT", 6, 0)
-    hexTitle:SetText("Hex:")
+    hexTitle:SetText(L["Hex:"])
 
     local hexEdit = CreateFrame("EditBox", "BleakfiberColorPickerHexEdit", hexContainer)
     hexEdit:SetPoint("LEFT", hexTitle, "RIGHT", 4, 0)
@@ -2092,41 +1376,24 @@ local function SetupColorPickerEnhancements()
     hexEdit:SetJustifyH("CENTER")
     customHexEditBox = hexEdit
 
-    local function CommitHexInput(self)
-        local raw = (self:GetText() or ""):gsub("%s+", ""):gsub("^#", "")
-        if #raw == 3 then
-            raw = raw:sub(1, 1):rep(2) .. raw:sub(2, 2):rep(2) .. raw:sub(3, 3):rep(2)
-        end
-        if #raw == 6 then
-            local rHex = tonumber(raw:sub(1, 2), 16)
-            local gHex = tonumber(raw:sub(3, 4), 16)
-            local bHex = tonumber(raw:sub(5, 6), 16)
-            if rHex and gHex and bHex then
-                self:ClearFocus()
-                ApplyColor(rHex / 255, gHex / 255, bHex / 255)
-                self:SetText(string.format("#%02X%02X%02X", rHex, gHex, bHex))
-                return
-            end
-        end
+    hexEdit:SetScript("OnEnterPressed", function(self)
+        local r, g, b = ns.ParseHexColor(self:GetText())
         self:ClearFocus()
-    end
-
-    hexEdit:SetScript("OnEnterPressed", CommitHexInput)
-    hexEdit:SetScript("OnEscapePressed", function(self)
-        self:ClearFocus()
+        if r then
+            ApplyColor(r, g, b)
+            self:SetText(HexFromRGB(r, g, b))
+        end
     end)
+    hexEdit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     hexEdit:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:AddLine("Hex Color Code", 1, 0.82, 0)
-        GameTooltip:AddLine("Type any hex color (e.g. #000000) and press Enter to apply.", 0.9, 0.9, 0.9, true)
+        GameTooltip:AddLine(L["Hex Color Code"], 1, 0.82, 0)
+        GameTooltip:AddLine(L["Type any hex color (e.g. #000000) and press Enter to apply."], 0.9, 0.9, 0.9, true)
         GameTooltip:Show()
     end)
-    hexEdit:SetScript("OnLeave", function()
-        GameTooltip:Hide()
-    end)
+    hexEdit:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- Dynamic positioning & button text/swatch refresh OnShow
-    local function UpdateBar()
+    local function PositionBar()
         bar:ClearAllPoints()
         local bottom = ColorPickerFrame:GetBottom()
         if bottom and bottom < 75 then
@@ -2134,185 +1401,135 @@ local function SetupColorPickerEnhancements()
         else
             bar:SetPoint("TOP", ColorPickerFrame, "BOTTOM", 0, -3)
         end
-
-        local c = ns.GetClassColor()
-        local cName = UnitClass("player") or "Class"
-        classSwatch:SetColorTexture(c.r, c.g, c.b, 1)
-        classLabel:SetText("Class: " .. cName)
-
-        local f = ns.GetFactionColor()
-        local fName = UnitFactionGroup("player") or "Faction"
-        factionSwatch:SetColorTexture(f.r, f.g, f.b, 1)
-        factionLabel:SetText("Faction: " .. fName)
-
-        if ColorPickerFrame.GetColorRGB and customHexEditBox and not customHexEditBox:HasFocus() then
-            local ok, r, g, b = pcall(ColorPickerFrame.GetColorRGB, ColorPickerFrame)
-            if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then
-                customHexEditBox:SetText(string.format("#%02X%02X%02X", math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5)))
-            end
-        end
     end
 
-    ColorPickerFrame:HookScript("OnShow", UpdateBar)
+    ColorPickerFrame:HookScript("OnShow", function()
+        PositionBar()
+        local c = ns.GetClassColor()
+        btnClass.swatch:SetColorTexture(c.r, c.g, c.b, 1)
+        btnClass.label:SetText(string_format(L["Class: %s"], UnitClass("player") or ""))
+
+        local f = ns.GetFactionColor()
+        local _, localizedFaction = UnitFactionGroup("player")
+        btnFaction.swatch:SetColorTexture(f.r, f.g, f.b, 1)
+        btnFaction.label:SetText(string_format(L["Faction: %s"], localizedFaction or ""))
+
+        if ColorPickerFrame.GetColorRGB and not hexEdit:HasFocus() then
+            local ok, r, g, b = pcall(ColorPickerFrame.GetColorRGB, ColorPickerFrame)
+            if ok and type(r) == "number" then
+                hexEdit:SetText(HexFromRGB(r, g, b))
+            end
+        end
+    end)
     if ColorPickerFrame:HasScript("OnColorSelect") then
         ColorPickerFrame:HookScript("OnColorSelect", function(_, r, g, b)
-            if customHexEditBox and not customHexEditBox:HasFocus() and type(r) == "number" and type(g) == "number" and type(b) == "number" then
-                customHexEditBox:SetText(string.format("#%02X%02X%02X", math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5)))
+            if not hexEdit:HasFocus() and type(r) == "number" then
+                hexEdit:SetText(HexFromRGB(r, g, b))
             end
         end)
     end
     if ColorPickerFrame:HasScript("OnMouseUp") then
-        ColorPickerFrame:HookScript("OnMouseUp", function()
-            local bottom = ColorPickerFrame:GetBottom()
-            bar:ClearAllPoints()
-            if bottom and bottom < 75 then
-                bar:SetPoint("BOTTOM", ColorPickerFrame, "TOP", 0, 3)
-            else
-                bar:SetPoint("TOP", ColorPickerFrame, "BOTTOM", 0, -3)
-            end
-        end)
+        ColorPickerFrame:HookScript("OnMouseUp", PositionBar)
     end
 end
 ns.SetupColorPickerEnhancements = SetupColorPickerEnhancements
 
--- Main Event Engine Frame
+-- Parses "#RGB", "#RRGGBB" or "RRGGBB" into 0..1 components (nil when invalid)
+function ns.ParseHexColor(text)
+    local raw = (text or ""):gsub("%s+", ""):gsub("^#", "")
+    if #raw == 3 then
+        raw = raw:sub(1, 1):rep(2) .. raw:sub(2, 2):rep(2) .. raw:sub(3, 3):rep(2)
+    end
+    if #raw ~= 6 then return nil end
+    local r = tonumber(raw:sub(1, 2), 16)
+    local g = tonumber(raw:sub(3, 4), 16)
+    local b = tonumber(raw:sub(5, 6), 16)
+    if not (r and g and b) then return nil end
+    return r / 255, g / 255, b / 255
+end
+
+-- ---------------------------------------------------------------------------
+-- Key binding migration: legacy named bindings -> secure CLICK bindings
+-- ---------------------------------------------------------------------------
+local LEGACY_BINDINGS = {
+    BLEAKFIBER_USE_QUEST_ITEM = ns.BINDING_QUEST_ITEM,
+    BLEAKFIBER_TOGGLE_TRACKER_VISIBILITY = ns.BINDING_TOGGLE_TRACKER,
+}
+
+local function MigrateKeyBindings()
+    if not (GetBindingKey and SetBinding) then return true end
+    if InCombatLockdown() then return false end
+    local changed = false
+    for oldName, newName in pairs(LEGACY_BINDINGS) do
+        local k1, k2 = GetBindingKey(oldName)
+        if (k1 or k2) and not GetBindingKey(newName) then
+            if k1 then SetBinding(k1, newName) end
+            if k2 then SetBinding(k2, newName) end
+            changed = true
+        end
+    end
+    if changed and SaveBindings and GetCurrentBindingSet then
+        SaveBindings(GetCurrentBindingSet())
+    end
+    return true
+end
+
+-- ---------------------------------------------------------------------------
+-- Main Event Engine
+-- ---------------------------------------------------------------------------
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
-eventFrame:RegisterEvent("VARIABLES_LOADED")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-eventFrame:RegisterEvent("PLAYER_LOGOUT")
+
+local bindingsMigrated = false
 
 eventFrame:SetScript("OnEvent", function(self, event, arg1, ...)
     if event == "ADDON_LOADED" then
         if arg1 == addonName then
-            InitializeDB("ADDON_LOADED")
-        elseif arg1 == "BleakfibersAddonConfigForever" or arg1 == "BleakfibersAddonConfig-Forever" then
-            if PublicAPI.RegisterWithMasterConfig then
+            InitializeDB()
+        elseif arg1 == "BleakfibersAddonConfig-Forever" or arg1 == "BleakfibersAddonConfigForever" then
+            if ns.dbObject then
                 PublicAPI:RegisterWithMasterConfig()
             end
         end
-    elseif event == "VARIABLES_LOADED" then
-        InitializeDB("VARIABLES_LOADED")
-    elseif event == "PLAYER_LOGIN" then
-        InitializeDB("PLAYER_LOGIN")
-        SetupColorPickerEnhancements()
 
-        -- Initialize Tracker container frame before modules hook into it
+    elseif event == "PLAYER_LOGIN" then
+        InitializeDB()
+
+        -- Tracker container frame first, then the modules that hook into it
         if ns.Tracker and ns.Tracker.Initialize then
             ns.Tracker:Initialize()
         end
-
-        -- Initialize registered modules
         ns:InitializeModules()
-        if ns.SocialModule and ns.SocialModule.UpdateLootEvents then
-            ns.SocialModule:UpdateLootEvents()
-        end
         ns:FireCallback("ON_INITIALIZE")
 
-        -- Seamless migration: if user bound legacy CLICK binding in previous versions, migrate to BLEAKFIBER_USE_QUEST_ITEM
-        if GetBindingKey and SetBinding then
-            local legacyKey1, legacyKey2 = GetBindingKey("CLICK BleakfiberQuestItemButton1:LeftButton")
-            if (legacyKey1 or legacyKey2) and not GetBindingKey("BLEAKFIBER_USE_QUEST_ITEM") then
-                if legacyKey1 then SetBinding(legacyKey1, "BLEAKFIBER_USE_QUEST_ITEM") end
-                if legacyKey2 then SetBinding(legacyKey2, "BLEAKFIBER_USE_QUEST_ITEM") end
-                if SaveBindings and GetCurrentBindingSet then
-                    SaveBindings(GetCurrentBindingSet())
-                end
-            end
+        bindingsMigrated = MigrateKeyBindings()
+        if not bindingsMigrated then
+            self:RegisterEvent("PLAYER_REGEN_ENABLED")
         end
 
-        -- Register with Master Config addon if present
-        if PublicAPI.RegisterWithMasterConfig then
-            PublicAPI:RegisterWithMasterConfig()
-        end
-        if ns.PurgeInvalidTimerCache then
-            ns.PurgeInvalidTimerCache()
-        end
+        PublicAPI:RegisterWithMasterConfig()
+        ns.PurgeInvalidTimerCache()
 
         if ns.Onboarding and ns.Onboarding.CheckFirstTimeUser then
-            if C_Timer and C_Timer.After then
-                C_Timer.After(1.5, function()
-                    ns.Onboarding:CheckFirstTimeUser()
-                end)
-            else
+            C_Timer.After(1.5, function()
                 ns.Onboarding:CheckFirstTimeUser()
-            end
-        end
-
-        -- WoW Forever SavedVariables Periodic Flush:
-        -- Sync the live AceDB profile into both global tables.
-        -- Debounced by 1.5s to prevent massive synchronous DeepCopy freezes when adjusting settings or dragging sliders.
-        local flushPending = false
-        local function DoFlush()
-            flushPending = false
-            local liveDB = _G["BleakfiberTrackerDB"]
-            if liveDB and type(liveDB) == "table" then
-                _G["BleakfiberTrackerBackupDB"] = DeepCopy(liveDB)
-            end
-            if ns.db and ns.db.framePosition and _G["BleakfiberTrackerCharDB"] then
-                _G["BleakfiberTrackerCharDB"].framePosition = DeepCopy(ns.db.framePosition)
-            end
-        end
-
-        local function FlushDBToGlobals(immediate)
-            if immediate then
-                DoFlush()
-                return
-            end
-            if flushPending then return end
-            flushPending = true
-            if C_Timer and C_Timer.After then
-                C_Timer.After(1.5, DoFlush)
-            else
-                DoFlush()
-            end
-        end
-        ns.FlushDBToGlobals = FlushDBToGlobals
-
-        -- Periodic 30-second background flush ticker
-        if C_Timer and C_Timer.NewTicker then
-            C_Timer.NewTicker(30, function() FlushDBToGlobals(true) end)
-        else
-            local elapsed = 0
-            local flushFrame = CreateFrame("Frame")
-            flushFrame:SetScript("OnUpdate", function(self, dt)
-                elapsed = elapsed + dt
-                if elapsed >= 30 then
-                    elapsed = 0
-                    FlushDBToGlobals()
-                end
             end)
+        end
+
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        if not bindingsMigrated then
+            bindingsMigrated = MigrateKeyBindings()
+        end
+        if bindingsMigrated then
+            self:UnregisterEvent("PLAYER_REGEN_ENABLED")
         end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         ns:FireCallback("PLAYER_ENTERING_WORLD", ...)
-        if ns.PurgeInvalidTimerCache then
+        if ns.db then
             ns.PurgeInvalidTimerCache()
         end
-
-        -- Flush backup on zone transitions (loading screens) — another point where
-        -- WoW Forever can lose SavedVariables data
-        if ns.FlushDBToGlobals then
-            ns.FlushDBToGlobals()
-        end
-
-    elseif event == "PLAYER_LOGOUT" then
-        -- Aggressive flush: ensure both primary and backup globals are fully up to date
-        -- before WoW serializes them to disk (to both root and 70/ folders)
-        if ns.FlushDBToGlobals then
-            ns.FlushDBToGlobals(true)
-        end
-        local liveDB = _G["BleakfiberTrackerDB"]
-
-        local rawExists = liveDB ~= nil
-        local hasProf = rawExists and type(liveDB.profiles) == "table"
-        local def = hasProf and liveDB.profiles["Default"]
-        local defPos = def and def.framePosition
-        ns.Debug(string.format("[LOGOUT Flush] RawDB=%s, BackupDB=%s, Pos=%s", 
-            tostring(rawExists), 
-            tostring(_G["BleakfiberTrackerBackupDB"] ~= nil),
-            defPos and (defPos.point .. " (" .. tostring(defPos.x) .. ", " .. tostring(defPos.y) .. ")") or "nil"))
     end
 end)
-

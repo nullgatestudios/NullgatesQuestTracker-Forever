@@ -1,6 +1,7 @@
 local addonName, ns = ...
 
-local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+local LSM = LibStub("LibSharedMedia-3.0")
+local L = ns.L
 
 local mediaPath = "Interface\\AddOns\\" .. addonName .. "\\Media\\"
 local fontPath = mediaPath .. "Fonts\\"
@@ -77,7 +78,7 @@ function ns.GetCustomSoundList(onlyDB)
                     table.insert(list, {
                         key = "custom:" .. file,
                         file = file,
-                        label = "Custom " .. idx .. " (" .. file .. ")",
+                        label = string.format(L["Custom %d (%s)"], idx, file),
                         index = idx,
                         origin = "file",
                     })
@@ -87,7 +88,7 @@ function ns.GetCustomSoundList(onlyDB)
     end
 
     -- 2. From SavedVariables DB (ns.db.sound.customSoundsList)
-    local sdb = (ns.dbObject and ns.dbObject.profile and ns.dbObject.profile.sound) or (ns.db and ns.db.sound)
+    local sdb = ns.db and ns.db.sound
     if sdb and type(sdb.customSoundsList) == "table" then
         for _, entry in ipairs(sdb.customSoundsList) do
             local file = type(entry) == "table" and entry.file or entry
@@ -103,7 +104,7 @@ function ns.GetCustomSoundList(onlyDB)
                     table.insert(list, {
                         key = "custom:" .. file,
                         file = file,
-                        label = "Custom " .. idx .. " (" .. file .. ")",
+                        label = string.format(L["Custom %d (%s)"], idx, file),
                         index = idx,
                         origin = "db",
                     })
@@ -116,41 +117,35 @@ function ns.GetCustomSoundList(onlyDB)
 end
 
 function ns.AddCustomSound(filename)
-    if not filename or type(filename) ~= "string" then return false, "Invalid filename" end
+    if not filename or type(filename) ~= "string" then return false, L["Invalid filename"] end
     filename = filename:match("^%s*(.-)%s*$") -- trim
     filename = filename:gsub("^.*[\\/]", "") -- strip any path
-    if filename == "" then return false, "Filename cannot be empty" end
+    if filename == "" then return false, L["Filename cannot be empty"] end
     if not filename:find("%.[wW][aA][vV]$") and not filename:find("%.[oO][gG][gG]$") and not filename:find("%.[mM][pP]3$") then
         filename = filename .. ".wav"
     end
 
-    local sdb = (ns.dbObject and ns.dbObject.profile and ns.dbObject.profile.sound) or (ns.db and ns.db.sound)
-    if not sdb then return false, "Sound database not loaded" end
+    local sdb = ns.db and ns.db.sound
+    if not sdb then return false, L["Settings are not loaded yet"] end
     sdb.customSoundsList = sdb.customSoundsList or {}
 
     local lower = filename:lower()
     for _, existing in ipairs(sdb.customSoundsList) do
         local ef = (type(existing) == "table" and existing.file or existing):lower()
         if ef == lower then
-            return false, "Sound file already registered"
+            return false, L["Sound file already registered"]
         end
     end
 
     table.insert(sdb.customSoundsList, filename)
-    if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-
-    -- Register in LSM if available
-    local lsm = LSM or (LibStub and LibStub("LibSharedMedia-3.0", true))
-    if lsm and lsm.Register then
-        pcall(lsm.Register, lsm, "sound", "Bleakfiber " .. filename, soundPath .. filename)
-    end
+    pcall(LSM.Register, LSM, "sound", "Bleakfiber " .. filename, soundPath .. filename)
 
     return true, filename
 end
 
 function ns.RemoveCustomSound(filename)
     if not filename then return false end
-    local sdb = (ns.dbObject and ns.dbObject.profile and ns.dbObject.profile.sound) or (ns.db and ns.db.sound)
+    local sdb = ns.db and ns.db.sound
     if not sdb or not sdb.customSoundsList then return false end
 
     local lower = filename:lower()
@@ -168,8 +163,6 @@ function ns.RemoveCustomSound(filename)
     if sdb.objectiveSoundChoice == "custom:" .. filename or sdb.objectiveSoundChoice == filename then
         sdb.objectiveSoundChoice = "whisper_ping"
     end
-
-    if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
     return true
 end
 
@@ -211,27 +204,42 @@ function ns.FetchSound(soundKey)
     end
 
     -- 5. LibSharedMedia lookup
-    local lsm = LSM or (LibStub and LibStub("LibSharedMedia-3.0", true))
-    if lsm and lsm.Fetch then
-        local snd = lsm:Fetch("sound", soundKey, true)
-        if snd and snd ~= "" then
-            return snd
-        end
+    local snd = LSM:Fetch("sound", soundKey, true)
+    if snd and snd ~= "" then
+        return snd
     end
 
     return soundKey
 end
 
+-- Bundled fonts only contain Latin glyphs; non-Latin languages swap them for a game font
+local BUNDLED_FONT_PATHS = {}
+for _, name in ipairs({
+    "Nata Sans Bold", "Nata Sans Regular", "Nata Sans", "Nata Sans Medium",
+    "Orbitron Bold", "Orbitron Medium", "Orbitron Regular", "Orbitron",
+    "Roboto Condensed Bold", "Roboto Condensed Medium", "Roboto Condensed Regular", "Roboto Condensed",
+}) do
+    BUNDLED_FONT_PATHS[name] = true
+end
+
 -- Media Fetch Helper with safety fallbacks
 function ns.FetchFont(fontName)
-    local fallback = ns.DEFAULT_FONT_PATH
     if not fontName or fontName == "" then
         fontName = ns.DEFAULT_FONT_NAME
     end
 
+    local languageFont = ns.GetLanguageFontOverride and ns.GetLanguageFontOverride()
+
     -- Direct file path support
     if type(fontName) == "string" and (fontName:find("%.ttf$") or fontName:find("%.otf$") or fontName:find("\\") or fontName:find("/")) then
+        if languageFont and fontName:find(fontPath, 1, true) then
+            return languageFont
+        end
         return fontName
+    end
+
+    if languageFont and BUNDLED_FONT_PATHS[fontName] then
+        return languageFont
     end
 
     -- Blizzard standard game font alias
@@ -239,26 +247,22 @@ function ns.FetchFont(fontName)
         return STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
     end
 
-    if LSM then
-        local font = LSM:Fetch("font", fontName, true)
-        if font and font ~= "" then
-            return font
-        end
-
-        local def = LSM:Fetch("font", ns.DEFAULT_FONT_NAME, true)
-        if def and def ~= "" then
-            return def
-        end
+    local font = LSM:Fetch("font", fontName, true)
+    if font and font ~= "" then
+        return font
     end
-
-    return fallback
+    return languageFont or LSM:Fetch("font", ns.DEFAULT_FONT_NAME, true) or ns.DEFAULT_FONT_PATH
 end
 
--- Listen for late-registering media from third-party addons (SharedMedia packs, ElvUI, Details)
-if LSM and LSM.RegisterCallback then
-    LSM.RegisterCallback(ns, "LibSharedMedia_Registered", function(_, mediatype, key)
-        if mediatype == "font" and ns.Tracker and ns.Tracker.UpdateTypography then
+-- Late-registering media from third-party addons (SharedMedia packs, ElvUI, Details)
+local typographyRefreshPending = false
+LSM.RegisterCallback(ns, "LibSharedMedia_Registered", function(_, mediatype)
+    if mediatype ~= "font" or typographyRefreshPending then return end
+    typographyRefreshPending = true
+    C_Timer.After(0.5, function()
+        typographyRefreshPending = false
+        if ns.Tracker and ns.Tracker.frame and ns.Tracker.UpdateTypography then
             ns.Tracker:UpdateTypography()
         end
     end)
-end
+end)

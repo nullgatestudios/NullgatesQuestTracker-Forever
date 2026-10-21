@@ -1,14 +1,12 @@
 local addonName, ns = ...
 
 -- Localized Lua & WoW API bindings for performance & garbage reduction
-local pairs, ipairs, type, tostring, tonumber, select, pcall = pairs, ipairs, type, tostring, tonumber, select, pcall
-local string_format, string_lower, string_match, string_gsub = string.format, string.lower, string.match, string.gsub
-local table_insert, table_sort, table_remove = table.insert, table.sort, table.remove
-local math_floor, math_ceil, math_max, math_min, math_abs = math.floor, math.ceil, math.max, math.min, math.abs
-local math_sqrt, math_atan2, math_pi = math.sqrt, math.atan2, math.pi
+local pairs, ipairs, type, tostring, tonumber, pcall = pairs, ipairs, type, tostring, tonumber, pcall
+local string_format = string.format
+local math_floor, math_abs = math.floor, math.abs
+local math_sqrt, math_atan2 = math.sqrt, math.atan2
 local MATH_PI = math.pi
 local TWO_PI = 2 * math.pi
-local wipe = table.wipe or wipe or function(t) for k in pairs(t) do t[k] = nil end return t end
 local GetTime, PlaySound = GetTime, PlaySound
 local CreateFrame, InCombatLockdown = CreateFrame, InCombatLockdown
 local C_Map = C_Map
@@ -16,7 +14,14 @@ local C_SuperTrack = C_SuperTrack
 local C_QuestLog = C_QuestLog
 local GetPlayerFacing = GetPlayerFacing
 local UnitOnTaxi = UnitOnTaxi
-local print = function(...) end -- Suppressed all chat outputs per user preference
+
+local API = ns.API
+local L = ns.L
+
+-- Status messages respect the "Debug & Chat Output" option (silent by default)
+local function Print(msg)
+    ns.Print("|cff00c0ff[Wayfinder]|r " .. msg)
+end
 
 local WayfinderModule = {}
 ns.WayfinderModule = WayfinderModule
@@ -68,7 +73,6 @@ local navState = {
     title = "",
 }
 
-local playedArrivalSound = false
 local arrivedSoundTargetKey = nil
 local updateElapsed = 0
 local arrivalTimer = 0
@@ -83,11 +87,6 @@ local cachedTargetMapID = nil
 local cachedTargetRawX = nil
 local cachedTargetRawY = nil
 
-local lastPlayerMapX = nil
-local lastPlayerMapY = nil
-local lastPlayerFacing = -999
-local stationaryElapsed = 0
-local targetWorldAngle = 0
 
 local lastDistFormatted = ""
 local lastDistNumber = -1
@@ -96,7 +95,6 @@ local lastDistArrived = nil
 local lastTitleFormatted = nil
 local lastRotationAngle = -999
 local lastColorR, lastColorG, lastColorB = -1, -1, -1
-local lastInlineRotation = -999
 local lastInlineR, lastInlineG, lastInlineB = -1, -1, -1
 
 -- ETA & Velocity Tracking (Taint-Free Calculation)
@@ -112,8 +110,6 @@ local function InvalidateTargetWorldCache()
     cachedTargetMapID = nil
     cachedTargetRawX = nil
     cachedTargetRawY = nil
-    lastPlayerMapX = nil
-    lastPlayerMapY = nil
     lastEtaDistance = nil
     lastEtaTime = nil
     smoothedSpeed = 0
@@ -456,53 +452,16 @@ local function GetQuestLogZone(questID, questLogIndex)
         end
     end
 
-    -- 2. Engine-safe quest log iteration across 16001 / Classic / Retail engines
-    local numEntries = (C_QuestLog and C_QuestLog.GetNumQuestLogEntries and SafeCall(C_QuestLog.GetNumQuestLogEntries))
-        or (GetNumQuestLogEntries and SafeCall(GetNumQuestLogEntries)) or 0
-    if numEntries == 0 then return nil end
-
-    local targetIdx = questLogIndex
-    if not targetIdx and questID and C_QuestLog and C_QuestLog.GetLogIndexForQuestID then
-        targetIdx = SafeCall(C_QuestLog.GetLogIndexForQuestID, questID)
-    end
-
+    -- 2. Walk the quest log headers
+    local targetIdx = questLogIndex or (questID and API.GetLogIndexForQuestID(questID))
+    local info = {}
     local currentHeader = nil
-    for i = 1, numEntries do
-        local title, _, _, isHeader, _, _, _, qID
-        if ns.GetQuestLogTitle then
-            title, _, _, isHeader, _, _, _, qID = SafeCall(ns.GetQuestLogTitle, i)
-        elseif C_QuestLog and C_QuestLog.GetInfo then
-            local info = SafeCall(C_QuestLog.GetInfo, i)
-            if info then
-                title = info.title
-                isHeader = (info.isHeader == 1 or info.isHeader == true)
-                qID = info.questID
-            end
-        end
-
-        if not title and GetQuestLogTitle then
-            local numRet = select("#", GetQuestLogTitle(i))
-            if numRet >= 9 then
-                local qTitle, _, _, _, qHdr, _, _, _, qIdNum = GetQuestLogTitle(i)
-                title = qTitle
-                isHeader = (qHdr == 1 or qHdr == true)
-                qID = tonumber(qIdNum)
-            elseif numRet >= 7 then
-                local qTitle, _, _, qHdr, _, _, _, qIdNum = GetQuestLogTitle(i)
-                title = qTitle
-                isHeader = (qHdr == 1 or qHdr == true)
-                qID = tonumber(qIdNum)
-            else
-                local qTitle, _, _, qHdr = GetQuestLogTitle(i)
-                title = qTitle
-                isHeader = (qHdr == 1 or qHdr == true)
-            end
-        end
-
-        if isHeader then
-            currentHeader = title
-        else
-            if (targetIdx and i == targetIdx) or (questID and qID and qID == questID) then
+    for i = 1, API.GetNumQuestLogEntries() do
+        local row = API.GetQuestInfo(i, info)
+        if row then
+            if row.isHeader then
+                currentHeader = row.title
+            elseif (targetIdx and i == targetIdx) or (questID and row.questID == questID) then
                 return currentHeader
             end
         end
@@ -605,20 +564,6 @@ end
 local GetQuestObjectiveDestinationMapID
 local GetQuestTurnInDestinationMapID
 
--- Helper: Discover destination uiMapID for a quest (router)
-local function GetQuestDestinationMapID(questID, questLogIndex, isTurnIn)
-    if not questID then return nil end
-    if isTurnIn then
-        if GetQuestTurnInDestinationMapID then
-            return GetQuestTurnInDestinationMapID(questID, questLogIndex)
-        end
-    else
-        if GetQuestObjectiveDestinationMapID then
-            return GetQuestObjectiveDestinationMapID(questID, questLogIndex)
-        end
-    end
-    return nil
-end
 
 
 -- ---------------------------------------------------------------------------
@@ -762,202 +707,6 @@ local function CalculateContinentOffset(fromMapID, fromX, fromY, toMapID, toX, t
     return distYards, angle, true
 end
 
--- ---------------------------------------------------------------------------
--- Classic Flight Master Registry & Intelligent Route Resolution
--- ---------------------------------------------------------------------------
-
-local FLIGHT_MASTERS = {
-    -- Eastern Kingdoms (Continent 1415)
-    [1424] = { -- Hillsbrad Foothills
-        Alliance = { x = 0.493, y = 0.523, name = "Southshore" },
-        Horde    = { x = 0.601, y = 0.186, name = "Tarren Mill" },
-    },
-    [1432] = { -- Loch Modan
-        Alliance = { x = 0.339, y = 0.509, name = "Thelsamar" },
-        Horde    = { x = 0.040, y = 0.448, name = "Kargath (Badlands)" },
-    },
-    [1417] = { -- Arathi Highlands
-        Alliance = { x = 0.458, y = 0.461, name = "Refuge Pointe" },
-        Horde    = { x = 0.731, y = 0.327, name = "Hammerfall" },
-    },
-    [1437] = { -- Wetlands
-        Alliance = { x = 0.095, y = 0.597, name = "Menethil Harbor" },
-        Horde    = { x = 0.731, y = 0.327, name = "Hammerfall (Arathi)" },
-    },
-    [1426] = { -- Dun Morogh
-        Alliance = { x = 0.538, y = 0.349, name = "Ironforge" },
-        Horde    = { x = 0.040, y = 0.448, name = "Kargath (Badlands)" },
-    },
-    [1455] = { -- Ironforge City
-        Alliance = { x = 0.555, y = 0.478, name = "Ironforge" },
-        Horde    = { x = 0.040, y = 0.448, name = "Kargath (Badlands)" },
-    },
-    [1429] = { -- Elwynn Forest
-        Alliance = { x = 0.315, y = 0.080, name = "Stormwind" },
-        Horde    = { x = 0.448, y = 0.550, name = "Stonard (Swamp)" },
-    },
-    [1453] = { -- Stormwind City
-        Alliance = { x = 0.663, y = 0.621, name = "Stormwind" },
-        Horde    = { x = 0.448, y = 0.550, name = "Stonard (Swamp)" },
-    },
-    [1420] = { -- Tirisfal Glades
-        Alliance = { x = 0.429, y = 0.849, name = "Chillwind Camp (WPL)" },
-        Horde    = { x = 0.619, y = 0.589, name = "Undercity" },
-    },
-    [1458] = { -- Undercity
-        Alliance = { x = 0.429, y = 0.849, name = "Chillwind Camp (WPL)" },
-        Horde    = { x = 0.638, y = 0.486, name = "Undercity" },
-    },
-    [1421] = { -- Silverpine Forest
-        Alliance = { x = 0.493, y = 0.523, name = "Southshore (Hillsbrad)" },
-        Horde    = { x = 0.456, y = 0.426, name = "The Sepulcher" },
-    },
-    [1422] = { -- Western Plaguelands
-        Alliance = { x = 0.429, y = 0.849, name = "Chillwind Camp" },
-        Horde    = { x = 0.830, y = 0.680, name = "The Bulwark" },
-    },
-    [1423] = { -- Eastern Plaguelands
-        Alliance = { x = 0.815, y = 0.580, name = "Light's Hope Chapel" },
-        Horde    = { x = 0.815, y = 0.580, name = "Light's Hope Chapel" },
-    },
-    [1425] = { -- The Hinterlands
-        Alliance = { x = 0.111, y = 0.461, name = "Aerie Peak" },
-        Horde    = { x = 0.781, y = 0.814, name = "Revantusk Village" },
-    },
-    [1433] = { -- Redridge Mountains
-        Alliance = { x = 0.306, y = 0.594, name = "Lakeshire" },
-        Horde    = { x = 0.448, y = 0.550, name = "Stonard (Swamp)" },
-    },
-    [1436] = { -- Westfall
-        Alliance = { x = 0.566, y = 0.526, name = "Sentinel Hill" },
-        Horde    = { x = 0.325, y = 0.292, name = "Grom'gol (STV)" },
-    },
-    [1431] = { -- Duskwood
-        Alliance = { x = 0.775, y = 0.443, name = "Darkshire" },
-        Horde    = { x = 0.325, y = 0.292, name = "Grom'gol (STV)" },
-    },
-    [1434] = { -- Stranglethorn Vale
-        Alliance = { x = 0.275, y = 0.778, name = "Booty Bay" },
-        Horde    = { x = 0.325, y = 0.292, name = "Grom'gol" },
-    },
-    [1418] = { -- Badlands
-        Alliance = { x = 0.339, y = 0.509, name = "Thelsamar (Loch Modan)" },
-        Horde    = { x = 0.040, y = 0.448, name = "Kargath" },
-    },
-    [1427] = { -- Searing Gorge
-        Alliance = { x = 0.379, y = 0.309, name = "Thorium Point" },
-        Horde    = { x = 0.348, y = 0.309, name = "Thorium Point" },
-    },
-    [1428] = { -- Burning Steppes
-        Alliance = { x = 0.843, y = 0.683, name = "Morgan's Vigil" },
-        Horde    = { x = 0.657, y = 0.242, name = "Flame Crest" },
-    },
-    [1435] = { -- Swamp of Sorrows
-        Alliance = { x = 0.306, y = 0.594, name = "Lakeshire (Redridge)" },
-        Horde    = { x = 0.448, y = 0.550, name = "Stonard" },
-    },
-    [1419] = { -- Blasted Lands
-        Alliance = { x = 0.655, y = 0.243, name = "Nethergarde Keep" },
-        Horde    = { x = 0.448, y = 0.550, name = "Stonard (Swamp)" },
-    },
-
-    -- Kalimdor (Continent 1414)
-    [1411] = { -- Durotar
-        Alliance = { x = 0.631, y = 0.372, name = "Ratchet (Barrens)" },
-        Horde    = { x = 0.451, y = 0.639, name = "Orgrimmar" },
-    },
-    [1454] = { -- Orgrimmar
-        Alliance = { x = 0.631, y = 0.372, name = "Ratchet (Barrens)" },
-        Horde    = { x = 0.451, y = 0.639, name = "Orgrimmar" },
-    },
-    [1412] = { -- Mulgore
-        Alliance = { x = 0.053, y = 0.177, name = "Thalanaar (Needles)" },
-        Horde    = { x = 0.468, y = 0.499, name = "Thunder Bluff" },
-    },
-    [1456] = { -- Thunder Bluff
-        Alliance = { x = 0.053, y = 0.177, name = "Thalanaar (Needles)" },
-        Horde    = { x = 0.468, y = 0.499, name = "Thunder Bluff" },
-    },
-    [1413] = { -- The Barrens
-        Alliance = { x = 0.631, y = 0.372, name = "Ratchet" },
-        Horde    = { x = 0.515, y = 0.303, name = "The Crossroads" },
-    },
-    [1438] = { -- Teldrassil
-        Alliance = { x = 0.584, y = 0.940, name = "Rut'theran Village" },
-    },
-    [1457] = { -- Darnassus
-        Alliance = { x = 0.584, y = 0.940, name = "Rut'theran Village" },
-    },
-    [1439] = { -- Darkshore
-        Alliance = { x = 0.363, y = 0.456, name = "Auberdine" },
-        Horde    = { x = 0.122, y = 0.338, name = "Zoram'gar (Ashenvale)" },
-    },
-    [1440] = { -- Ashenvale
-        Alliance = { x = 0.344, y = 0.480, name = "Astranaar" },
-        Horde    = { x = 0.732, y = 0.616, name = "Splintertree Post" },
-    },
-    [1442] = { -- Stonetalon Mountains
-        Alliance = { x = 0.364, y = 0.072, name = "Peak Camp" },
-        Horde    = { x = 0.451, y = 0.598, name = "Sun Rock Retreat" },
-    },
-    [1441] = { -- Thousand Needles
-        Alliance = { x = 0.053, y = 0.177, name = "Thalanaar" },
-        Horde    = { x = 0.451, y = 0.491, name = "Freewind Post" },
-    },
-    [1443] = { -- Desolace
-        Alliance = { x = 0.647, y = 0.105, name = "Nijel's Point" },
-        Horde    = { x = 0.216, y = 0.741, name = "Shadowprey Village" },
-    },
-    [1444] = { -- Feralas
-        Alliance = { x = 0.302, y = 0.432, name = "Feathermoon Stronghold" },
-        Horde    = { x = 0.754, y = 0.443, name = "Camp Mojache" },
-    },
-    [1445] = { -- Dustwallow Marsh
-        Alliance = { x = 0.675, y = 0.513, name = "Theramore Isle" },
-        Horde    = { x = 0.356, y = 0.319, name = "Brackenwall Village" },
-    },
-    [1446] = { -- Tanaris
-        Alliance = { x = 0.514, y = 0.254, name = "Gadgetzan" },
-        Horde    = { x = 0.516, y = 0.267, name = "Gadgetzan" },
-    },
-    [1447] = { -- Azshara
-        Alliance = { x = 0.119, y = 0.776, name = "Talrendis Point" },
-        Horde    = { x = 0.220, y = 0.496, name = "Valormok" },
-    },
-    [1448] = { -- Felwood
-        Alliance = { x = 0.625, y = 0.242, name = "Talonbranch Glade" },
-        Horde    = { x = 0.344, y = 0.538, name = "Bloodvenom Post" },
-    },
-    [1449] = { -- Un'Goro Crater
-        Alliance = { x = 0.514, y = 0.254, name = "Gadgetzan (Tanaris)" },
-        Horde    = { x = 0.516, y = 0.267, name = "Gadgetzan (Tanaris)" },
-    },
-    [1451] = { -- Silithus
-        Alliance = { x = 0.506, y = 0.344, name = "Cenarion Hold" },
-        Horde    = { x = 0.487, y = 0.367, name = "Cenarion Hold" },
-    },
-    [1450] = { -- Moonglade
-        Alliance = { x = 0.481, y = 0.673, name = "Nighthaven" },
-        Horde    = { x = 0.443, y = 0.452, name = "Nighthaven" },
-    },
-}
-
-local function GetZoneFlightMaster(uiMapID)
-    if not uiMapID then return nil end
-    local entry = FLIGHT_MASTERS[uiMapID]
-    if not entry then return nil end
-    local faction = (UnitFactionGroup and UnitFactionGroup("player")) or "Alliance"
-    local fm = entry[faction] or entry["Alliance"] or entry["Horde"]
-    if fm then
-        return {
-            x = fm.x,
-            y = fm.y,
-            name = fm.name,
-            uiMapID = uiMapID,
-        }
-    end
-    return nil
-end
 
 -- ---------------------------------------------------------------------------
 -- Target Coordinate Resolution & Multi-Waypoint Management
@@ -1241,7 +990,7 @@ local function GetQuestTurnInLocation(questID, questLogIndex, destMapID)
     if not (tx and ty) and type(QuestPOIGetIconInfo) == "function" then
         local logIdx = questLogIndex or (C_QuestLog and C_QuestLog.GetLogIndexForQuestID and SafeCall(C_QuestLog.GetLogIndexForQuestID, questID))
         if logIdx then
-            local poiType, px, py = SafeCall(QuestPOIGetIconInfo, logIdx)
+            local _, px, py = SafeCall(QuestPOIGetIconInfo, logIdx)
             if px and py and px > 0 and py > 0 then
                 tx, ty = px, py
                 tMapID = destMapID
@@ -1284,6 +1033,22 @@ local function GetQuestTurnInLocation(questID, questLogIndex, destMapID)
 end
 
 -- Helper: Locate quest objective center (centroid of quest zone area / spawns / POIs)
+local objectiveScratch = {}
+
+local function FirstIncompleteObjectiveIndex(questID)
+    local objectives = API.GetQuestObjectives(questID, nil, objectiveScratch)
+    local index
+    for idx, obj in ipairs(objectives) do
+        if not obj.finished then
+            index = idx
+            break
+        end
+    end
+    local hasObjectives = #objectives > 0
+    API.ReleaseObjectives(objectiveScratch)
+    return index, hasObjectives
+end
+
 local function GetQuestObjectiveLocation(questID, destMapID)
     if not questID then return nil, nil, nil end
 
@@ -1303,20 +1068,10 @@ local function GetQuestObjectiveLocation(questID, destMapID)
     destMapID = destMapID or (GetQuestObjectiveDestinationMapID and GetQuestObjectiveDestinationMapID(questID))
 
     -- Identify the first incomplete objective index
-    local firstIncompleteIdx = nil
-    local objectives = (ns.GetQuestObjectives and SafeCall(ns.GetQuestObjectives, questID))
-        or (C_QuestLog and C_QuestLog.GetQuestObjectives and SafeCall(C_QuestLog.GetQuestObjectives, questID))
-    if objectives and #objectives > 0 then
-        for idx, obj in ipairs(objectives) do
-            if not obj.finished then
-                firstIncompleteIdx = idx
-                break
-            end
-        end
-    end
+    local firstIncompleteIdx = FirstIncompleteObjectiveIndex(questID)
 
     -- 1. Blizzard Native Objective POIs (Filter out turn-in and already-completed objectives)
-    if not (wx and wy) and C_QuestLog and C_QuestLog.GetQuestPOIs then
+    if C_QuestLog and C_QuestLog.GetQuestPOIs then
         local pois = SafeCall(C_QuestLog.GetQuestPOIs, questID)
         if pois and type(pois) == "table" and #pois > 0 then
             -- Pass A: Specific incomplete objective POIs (matches first incomplete objective)
@@ -1453,33 +1208,15 @@ function WayfinderModule:SetQuestTarget(questID, skipTrackerUpdate, force)
 
     ns.waypointExplicitlyCleared = false
 
-    local title = (C_QuestLog and C_QuestLog.GetTitleForQuestID and SafeCall(C_QuestLog.GetTitleForQuestID, questID))
-        or ("Quest #" .. tostring(questID))
+    local title = API.GetTitleForQuestID(questID) or string_format(L["Quest #%d"], questID)
 
-    -- Check if quest objectives are genuinely complete
-    local objectives = (ns.GetQuestObjectives and SafeCall(ns.GetQuestObjectives, questID))
-        or (C_QuestLog and C_QuestLog.GetQuestObjectives and SafeCall(C_QuestLog.GetQuestObjectives, questID))
-    local isComplete = false
-
-    if objectives and #objectives > 0 then
-        local allDone = true
-        for _, obj in ipairs(objectives) do
-            if not obj.finished then
-                allDone = false
-                break
-            end
-        end
-        if allDone then
-            isComplete = true
-        end
+    -- Objectives complete -> navigate to the turn-in, otherwise to the objectives
+    local firstIncomplete, hasObjectives = FirstIncompleteObjectiveIndex(questID)
+    local isComplete
+    if hasObjectives then
+        isComplete = (firstIncomplete == nil)
     else
-        if C_QuestLog and C_QuestLog.ReadyForTurnIn and SafeCall(C_QuestLog.ReadyForTurnIn, questID) then
-            isComplete = true
-        elseif C_QuestLog and C_QuestLog.IsComplete and SafeCall(C_QuestLog.IsComplete, questID) then
-            isComplete = true
-        elseif ns.IsQuestComplete and SafeCall(ns.IsQuestComplete, questID) then
-            isComplete = true
-        end
+        isComplete = API.IsQuestComplete(questID)
     end
 
     local wx, wy, uiMapID
@@ -1488,7 +1225,7 @@ function WayfinderModule:SetQuestTarget(questID, skipTrackerUpdate, force)
     -- 1. If objectives ARE complete -> Point to quest turn-in location.
     -- 2. If objectives are NOT complete -> Point to quest objective location.
     if isComplete then
-        title = title .. " (Turn-In)"
+        title = title .. " (" .. L["Turn-In"] .. ")"
         local tx, ty, tMap = GetQuestTurnInLocation(questID, nil)
         if tx and ty then
             wx, wy, uiMapID = tx, ty, tMap
@@ -1529,10 +1266,9 @@ function WayfinderModule:SetQuestTarget(questID, skipTrackerUpdate, force)
         elseif headerZone then
             currentTarget.zoneName = headerZone
         else
-            currentTarget.zoneName = "Zone"
+            currentTarget.zoneName = L["Zone"]
         end
 
-        playedArrivalSound = false
         arrivalActive = false
         arrivalTimer = 0
         UpdateTargetWorldCache()
@@ -1548,7 +1284,7 @@ function WayfinderModule:SetQuestTarget(questID, skipTrackerUpdate, force)
         currentTarget.x = nil
         currentTarget.y = nil
         currentTarget.title = title
-        currentTarget.zoneName = GetQuestLogZone(questID) or "Zone"
+        currentTarget.zoneName = GetQuestLogZone(questID) or L["Zone"]
         currentTarget.isCustom = false
         currentTarget.isComplete = isComplete
         currentTarget.waypointID = nil
@@ -1556,7 +1292,7 @@ function WayfinderModule:SetQuestTarget(questID, skipTrackerUpdate, force)
         arrivalTimer = 0
         InvalidateTargetWorldCache()
         self:UpdateFrameVisibility()
-        print(string.format("|cff00c0ff[Wayfinder]|r No map coordinates found for |cffffffff%s|r.", title))
+        Print(string_format(L["No map coordinates found for %s."], "|cffffffff" .. title .. "|r"))
     end
 
     if not skipTrackerUpdate and ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then
@@ -1573,10 +1309,10 @@ function WayfinderModule:SetWaypointAsTarget(wp)
     currentTarget.x = wp.x
     currentTarget.y = wp.y
     currentTarget.title = wp.title
-    currentTarget.zoneName = wp.mapName or (wp.uiMapID and C_Map and C_Map.GetMapInfo and SafeCall(C_Map.GetMapInfo, wp.uiMapID) and SafeCall(C_Map.GetMapInfo, wp.uiMapID).name) or "Waypoint"
+    local wpMapInfo = wp.uiMapID and C_Map and C_Map.GetMapInfo and SafeCall(C_Map.GetMapInfo, wp.uiMapID)
+    currentTarget.zoneName = wp.mapName or (wpMapInfo and wpMapInfo.name) or L["Waypoint"]
     currentTarget.isCustom = true
     currentTarget.waypointID = wp.id
-    playedArrivalSound = false
     UpdateTargetWorldCache()
     self:CalculateNavigation()
     self:UpdateFrameVisibility()
@@ -1602,13 +1338,13 @@ function WayfinderModule:AddCustomWaypoint(uiMapID, x, y, title)
     if not uiMapID then return nil end
 
     waypointCounter = waypointCounter + 1
-    local mapName = "Current Zone"
+    local mapName = L["Current Zone"]
     if C_Map and C_Map.GetMapInfo then
         local info = C_Map.GetMapInfo(uiMapID)
         if info and info.name then mapName = info.name end
     end
 
-    local wpTitle = title or string.format("Waypoint (%.1f, %.1f)", x * 100, y * 100)
+    local wpTitle = title or string_format(L["Waypoint (%.1f, %.1f)"], x * 100, y * 100)
     local wp = {
         id = waypointCounter,
         uiMapID = uiMapID,
@@ -1640,7 +1376,7 @@ end
 
 function WayfinderModule:SetClosestWaypoint()
     if #self.customWaypoints == 0 then
-        print("|cff00c0ff[Wayfinder]|r No custom waypoints are currently set.")
+        Print(L["No custom waypoints are currently set."])
         return nil
     end
 
@@ -1661,7 +1397,7 @@ function WayfinderModule:SetClosestWaypoint()
     local minDistance = math.huge
 
     for _, wp in ipairs(self.customWaypoints) do
-        local dist = math.huge
+        local dist
         if wp.uiMapID == playerMapID then
             local dx = wp.x - px
             local dy = wp.y - py
@@ -1694,7 +1430,7 @@ function WayfinderModule:SetClosestWaypoint()
     if closestWP then
         self:SetWaypointAsTarget(closestWP)
         local distStr = self:FormatDistance(minDistance)
-        print(string.format("|cff00c0ff[Wayfinder]|r Pointing to closest waypoint: |cffffffff%s|r (%s).", closestWP.title, distStr))
+        Print(string_format(L["Pointing to closest waypoint: %s (%s)."], "|cffffffff" .. closestWP.title .. "|r", distStr))
         return closestWP
     end
     return nil
@@ -1711,7 +1447,6 @@ function WayfinderModule:ClearWaypoint(fromTracker)
     currentTarget.waypointID = nil
     currentTarget.flightDestZone = nil
     WayfinderModule.flightDestination = nil
-    playedArrivalSound = false
     arrivedSoundTargetKey = nil
 
     navState.hasTarget = false
@@ -1756,7 +1491,6 @@ function WayfinderModule:SavePersistentWaypoints()
             title = wp.title,
         })
     end
-    if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
 end
 
 function WayfinderModule:RemoveWaypointByID(id)
@@ -1782,7 +1516,7 @@ function WayfinderModule:RemoveWaypointByID(id)
 
     if self.RefreshMapPins then self:RefreshMapPins() end
     if removedTitle then
-        print(string.format("|cff00c0ff[Wayfinder]|r Removed waypoint: |cffffffff%s|r.", removedTitle))
+        Print(string_format(L["Removed waypoint: %s."], "|cffffffff" .. removedTitle .. "|r"))
     end
 end
 
@@ -1793,19 +1527,20 @@ function WayfinderModule:ClearAllCustomWaypoints()
     if currentTarget.isCustom then
         self:ClearWaypoint()
     end
-    print("|cff00c0ff[Wayfinder]|r All custom waypoints cleared.")
+    Print(L["All custom waypoints cleared."])
 end
 
 function WayfinderModule:ListWaypoints()
+    ns.HintChatOutput()
     if #self.customWaypoints == 0 then
-        print("|cff00c0ff[Wayfinder]|r No waypoints currently active.")
+        Print(L["No waypoints currently active."])
         return
     end
-    print(string.format("|cff00c0ff[Wayfinder]|r Active Waypoints (%d):", #self.customWaypoints))
+    Print(string_format(L["Active Waypoints (%d):"], #self.customWaypoints))
     for i, wp in ipairs(self.customWaypoints) do
         local isActive = (currentTarget.hasTarget and currentTarget.waypointID == wp.id)
-        local activeTag = isActive and " |cff00ff00[ACTIVE]|r" or ""
-        print(string.format("  #%d: |cffffd100%s|r - (%.1f, %.1f) in %s%s", i, wp.title, wp.x * 100, wp.y * 100, wp.mapName or "Zone", activeTag))
+        local activeTag = isActive and (" |cff00ff00[" .. L["ACTIVE"] .. "]|r") or ""
+        Print(string_format("  #%d: |cffffd100%s|r - (%.1f, %.1f) %s%s", i, wp.title, wp.x * 100, wp.y * 100, wp.mapName or L["Zone"], activeTag))
     end
 end
 
@@ -1814,22 +1549,22 @@ function WayfinderModule:OnWaypointArrived(wpID)
     if #self.customWaypoints > 1 then
         for i, wp in ipairs(self.customWaypoints) do
             if wp.id == wpID then
-                local title = wp.title or "Waypoint"
+                local title = wp.title or L["Waypoint"]
                 table.remove(self.customWaypoints, i)
                 self:SavePersistentWaypoints()
                 if self.RefreshMapPins then self:RefreshMapPins() end
-                print(string.format("|cff00c0ff[Wayfinder]|r Arrived at |cffffffff%s|r! Switching to next closest waypoint...", title))
+                Print(string_format(L["Arrived at %s! Switching to the next closest waypoint..."], "|cffffffff" .. title .. "|r"))
                 self:SetClosestWaypoint()
                 break
             end
         end
     elseif #self.customWaypoints == 1 then
         local wp = self.customWaypoints[1]
-        local title = (wp and wp.title) or "Waypoint"
+        local title = (wp and wp.title) or L["Waypoint"]
         self.customWaypoints = {}
         self:SavePersistentWaypoints()
         if self.RefreshMapPins then self:RefreshMapPins() end
-        print(string.format("|cff00c0ff[Wayfinder]|r Arrived at destination: |cffffffff%s|r!", title))
+        Print(string_format(L["Arrived at destination: %s!"], "|cffffffff" .. title .. "|r"))
         self:ClearWaypoint()
     end
 end
@@ -1882,9 +1617,6 @@ function WayfinderModule:CalculateNavigation()
 
     local playerFacing = (GetPlayerFacing and GetPlayerFacing()) or 0
 
-    lastPlayerMapX = px
-    lastPlayerMapY = py
-    lastPlayerFacing = playerFacing
 
     -- Verify target world cache is populated
     local targetMapID = currentTarget.uiMapID or playerMapID
@@ -1892,8 +1624,7 @@ function WayfinderModule:CalculateNavigation()
         UpdateTargetWorldCache()
     end
 
-    local distanceYards = 0
-    local targetAngle = 0
+    local distanceYards, targetAngle
     local isSameZone = (playerMapID == targetMapID)
 
     if isSameZone then
@@ -1927,7 +1658,6 @@ function WayfinderModule:CalculateNavigation()
         end
     end
 
-    targetWorldAngle = targetAngle
 
     local relativeAngle = (targetAngle - playerFacing) % TWO_PI
     if relativeAngle > MATH_PI then
@@ -1953,7 +1683,7 @@ function WayfinderModule:CalculateNavigation()
     local threshold = (ns.db and ns.db.wayfinder and ns.db.wayfinder.arrivalThreshold) or 15
     local targetKey = (currentTarget.isCustom and ("wp_" .. tostring(currentTarget.waypointID or 0))) or ("quest_" .. tostring(currentTarget.questID or 0))
 
-    local isArrived = false
+    local isArrived
     -- CRITICAL: Arrival detection can ONLY trigger if player is on the same zone map as the destination!
     if isSameZone then
         if navState.isArrived and navState.hasTarget and (navState.targetKey == targetKey) then
@@ -2120,7 +1850,6 @@ function WayfinderModule:CreateHUDFrame()
         local pt, _, relPt, x, y = self:GetPoint()
         if ns.db and ns.db.wayfinder then
             ns.db.wayfinder.hudPosition = { point = pt, relativePoint = relPt, x = math.floor(x), y = math.floor(y) }
-            if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
         end
     end)
 
@@ -2172,50 +1901,48 @@ function WayfinderModule:CreateHUDFrame()
     frame:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
         GameTooltip:ClearLines()
-        GameTooltip:AddLine("|cff00c0ffWayfinder Navigation|r", 1, 1, 1)
+        GameTooltip:AddLine("|cff00c0ff" .. L["Wayfinder Navigation"] .. "|r", 1, 1, 1)
         if currentTarget.hasTarget then
+            local distStr = WayfinderModule:FormatDistance(navState.distanceYards)
             if navState.isOnTaxi then
-                GameTooltip:AddDoubleLine("Status:", "|cff00ffffIn Flight|r", 0.8, 0.8, 0.8, 0, 1, 1)
+                GameTooltip:AddDoubleLine(L["Status:"], "|cff00ffff" .. L["In Flight"] .. "|r", 0.8, 0.8, 0.8, 0, 1, 1)
                 if currentTarget.flightDestZone then
-                    GameTooltip:AddDoubleLine("Destination:", currentTarget.flightDestZone, 0.8, 0.8, 0.8, 1, 1, 1)
+                    GameTooltip:AddDoubleLine(L["Destination:"], currentTarget.flightDestZone, 0.8, 0.8, 0.8, 1, 1, 1)
                 end
             elseif currentTarget.isFlightLeg then
-                GameTooltip:AddDoubleLine("Action:", "|cff00ff00Take Flight|r", 0.8, 0.8, 0.8, 0, 1, 0)
+                GameTooltip:AddDoubleLine(L["Action:"], "|cff00ff00" .. L["Take Flight"] .. "|r", 0.8, 0.8, 0.8, 0, 1, 0)
                 if currentTarget.title then
-                    GameTooltip:AddDoubleLine("Target:", currentTarget.title, 0.8, 0.8, 0.8, 1, 1, 1)
+                    GameTooltip:AddDoubleLine(L["Target:"], currentTarget.title, 0.8, 0.8, 0.8, 1, 1, 1)
                 end
-                local distStr = WayfinderModule:FormatDistance(navState.distanceYards)
-                GameTooltip:AddDoubleLine("Distance:", distStr, 0.8, 0.8, 0.8, 1, 1, 1)
+                GameTooltip:AddDoubleLine(L["Distance:"], distStr, 0.8, 0.8, 0.8, 1, 1, 1)
             elseif currentTarget.checkpointIndex and currentTarget.totalCheckpoints then
-                GameTooltip:AddDoubleLine("Action:", "|cffffaa00On-Foot Highway|r", 0.8, 0.8, 0.8, 1, 0.7, 0)
-                GameTooltip:AddDoubleLine("Checkpoint:", string.format("%d of %d", currentTarget.checkpointIndex, currentTarget.totalCheckpoints), 0.8, 0.8, 0.8, 1, 1, 1)
+                GameTooltip:AddDoubleLine(L["Action:"], "|cffffaa00" .. L["On-Foot Highway"] .. "|r", 0.8, 0.8, 0.8, 1, 0.7, 0)
+                GameTooltip:AddDoubleLine(L["Checkpoint:"], string_format(L["%d of %d"], currentTarget.checkpointIndex, currentTarget.totalCheckpoints), 0.8, 0.8, 0.8, 1, 1, 1)
                 if currentTarget.title then
-                    GameTooltip:AddDoubleLine("Target:", currentTarget.title, 0.8, 0.8, 0.8, 1, 1, 1)
+                    GameTooltip:AddDoubleLine(L["Target:"], currentTarget.title, 0.8, 0.8, 0.8, 1, 1, 1)
                 end
-                local distStr = WayfinderModule:FormatDistance(navState.distanceYards)
-                GameTooltip:AddDoubleLine("Distance:", distStr, 0.8, 0.8, 0.8, 1, 1, 1)
+                GameTooltip:AddDoubleLine(L["Distance:"], distStr, 0.8, 0.8, 0.8, 1, 1, 1)
             else
                 if currentTarget.title then
-                    GameTooltip:AddDoubleLine("Target:", currentTarget.title, 0.8, 0.8, 0.8, 1, 1, 1)
+                    GameTooltip:AddDoubleLine(L["Target:"], currentTarget.title, 0.8, 0.8, 0.8, 1, 1, 1)
                 end
-                local distStr = WayfinderModule:FormatDistance(navState.distanceYards)
-                GameTooltip:AddDoubleLine("Distance:", distStr, 0.8, 0.8, 0.8, 1, 1, 1)
+                GameTooltip:AddDoubleLine(L["Distance:"], distStr, 0.8, 0.8, 0.8, 1, 1, 1)
                 if #WayfinderModule.customWaypoints > 1 then
-                    GameTooltip:AddLine(string.format("|cff00ff00%d active custom waypoints|r", #WayfinderModule.customWaypoints), 0.8, 0.8, 0.8)
+                    GameTooltip:AddLine("|cff00ff00" .. string_format(L["%d active custom waypoints"], #WayfinderModule.customWaypoints) .. "|r", 0.8, 0.8, 0.8)
                 end
             end
         else
             if currentTarget.title then
                 GameTooltip:AddLine(currentTarget.title, 1, 0.82, 0)
-                GameTooltip:AddLine("No coordinates available from server.", 0.8, 0.8, 0.8)
+                GameTooltip:AddLine(L["No coordinates available from server."], 0.8, 0.8, 0.8)
             else
-                GameTooltip:AddLine("No active waypoint set.", 0.8, 0.8, 0.8)
+                GameTooltip:AddLine(L["No active waypoint set."], 0.8, 0.8, 0.8)
             end
-            GameTooltip:AddLine("Type |cff00c0ff/way <x> <y>|r to set a manual destination.", 0.6, 0.8, 1)
+            GameTooltip:AddLine(L["Type /way <x> <y> to set a manual destination."], 0.6, 0.8, 1)
         end
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("|cffaaaaaaLeft-Click Drag: Move Arrow|r", 0.6, 0.6, 0.6)
-        GameTooltip:AddLine("|cffaaaaaaRight-Click: Wayfinder Menu|r", 0.6, 0.6, 0.6)
+        GameTooltip:AddLine("|cffaaaaaa" .. L["Left-Click Drag: Move Arrow"] .. "|r", 0.6, 0.6, 0.6)
+        GameTooltip:AddLine("|cffaaaaaa" .. L["Right-Click: Wayfinder Menu"] .. "|r", 0.6, 0.6, 0.6)
         GameTooltip:Show()
     end)
     frame:SetScript("OnLeave", function()
@@ -2312,55 +2039,39 @@ end
 function WayfinderModule:OpenHUDContextMenu(anchor)
     local hasCustom = #WayfinderModule.customWaypoints > 0
     local menu = {
-        { text = "|cff00c0ffWayfinder Navigation|r", isTitle = true, notCheckable = true },
+        { text = "|cff00c0ff" .. L["Wayfinder Navigation"] .. "|r", isTitle = true, notCheckable = true },
         {
-            text = (ns.db and ns.db.wayfinder and ns.db.wayfinder.locked) and "Unlock Arrow Position" or "Lock Arrow Position",
+            text = ns.db.wayfinder.locked and L["Unlock Arrow Position"] or L["Lock Arrow Position"],
             notCheckable = true,
             func = function()
-                if ns.db and ns.db.wayfinder then
-                    ns.db.wayfinder.locked = not ns.db.wayfinder.locked
-                    if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                end
+                ns.db.wayfinder.locked = not ns.db.wayfinder.locked
             end,
         },
         {
-            text = "Reset Arrow Position",
+            text = L["Reset Arrow Position"],
             notCheckable = true,
             func = function()
-                if WayfinderModule.hudFrame then
-                    WayfinderModule.hudFrame:ClearAllPoints()
-                    WayfinderModule.hudFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 160)
-                    if ns.db and ns.db.wayfinder then
-                        ns.db.wayfinder.hudPosition = { point = "CENTER", x = 0, y = 160 }
-                        if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                    end
-                end
+                WayfinderModule:ResetHUDPosition()
             end,
         },
         {
-            text = "Show Backdrop Circle",
-            checked = function() return ns.db and ns.db.wayfinder and ns.db.wayfinder.showBackdrop == true end,
+            text = L["Show Backdrop Circle"],
+            checked = function() return ns.db.wayfinder.showBackdrop == true end,
             func = function()
-                if ns.db and ns.db.wayfinder then
-                    ns.db.wayfinder.showBackdrop = not (ns.db.wayfinder.showBackdrop == true)
-                    if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                    WayfinderModule:ApplyHUDSettings()
-                end
+                ns.db.wayfinder.showBackdrop = ns.db.wayfinder.showBackdrop ~= true
+                WayfinderModule:ApplyHUDSettings()
             end,
         },
         {
-            text = "Hide Arrow in Combat",
-            checked = function() return not (ns.db and ns.db.wayfinder and ns.db.wayfinder.hideInCombat == false) end,
+            text = L["Hide Arrow in Combat"],
+            checked = function() return ns.db.wayfinder.hideInCombat ~= false end,
             func = function()
-                if ns.db and ns.db.wayfinder then
-                    ns.db.wayfinder.hideInCombat = not (ns.db.wayfinder.hideInCombat ~= false)
-                    if ns.FlushDBToGlobals then ns.FlushDBToGlobals() end
-                    WayfinderModule:UpdateFrameVisibility()
-                end
+                ns.db.wayfinder.hideInCombat = ns.db.wayfinder.hideInCombat == false
+                WayfinderModule:UpdateFrameVisibility()
             end,
         },
         {
-            text = "Point to Closest Waypoint (/cway)",
+            text = L["Point to Closest Waypoint (/cway)"],
             notCheckable = true,
             disabled = not hasCustom,
             func = function()
@@ -2368,7 +2079,7 @@ function WayfinderModule:OpenHUDContextMenu(anchor)
             end,
         },
         {
-            text = "List Active Waypoints (/way list)",
+            text = L["List Active Waypoints (/way list)"],
             notCheckable = true,
             disabled = not hasCustom,
             func = function()
@@ -2376,7 +2087,7 @@ function WayfinderModule:OpenHUDContextMenu(anchor)
             end,
         },
         {
-            text = "Clear Current Target",
+            text = L["Clear Current Target"],
             notCheckable = true,
             disabled = not currentTarget.hasTarget,
             func = function()
@@ -2384,7 +2095,7 @@ function WayfinderModule:OpenHUDContextMenu(anchor)
             end,
         },
         {
-            text = "Clear All Custom Waypoints",
+            text = L["Clear All Custom Waypoints"],
             notCheckable = true,
             disabled = not hasCustom,
             func = function()
@@ -2392,7 +2103,7 @@ function WayfinderModule:OpenHUDContextMenu(anchor)
             end,
         },
         {
-            text = "Open Wayfinder Settings",
+            text = L["Open Wayfinder Settings"],
             notCheckable = true,
             func = function()
                 if ns.Config and ns.Config.ToggleConfigFrame then
@@ -2400,7 +2111,7 @@ function WayfinderModule:OpenHUDContextMenu(anchor)
                 end
             end,
         },
-        { text = "Close", notCheckable = true, func = function() end },
+        { text = L["Close"], notCheckable = true, isClose = true, func = function() end },
     }
 
     if MenuUtil and MenuUtil.CreateContextMenu then
@@ -2411,7 +2122,7 @@ function WayfinderModule:OpenHUDContextMenu(anchor)
                         rootDescription:CreateTitle(item.text)
                     end
                 elseif item.text and item.text ~= "" then
-                    if item.text == "Close" then
+                    if item.isClose then
                         if rootDescription.CreateDivider then rootDescription:CreateDivider() end
                         rootDescription:CreateButton(item.text, function() end)
                     else
@@ -2473,13 +2184,13 @@ end
 
 local function GetPreviewDestinationTitle()
     local titleFormat = (ns.db and ns.db.wayfinder and ns.db.wayfinder.hudTitleFormat) or "zone"
+    local zone, quest = L["Westfall"], L["The People's Militia"]
     if titleFormat == "zone" then
-        return "Westfall"
+        return zone
     elseif titleFormat == "quest" then
-        return "The People's Militia"
-    else
-        return "Westfall - The People's Militia"
+        return quest
     end
+    return zone .. " - " .. quest
 end
 
 function WayfinderModule:UpdateIdleState()
@@ -2504,7 +2215,7 @@ function WayfinderModule:UpdateIdleState()
         self:UpdateHUDTextAnchors()
         if ns.db and ns.db.wayfinder and ns.db.wayfinder.showDistance then
             self.hudFrame.distText:Show()
-            self.hudFrame.distText:SetText("|cff00c0ff(Preview)|r")
+            self.hudFrame.distText:SetText("|cff00c0ff(" .. L["Preview"] .. ")|r")
         else
             self.hudFrame.distText:Hide()
         end
@@ -2521,7 +2232,6 @@ function WayfinderModule:UpdateIdleState()
             block.header.wayfinderArrow:SetRotation(0)
             block.header.wayfinderArrow:SetVertexColor(1.0, 0.82, 0.0, 0.85)
         end
-        lastInlineRotation = 0
         lastInlineR, lastInlineG, lastInlineB = 1.0, 0.82, 0.0
     end
 end
@@ -2591,7 +2301,7 @@ function WayfinderModule:UpdateFrameVisibility()
             self:UpdateHUDTextAnchors()
             if ns.db and ns.db.wayfinder and ns.db.wayfinder.showDistance then
                 self.hudFrame.distText:Show()
-                self.hudFrame.distText:SetText("|cff00c0ff(Preview)|r")
+                self.hudFrame.distText:SetText("|cff00c0ff(" .. L["Preview"] .. ")|r")
             else
                 self.hudFrame.distText:Hide()
             end
@@ -2694,14 +2404,14 @@ function WayfinderModule:OnUpdate(dt)
         if showDest then
             if navState.isOnTaxi then
                 local flightDest = WayfinderModule.flightDestination or currentTarget.flightDestZone or ""
-                destTitle = (flightDest ~= "" and flightDest) or currentTarget.title or "Flight Destination"
+                destTitle = (flightDest ~= "" and flightDest) or currentTarget.title or L["Flight Destination"]
             elseif currentTarget.isCustom then
                 if titleFormat == "zone" and currentTarget.zoneName and currentTarget.zoneName ~= "" then
                     destTitle = currentTarget.zoneName
                 elseif titleFormat == "both" and currentTarget.zoneName and currentTarget.title and currentTarget.title ~= currentTarget.zoneName then
                     destTitle = string.format("%s - %s", currentTarget.zoneName, currentTarget.title)
                 else
-                    destTitle = currentTarget.title or currentTarget.zoneName or "Waypoint"
+                    destTitle = currentTarget.title or currentTarget.zoneName or L["Waypoint"]
                 end
             else
                 local zoneName = currentTarget.zoneName or ""
@@ -2743,9 +2453,9 @@ function WayfinderModule:OnUpdate(dt)
                 local flightDest = WayfinderModule.flightDestination or currentTarget.flightDestZone or ""
                 local flightMsg
                 if flightDest ~= "" then
-                    flightMsg = string.format("|cff00ffffIN FLIGHT to %s|r", flightDest:upper())
+                    flightMsg = "|cff00ffff" .. string_format(L["IN FLIGHT to %s"], flightDest:upper()) .. "|r"
                 else
-                    flightMsg = "|cff00ffffIN FLIGHT|r"
+                    flightMsg = "|cff00ffff" .. L["IN FLIGHT"] .. "|r"
                 end
                 if lastDistFormatted ~= flightMsg then
                     lastDistFormatted = flightMsg
@@ -2757,7 +2467,7 @@ function WayfinderModule:OnUpdate(dt)
                     lastDistArrived = true
                     lastDistNumber = -1
                     local cArrived = (ns.db and ns.db.wayfinder and ns.db.wayfinder.arrowArrivedColor) or { r = 0.1, g = 1.0, b = 0.2 }
-                    lastDistFormatted = string_format("|cff%02x%02x%02xArrived!|r", math_floor(cArrived.r * 255), math_floor(cArrived.g * 255), math_floor(cArrived.b * 255))
+                    lastDistFormatted = ns.ColorToHex(cArrived) .. L["Arrived!"] .. "|r"
                     self.hudFrame.distText:SetText(lastDistFormatted)
                 end
             else
@@ -2772,7 +2482,7 @@ function WayfinderModule:OnUpdate(dt)
                     if showDist then
                         lastDistFormatted = string_format("%s%s", self:FormatDistance(navState.distanceYards), etaPart)
                     else
-                        lastDistFormatted = string_format("|cff88ccffETA: %s|r", navState.etaFormatted)
+                        lastDistFormatted = "|cff88ccff" .. string_format(L["ETA: %s"], navState.etaFormatted) .. "|r"
                     end
                     self.hudFrame.distText:SetText(lastDistFormatted)
                 end
@@ -2787,7 +2497,6 @@ function WayfinderModule:OnUpdate(dt)
         local block = ns.StandaloneTracker.activeBlocks[ns.activeQuestID]
         if block and block.header and block.header.wayfinderArrow and block.header.wayfinderArrow:IsShown() then
             block.header.wayfinderArrow:SetRotation(navState.relativeAngle)
-            lastInlineRotation = navState.relativeAngle
             if navState.r ~= lastInlineR or navState.g ~= lastInlineG or navState.b ~= lastInlineB then
                 block.header.wayfinderArrow:SetVertexColor(navState.r, navState.g, navState.b, 1.0)
                 lastInlineR, lastInlineG, lastInlineB = navState.r, navState.g, navState.b
@@ -2805,6 +2514,14 @@ function WayfinderModule:RefreshState()
     end
 end
 
+function WayfinderModule:ResetHUDPosition()
+    ns.db.wayfinder.hudPosition = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 160 }
+    if self.hudFrame then
+        self.hudFrame:ClearAllPoints()
+        self.hudFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 160)
+    end
+end
+
 function WayfinderModule:ForceImmediateUpdate()
     updateElapsed = 1.0
     lastRotationAngle = -999
@@ -2814,7 +2531,6 @@ function WayfinderModule:ForceImmediateUpdate()
     lastDistArrived = nil
     lastTitleFormatted = nil
     lastColorR, lastColorG, lastColorB = -1, -1, -1
-    lastInlineRotation = -999
     lastInlineR, lastInlineG, lastInlineB = -1, -1, -1
 
     self:StartUpdateTimer()
@@ -2825,9 +2541,9 @@ end
 function WayfinderModule:TogglePreviewMode()
     self.previewMode = not self.previewMode
     if self.previewMode then
-        print("|cff00c0ff[Wayfinder]|r Arrow preview active (drag to reposition). Run |cffffd100/way test|r again to exit preview.")
+        ns.Notify(L["Arrow preview active (drag to reposition). Run /way test again to exit preview."])
     else
-        print("|cff00c0ff[Wayfinder]|r Arrow preview closed.")
+        ns.Notify(L["Arrow preview closed."])
     end
     self:UpdateFrameVisibility()
 end
@@ -2928,13 +2644,13 @@ local function GetOrCreateWorldMapPin(parent)
         if self.wp then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:ClearLines()
-            GameTooltip:AddLine("|cff00c0ff[Wayfinder Waypoint]|r", 1, 1, 1)
-            GameTooltip:AddLine(self.wp.title or "Custom Destination", 1, 0.82, 0)
-            GameTooltip:AddDoubleLine("Coords:", string.format("%.1f, %.1f", self.wp.x * 100, self.wp.y * 100), 0.8, 0.8, 0.8, 1, 1, 1)
-            GameTooltip:AddDoubleLine("Zone:", self.wp.mapName or "Unknown", 0.8, 0.8, 0.8, 1, 1, 1)
+            GameTooltip:AddLine("|cff00c0ff[" .. L["Wayfinder Waypoint"] .. "]|r", 1, 1, 1)
+            GameTooltip:AddLine(self.wp.title or L["Custom Destination"], 1, 0.82, 0)
+            GameTooltip:AddDoubleLine(L["Coords:"], string_format("%.1f, %.1f", self.wp.x * 100, self.wp.y * 100), 0.8, 0.8, 0.8, 1, 1, 1)
+            GameTooltip:AddDoubleLine(L["Zone:"], self.wp.mapName or L["Unknown"], 0.8, 0.8, 0.8, 1, 1, 1)
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("|cff00ff00Left-Click: Set Active Waypoint|r", 0.6, 0.8, 1)
-            GameTooltip:AddLine("|cffff8800Right-Click: Remove Waypoint|r", 1, 0.6, 0.4)
+            GameTooltip:AddLine("|cff00ff00" .. L["Left-Click: Set Active Waypoint"] .. "|r", 0.6, 0.8, 1)
+            GameTooltip:AddLine("|cffff8800" .. L["Right-Click: Remove Waypoint"] .. "|r", 1, 0.6, 0.4)
             GameTooltip:Show()
         end
     end)
@@ -2957,7 +2673,7 @@ local function GetOrCreateWorldMapPin(parent)
             end
         else
             WayfinderModule:SetWaypointAsTarget(self.wp)
-            print(string.format("|cff00c0ff[Wayfinder]|r Active waypoint set to: |cffffffff%s|r.", self.wp.title))
+            Print(string_format(L["Active waypoint set to: %s."], "|cffffffff" .. self.wp.title .. "|r"))
             if WayfinderModule.RefreshMapPins then
                 WayfinderModule:RefreshMapPins()
             end
@@ -3076,21 +2792,21 @@ function WayfinderModule:UpdateCoordinatesDisplay()
             end
 
             -- Player Coordinates
-            local playerText = "Player: --.-, --.-"
+            local playerText = string_format(L["Player: %s"], "--.-, --.-")
             local playerPos = C_Map and C_Map.GetPlayerMapPosition and C_Map.GetPlayerMapPosition(mapID, "player")
             if playerPos then
                 local px, py = playerPos:GetXY()
                 if px and py and px > 0 and py > 0 then
-                    playerText = string.format("Player: |cffffffff%.1f, %.1f|r", px * 100, py * 100)
+                    playerText = string_format(L["Player: %s"], string_format("|cffffffff%.1f, %.1f|r", px * 100, py * 100))
                 end
             end
 
             -- Cursor Coordinates
-            local cursorText = "Cursor: --.-, --.-"
+            local cursorText = string_format(L["Cursor: %s"], "--.-, --.-")
             if WorldMapFrame.GetNormalizedCursorPosition then
                 local cx, cy = WorldMapFrame:GetNormalizedCursorPosition()
                 if cx and cy and cx >= 0 and cx <= 1 and cy >= 0 and cy <= 1 then
-                    cursorText = string.format("Cursor: |cffffffff%.1f, %.1f|r", cx * 100, cy * 100)
+                    cursorText = string_format(L["Cursor: %s"], string_format("|cffffffff%.1f, %.1f|r", cx * 100, cy * 100))
                 end
             end
 
@@ -3125,7 +2841,7 @@ function WayfinderModule:UpdateMapWaypointButton()
 
         local t = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         t:SetPoint("CENTER")
-        t:SetText("+ Waypoint")
+        t:SetText("+ " .. L["Waypoint"])
         btn.text = t
 
         btn:SetScript("OnEnter", function(self)
@@ -3133,9 +2849,9 @@ function WayfinderModule:UpdateMapWaypointButton()
             self:SetBackdropBorderColor(0.40, 0.80, 1.0, 1.0)
             GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
             GameTooltip:ClearLines()
-            GameTooltip:AddLine("Wayfinder Waypoints", 0.0, 0.75, 1.0)
-            GameTooltip:AddLine("Click to open the Paste Waypoints dialog.", 1, 1, 1)
-            GameTooltip:AddLine("Tip: Alt-Click anywhere on the map to add a waypoint.", 0.7, 0.85, 1.0)
+            GameTooltip:AddLine(L["Wayfinder Waypoints"], 0.0, 0.75, 1.0)
+            GameTooltip:AddLine(L["Click to open the Paste Waypoints dialog."], 1, 1, 1)
+            GameTooltip:AddLine(L["Tip: Alt-Click anywhere on the map to add a waypoint."], 0.7, 0.85, 1.0)
             GameTooltip:Show()
         end)
         btn:SetScript("OnLeave", function(self)
@@ -3193,12 +2909,12 @@ local function HandleWorldMapClick(self, button)
         local x = math.floor(cx * 1000 + 0.5) / 10
         local y = math.floor(cy * 1000 + 0.5) / 10
         local mapInfo = C_Map and C_Map.GetMapInfo and C_Map.GetMapInfo(mapID)
-        local mapName = mapInfo and mapInfo.name or "Map"
+        local mapName = mapInfo and mapInfo.name or L["Map"]
         local title = string.format("%s (%.1f, %.1f)", mapName, x, y)
         local wp = WayfinderModule:AddCustomWaypoint(mapID, x, y, title)
         if wp then
             WayfinderModule:SetWaypointAsTarget(wp)
-            print(string.format("|cff00c0ff[Wayfinder]|r Waypoint dropped at (%.1f, %.1f) in %s.", x, y, mapName))
+            Print(string_format(L["Waypoint dropped at (%.1f, %.1f) in %s."], x, y, mapName))
         end
     end
 end
@@ -3238,7 +2954,7 @@ function WayfinderModule:CreatePasteDialog()
 
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("LEFT", header, "LEFT", 10, 0)
-    title:SetText("Wayfinder - Paste Waypoints")
+    title:SetText(L["Wayfinder - Paste Waypoints"])
 
     -- Close Button
     local closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
@@ -3250,7 +2966,7 @@ function WayfinderModule:CreatePasteDialog()
     subtitle:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 10, -8)
     subtitle:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", -10, -8)
     subtitle:SetJustifyH("LEFT")
-    subtitle:SetText("Paste coordinate lines or /way commands below (one per line):")
+    subtitle:SetText(L["Paste coordinate lines or /way commands below (one per line):"])
 
     -- ScrollFrame container
     local scrollBox = CreateFrame("Frame", nil, f, (BackdropTemplateMixin and "BackdropTemplate"))
@@ -3307,7 +3023,7 @@ function WayfinderModule:CreatePasteDialog()
     addBtn:SetBackdropBorderColor(0.20, 0.70, 0.35, 0.90)
     local addText = addBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     addText:SetPoint("CENTER")
-    addText:SetText("Add Waypoints")
+    addText:SetText(L["Add Waypoints"])
     addBtn.text = addText
 
     addBtn:SetScript("OnEnter", function(self)
@@ -3333,13 +3049,12 @@ function WayfinderModule:CreatePasteDialog()
         end
 
         if added > 0 then
-            print(string.format("|cff00c0ff[Wayfinder]|r Successfully parsed and added %d waypoints (%d active total).",
-                added, #WayfinderModule.customWaypoints))
+            ns.Notify(string_format(L["Added %d waypoints (%d active in total)."], added, #WayfinderModule.customWaypoints))
             WayfinderModule:SetClosestWaypoint()
             editBox:SetText("")
             f:Hide()
         else
-            print("|cff00c0ff[Wayfinder]|r No valid coordinates found. Format: [Zone] <x> <y> [description]")
+            ns.Notify(L["No valid coordinates found. Format: [Zone] <x> <y> [description]"], 1.0, 0.3, 0.3)
         end
     end)
 
@@ -3358,7 +3073,7 @@ function WayfinderModule:CreatePasteDialog()
     clearBtn:SetBackdropBorderColor(0.35, 0.40, 0.48, 0.80)
     local clearText = clearBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     clearText:SetPoint("CENTER")
-    clearText:SetText("Clear")
+    clearText:SetText(L["Clear"])
     clearBtn.text = clearText
     clearBtn:SetScript("OnEnter", function(self)
         self:SetBackdropColor(0.25, 0.28, 0.34, 1.0)
@@ -3386,7 +3101,7 @@ function WayfinderModule:CreatePasteDialog()
     cancelBtn:SetBackdropBorderColor(0.35, 0.40, 0.48, 0.80)
     local cancelText = cancelBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     cancelText:SetPoint("CENTER")
-    cancelText:SetText("Close")
+    cancelText:SetText(L["Close"])
     cancelBtn.text = cancelText
     cancelBtn:SetScript("OnEnter", function(self)
         self:SetBackdropColor(0.25, 0.28, 0.34, 1.0)
@@ -3466,13 +3181,14 @@ end
 function WayfinderModule:HandleWaySlash(msg)
     msg = (msg and msg:gsub("^%s*(.-)%s*$", "%1")) or ""
     if msg == "" then
-        print("|cff00c0ff[Wayfinder]|r Usage: /way <x> <y> [description]")
-        print("  |cff00c0ff/way <zone> <x> <y>|r - Set waypoint in a specific zone")
-        print("  |cff00c0ff/way paste|r - Open multi-line waypoint paste window")
-        print("  |cff00c0ff/cway|r - Point arrow to the closest active waypoint")
-        print("  |cff00c0ff/way list|r - List all active custom waypoints")
-        print("  |cff00c0ff/way reset|r - Clear all custom waypoints")
-        print("  |cff00c0ff/way test|r - Preview and reposition navigation arrow")
+        ns.HintChatOutput()
+        Print(L["Usage: /way <x> <y> [description]"])
+        Print("  |cff00c0ff/way <zone> <x> <y>|r - " .. L["Set a waypoint in a specific zone"])
+        Print("  |cff00c0ff/way paste|r - " .. L["Open the multi-line waypoint paste window"])
+        Print("  |cff00c0ff/cway|r - " .. L["Point the arrow to the closest active waypoint"])
+        Print("  |cff00c0ff/way list|r - " .. L["List all active custom waypoints"])
+        Print("  |cff00c0ff/way reset|r - " .. L["Clear all custom waypoints"])
+        Print("  |cff00c0ff/way test|r - " .. L["Preview and reposition the navigation arrow"])
         return
     end
 
@@ -3491,8 +3207,7 @@ function WayfinderModule:HandleWaySlash(msg)
             local wp = self:ParseAndAddWaypoint(line)
             if wp then added = added + 1 end
         end
-        print(string.format("|cff00c0ff[Wayfinder]|r Successfully parsed and added %d waypoints (%d active total).",
-            added, #self.customWaypoints))
+        ns.Notify(string_format(L["Added %d waypoints (%d active in total)."], added, #self.customWaypoints))
         return
     end
 
@@ -3503,7 +3218,7 @@ function WayfinderModule:HandleWaySlash(msg)
     elseif lower == "reset" or lower == "clear" or lower == "reset all" or lower == "clear all" then
         self:ClearAllCustomWaypoints()
         self:ClearWaypoint()
-        print("|cff00c0ff[Wayfinder]|r All waypoints and quest navigation cleared.")
+        ns.Notify(L["All waypoints and quest navigation cleared."])
         return
     elseif lower == "list" then
         self:ListWaypoints()
@@ -3519,13 +3234,12 @@ function WayfinderModule:HandleWaySlash(msg)
     local wp = self:ParseAndAddWaypoint(msg)
     if wp then
         local count = #self.customWaypoints
-        local countStr = (count > 1) and string.format(" (%d active waypoints)", count) or ""
-        print(string.format("|cff00c0ff[Wayfinder]|r Waypoint added: |cffffffff%s|r at (%.1f, %.1f) in %s%s.",
-            wp.title, wp.x * 100, wp.y * 100, wp.mapName, countStr))
+        local countStr = (count > 1) and (" (" .. string_format(L["%d active waypoints"], count) .. ")") or ""
+        ns.Notify(string_format(L["Waypoint added: %s at (%.1f, %.1f) in %s"], wp.title, wp.x * 100, wp.y * 100, wp.mapName) .. countStr)
         return
     end
 
-    print("|cff00c0ff[Wayfinder]|r Invalid format. Use: /way <x> <y> [description], /way paste, or /cway")
+    ns.Notify(L["Invalid format. Use: /way <x> <y> [description], /way paste, or /cway"], 1.0, 0.3, 0.3)
 end
 
 -- ---------------------------------------------------------------------------
@@ -3553,10 +3267,10 @@ function WayfinderModule:Initialize()
                 local wp = {
                     id = waypointCounter,
                     uiMapID = wpData.uiMapID,
-                    mapName = wpData.mapName or "Zone",
+                    mapName = wpData.mapName or L["Zone"],
                     x = wpData.x,
                     y = wpData.y,
-                    title = wpData.title or string.format("Waypoint %d", waypointCounter),
+                    title = wpData.title or string_format(L["Waypoint %d"], waypointCounter),
                     created = time(),
                 }
                 table.insert(self.customWaypoints, wp)
@@ -3767,44 +3481,65 @@ function WayfinderModule:Initialize()
     end)
     self.eventFrame = eventFrame
 
-    -- Slash Command Registrations: /way, /waypoint, /bfqway
-    _G["SLASH_BLEAKFIBER_WAY1"] = "/way"
-    _G["SLASH_BLEAKFIBER_WAY2"] = "/waypoint"
-    _G["SLASH_BLEAKFIBER_WAY3"] = "/bfqway"
-    SlashCmdList["BLEAKFIBER_WAY"] = function(msg)
-        WayfinderModule:HandleWaySlash(msg)
-    end
+    self:RegisterSlashCommands()
+end
 
-    -- Slash Command Registrations: /cway, /closestway
-    _G["SLASH_BLEAKFIBER_CWAY1"] = "/cway"
-    _G["SLASH_BLEAKFIBER_CWAY2"] = "/closestway"
-    SlashCmdList["BLEAKFIBER_CWAY"] = function()
-        WayfinderModule:SetClosestWaypoint()
-    end
-
-    -- Slash Command Registration: /waypaste
-    _G["SLASH_BLEAKFIBER_PASTE1"] = "/waypaste"
-    SlashCmdList["BLEAKFIBER_PASTE"] = function()
-        WayfinderModule:OpenPasteDialog()
-    end
-
-    -- Hook into /bfq arrow, /bfq cway, and /bfq paste
-    local origSlashHandler = SlashCmdList["BLEAKFIBER_TRACKER"]
-    SlashCmdList["BLEAKFIBER_TRACKER"] = function(msg)
-        local cmd, rest = msg:match("^(%S*)%s*(.-)$")
-        cmd = cmd:lower()
-        if cmd == "arrow" or cmd == "wp" or cmd == "waypoint" then
-            WayfinderModule:HandleWaySlash(rest)
-        elseif cmd == "cway" then
-            WayfinderModule:SetClosestWaypoint()
-        elseif cmd == "paste" or cmd == "waypaste" then
-            WayfinderModule:OpenPasteDialog()
-        else
-            if origSlashHandler then
-                origSlashHandler(msg)
+-- Returns true when another add-on (e.g. TomTom) already owns a slash command string
+local function IsSlashCommandTaken(command, ownKey)
+    command = command:lower()
+    for key in pairs(SlashCmdList) do
+        if key ~= ownKey then
+            local i = 1
+            local alias = _G["SLASH_" .. key .. i]
+            while alias do
+                if type(alias) == "string" and alias:lower() == command then
+                    return true
+                end
+                i = i + 1
+                alias = _G["SLASH_" .. key .. i]
             end
         end
     end
+    return false
+end
+
+-- /bfqway, /bfqcway and /waypaste are always ours; /way, /waypoint, /cway and
+-- /closestway are only claimed when no other add-on (TomTom, etc.) provides them.
+function WayfinderModule:RegisterSlashCommands()
+    if self.slashRegistered then return end
+    self.slashRegistered = true
+
+    local function Register(key, handler, ...)
+        local index = 0
+        for _, command in ipairs({ ... }) do
+            if command:sub(1, 4) == "/bfq" or not IsSlashCommandTaken(command, key) then
+                index = index + 1
+                _G["SLASH_" .. key .. index] = command
+            end
+        end
+        if index > 0 then
+            SlashCmdList[key] = handler
+        end
+    end
+
+    Register("BLEAKFIBER_WAY", function(msg) WayfinderModule:HandleWaySlash(msg) end, "/bfqway", "/way", "/waypoint")
+    Register("BLEAKFIBER_CWAY", function() WayfinderModule:SetClosestWaypoint() end, "/bfqcway", "/cway", "/closestway")
+    Register("BLEAKFIBER_PASTE", function() WayfinderModule:OpenPasteDialog() end, "/bfqpaste", "/waypaste")
+end
+
+-- /bfq arrow, /bfq cway and /bfq paste (dispatched from Config's /bfq handler)
+function WayfinderModule:HandleTrackerSubcommand(cmd, rest)
+    if cmd == "arrow" or cmd == "wp" or cmd == "waypoint" or cmd == "way" then
+        self:HandleWaySlash(rest)
+        return true
+    elseif cmd == "cway" then
+        self:SetClosestWaypoint()
+        return true
+    elseif cmd == "paste" or cmd == "waypaste" then
+        self:OpenPasteDialog()
+        return true
+    end
+    return false
 end
 
 function WayfinderModule:Disable()
@@ -3816,11 +3551,14 @@ function WayfinderModule:Disable()
     if self.hudFrame then
         self.hudFrame:Hide()
     end
-    if self.coordFrame then
-        self.coordFrame:Hide()
+    if coordsFrame then
+        coordsFrame:Hide()
     end
-    if self.pinOverlayFrame then
-        self.pinOverlayFrame:Hide()
+    if mapPinOverlay then
+        mapPinOverlay:Hide()
+    end
+    if mapWaypointBtn then
+        mapWaypointBtn:Hide()
     end
     -- Hide all inline mini-arrows in quest tracker
     if ns.StandaloneTracker and ns.StandaloneTracker.activeBlocks then
@@ -3853,10 +3591,12 @@ function WayfinderModule:Enable()
     end
     self:StartUpdateTimer()
     self:UpdateFrameVisibility()
-    if self.pinOverlayFrame then
-        self.pinOverlayFrame:Show()
-        self:RefreshMapPins()
+    if mapPinOverlay then
+        mapPinOverlay:Show()
     end
+    self:RefreshMapPins()
+    self:UpdateCoordinatesDisplay()
+    self:UpdateMapWaypointButton()
     if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then
         ns.StandaloneTracker:UpdateTracker()
     end
