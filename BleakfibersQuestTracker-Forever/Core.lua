@@ -519,12 +519,14 @@ ns.GetQuestTimeLeft = ns.GetQuestTimeInfo
 -- ---------------------------------------------------------------------------
 -- Default Settings
 -- ---------------------------------------------------------------------------
-ns.DB_VERSION = 2
+ns.DB_VERSION = 3
 
 ns.defaultDB = {
     global = {
         language = "auto",      -- "auto" (game client) or a language pack code such as "deDE"
         chatOutput = false,     -- Debug & status messages in chat (off by default)
+        questItemNames = {},    -- questID -> last known quest item name (finds changed items)
+        wavNoticeShown = false, -- the ".wav sounds must be converted" notice was shown
     },
     profile = {
         -- Positioning & Sizing
@@ -968,6 +970,23 @@ local function Ensure(t, key)
     return v
 end
 
+-- Player sound files renamed from .wav to .ogg by migration 3 (shown in a one-time notice)
+local convertedWavSounds = {}
+local BUNDLED_SOUND_FILES = {
+    ["beep.wav"] = true, ["click.wav"] = true, ["custom1.wav"] = true, ["custom2.wav"] = true,
+    ["custom3.wav"] = true, ["custom4.wav"] = true, ["custom5.wav"] = true,
+}
+
+-- "fart.wav" -> "fart.ogg" (also inside "custom:fart.wav"); notes the player's own files
+local function WavToOgg(value)
+    if type(value) ~= "string" or not value:lower():find("%.wav$") then return value end
+    local file = value:gsub("^custom:", ""):gsub("^.*[\\/]", "")
+    if not BUNDLED_SOUND_FILES[file:lower()] then
+        convertedWavSounds[file:lower()] = file
+    end
+    return value:sub(1, -5) .. ".ogg"
+end
+
 local MIGRATIONS = {
     -- v1: one-time cleanup of settings from releases before 1.2.0
     [1] = function(p)
@@ -1111,6 +1130,23 @@ local MIGRATIONS = {
             wf.initialized = nil
         end
     end,
+
+    -- v3: sounds must be .ogg or .mp3; .wav names now point at an .ogg of the same name
+    [3] = function(p)
+        local s = Sub(p, "sound")
+        if not s then return end
+        s.soundChoice = WavToOgg(s.soundChoice)
+        s.objectiveSoundChoice = WavToOgg(s.objectiveSoundChoice)
+        if type(s.customSoundsList) == "table" then
+            for i, entry in ipairs(s.customSoundsList) do
+                if type(entry) == "table" then
+                    entry.file = WavToOgg(entry.file)
+                else
+                    s.customSoundsList[i] = WavToOgg(entry)
+                end
+            end
+        end
+    end,
 }
 
 local function MigrateRawProfile(profile)
@@ -1153,6 +1189,36 @@ local function OnProfileChanged()
     ns:FireCallback("PROFILE_CHANGED")
     ns:FireCallback("SETTINGS_UPDATED")
     ns:FireCallback("QUEST_DATA_CHANGED")
+end
+
+-- One-time popup naming the player's .wav sound files that must be converted to .ogg
+StaticPopupDialogs["BFQ_WAV_SOUNDS"] = {
+    text = "%s",
+    button1 = OKAY,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
+function ns.ShowWavSoundNotice()
+    local files = {}
+    for _, name in pairs(convertedWavSounds) do files[#files + 1] = name end
+    if type(BleakfiberCustomSounds) == "table" then
+        for _, entry in ipairs(BleakfiberCustomSounds) do
+            local file = type(entry) == "table" and entry.file or entry
+            if type(file) == "string" and file:lower():find("%.wav$") then
+                file = file:gsub("^.*[\\/]", "")
+                if not convertedWavSounds[file:lower()] then files[#files + 1] = file end
+            end
+        end
+    end
+    if #files == 0 or ns.dbObject.global.wavNoticeShown then return end
+    ns.dbObject.global.wavNoticeShown = true
+    table.sort(files)
+    StaticPopup_Show("BFQ_WAV_SOUNDS", string.format(
+        L["Bleakfiber's Quest Tracker: custom sounds must now be .ogg or .mp3 files. Please convert these files in Media\\Sounds\\ to .ogg (same name), then restart the game:\n\n%s"],
+        table.concat(files, "\n")))
 end
 
 local function InitializeDB()
@@ -1517,6 +1583,7 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1, ...)
                 ns.Onboarding:CheckFirstTimeUser()
             end)
         end
+        C_Timer.After(3, ns.ShowWavSoundNotice)
 
     elseif event == "PLAYER_REGEN_ENABLED" then
         if not bindingsMigrated then

@@ -2,6 +2,22 @@
 
 All notable changes to **Bleakfiber's Quest Tracker - Forever** are documented below.
 
+## [1.2.4] - 2026-10-22: Quest Item Buttons for Changing Items and Sound File Fix
+
+### Fixed
+- **Quest item button disappearing when the item changes**:
+  - Some quests turn their item into a new one partway through, for example an empty bowl you fill at a moonwell and then place. The button used to vanish once the original item was gone.
+  - The tracker now remembers each quest's item and, when it changes form, finds the new version in your bags (for example *Empty Cleansing Bowl* becoming *Filled Cleansing Bowl*), so the button stays.
+- **Lua errors with other addons that use LibSharedMedia**: some addons (for example Basic Minimap) load a newer LibSharedMedia that rejects .wav sound files, which caused two errors at login. This is fixed.
+
+### Changed
+- **Updated LibSharedMedia**: the tracker now bundles the latest LibSharedMedia-3.0 (v12.1.3).
+- **Sounds are now .ogg and .mp3 only**:
+  - The bundled sounds have been converted to .ogg.
+  - **If you added your own custom sounds as .wav files, you need to convert them to .ogg** (keep the same name, for example `fart.wav` becomes `fart.ogg`) and restart the game. Your saved sound settings already point to the .ogg name, so nothing else needs changing.
+  - The first time you log in after updating, a message lists any of your sound files that need converting.
+  - Adding a new custom sound only accepts .ogg and .mp3 files.
+
 ## [1.2.3] - 2026-10-20: Markers for Quests New in WoW Forever
 
 ### Added

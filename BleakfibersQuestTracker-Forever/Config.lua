@@ -1756,8 +1756,8 @@ local COMPLETE_SOUNDS = {
     { key = "raid_warning",   label = "Raid Warning Chime" },
     { key = "ready_check",    label = "Ready Check Chime" },
     { key = "pvp_horn",       label = "PvP Queue Horn" },
-    { key = "beep",           label = "Bleakfiber Beep (beep.wav)" },
-    { key = "click",          label = "Bleakfiber Click (click.wav)" },
+    { key = "beep",           label = "Bleakfiber Beep" },
+    { key = "click",          label = "Bleakfiber Click" },
 }
 
 local OBJECTIVE_SOUNDS = {
@@ -1766,8 +1766,8 @@ local OBJECTIVE_SOUNDS = {
     { key = "loot_clink",   label = "Loot Coin Clink" },
     { key = "map_ping",     label = "Mini-Map Ping" },
     { key = "item_click",   label = "Subtle Click" },
-    { key = "beep",         label = "Bleakfiber Beep (beep.wav)" },
-    { key = "click",        label = "Bleakfiber Click (click.wav)" },
+    { key = "beep",         label = "Bleakfiber Beep" },
+    { key = "click",        label = "Bleakfiber Click" },
 }
 
 local function GetCompleteSoundOptions()
@@ -5233,9 +5233,9 @@ local function BuildWayfinderTab(content, syncList)
 
     local descCustom = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     descCustom:SetJustifyH("LEFT")
-    descCustom:SetText(L["Place .wav files in Media\\Sounds\\ & restart WoW. Enter filename below or list in Media\\CustomSounds.lua:"])
+    descCustom:SetText(L["Place .ogg or .mp3 files in Media\\Sounds\\ & restart WoW. Enter filename below or list in Media\\CustomSounds.lua:"])
 
-    local inputCustom = CreateStyledTextInput(content, 190, 22, "filename.wav (e.g. fart.wav)")
+    local inputCustom = CreateStyledTextInput(content, 190, 22, "filename.ogg (e.g. fart.ogg)")
     local btnAddCustom = CreateStyledButton(content, "Add Sound", 100, 22, function()
         local eb = inputCustom.EditBox
         local txt = eb and eb:GetText()

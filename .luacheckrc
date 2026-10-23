@@ -107,7 +107,7 @@ read_globals = {
     "hooksecurefunc", "securecallfunction",
 
     -- Constants & tables
-    "ACCEPT", "CANCEL", "CUSTOM_CLASS_COLORS", "DifficultyUtil", "GetQuestUiMapID", "OpenWorldMap", "ERR_NOT_IN_COMBAT", "ERR_QUEST_ACCEPTED_S",
+    "ACCEPT", "CANCEL", "OKAY", "CUSTOM_CLASS_COLORS", "DifficultyUtil", "GetQuestUiMapID", "OpenWorldMap", "ERR_NOT_IN_COMBAT", "ERR_QUEST_ACCEPTED_S",
     "ERR_QUEST_ALREADY_DONE_S", "ERR_QUEST_ALREADY_HAVE_S", "ERR_QUEST_BUSY_S", "ERR_QUEST_DECLINED_S",
     "ERR_QUEST_LOG_FULL_S", "ERR_QUEST_NOT_FOUND_S", "ERR_QUEST_PUSH_SUCCESS_S", "Enum",
     "ITEM_QUALITY_COLORS", "LE_PARTY_CATEGORY_INSTANCE", "LOCALIZED_CLASS_NAMES_FEMALE",

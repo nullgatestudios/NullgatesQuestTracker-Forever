@@ -3,14 +3,14 @@ Bleakfiber's Quest Tracker - Custom Sounds Guide
 
 How to Add Your Own Custom Sounds:
 ----------------------------------
-1. Copy your .wav audio file into this folder:
+1. Copy your .ogg or .mp3 audio file into this folder:
    World of Warcraft\Interface\AddOns\BleakfibersQuestTracker-Forever\Media\Sounds\
 
-2. Name your file whatever you like (e.g. fart.wav, cheer.wav, levelup.wav, custom1.wav).
+2. Name your file whatever you like (e.g. fart.ogg, cheer.ogg, levelup.mp3, custom1.ogg).
 
    Bundled presets already included in this folder:
-   - beep.wav   (Clean subtle tone)
-   - click.wav  (Soft tick)
+   - beep.ogg   (Clean subtle tone)
+   - click.ogg  (Soft tick)
 
 3. Restart World of Warcraft:
    IMPORTANT: If you add a new audio file while WoW is running, you must COMPLETELY RESTART the WoW client.
@@ -21,20 +21,22 @@ How to Add Your Own Custom Sounds:
    Method A - Directly In-Game (Recommended):
    - Type /bqt to open settings and select "Audio".
    - Scroll to "Custom Audio Files".
-   - Type your filename (e.g. fart.wav) into the text box and click "Add Sound".
+   - Type your filename (e.g. fart.ogg) into the text box and click "Add Sound".
    - Your sound will immediately appear in the "Quest Complete Sound" and "Objective Progress Sound" dropdowns as:
-     Custom 1 (fart.wav), Custom 2 (cheer.wav), etc.
+     Custom 1 (fart.ogg), Custom 2 (cheer.ogg), etc.
    - Only your registered custom sounds are shown in the dropdown (no 1-99 clutter!).
 
    Method B - Text File Editing:
    - Open Media\CustomSounds.lua in any text editor.
    - Add your filename to the list:
      BleakfiberCustomSounds = {
-         "fart.wav",
-         "cheer.wav",
+         "fart.ogg",
+         "cheer.ogg",
      }
    - Launch WoW. Your custom sounds will automatically appear in the sound dropdowns as:
-     Custom 1 (fart.wav), Custom 2 (cheer.wav), etc.
+     Custom 1 (fart.ogg), Custom 2 (cheer.ogg), etc.
 
-Supported Audio Format:
-- Standard 16-bit 44.1kHz (or 22.05kHz) PCM .wav (Stereo or Mono).
+Supported Audio Formats:
+- Only Ogg Vorbis (.ogg) and MP3 (.mp3) files are supported.
+- .wav files are no longer supported. Convert them to .ogg and keep the same name
+  (e.g. fart.wav -> fart.ogg); settings that pointed at the .wav file use the .ogg automatically.
