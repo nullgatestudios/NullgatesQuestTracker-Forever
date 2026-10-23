@@ -1,5 +1,5 @@
 name: Bug Report
-description: "Report an issue, Lua error, or unexpected behavior in Bleakfiber's Quest Tracker."
+description: "Report an issue, Lua error, or unexpected behavior in Nullgate's Quest Tracker."
 title: "[Bug]: "
 labels: ["bug"]
 body:
@@ -25,7 +25,7 @@ body:
     id: addon-version
     attributes:
       label: "Addon Version"
-      description: "What version of Bleakfiber's Quest Tracker are you using?"
+      description: "What version of Nullgate's Quest Tracker are you using?"
       placeholder: "e.g. 1.0.0"
     validations:
       required: true
