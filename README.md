@@ -102,7 +102,7 @@ Streamline tedious quest interactions with safety toggles:
 Immediate auditory cues for quest progression:
 - Independent sound alerts for quest completion and objective advancement.
 - Built-in Classic audio presets: Peon *"Work complete!"*, Classic chime, Level Up Fanfare, Raid Warning, Whispers, and Coin clinks.
-- **Dynamic Custom Sound Support**: Drop any 16-bit 44.1kHz PCM `.wav` audio files into `Media/Sounds/` (e.g. `fart.wav`, `cheer.wav`), register them via the in-game Audio settings manager or `Media/CustomSounds.lua`, and select them directly from the dropdown as `Custom 1 (fart.wav)`, `Custom 2 (cheer.wav)`. The sound dropdown only lists sounds that are actually loaded with zero empty slot clutter. *(Note: Completely restart the WoW client after adding new audio files so the game engine indexes them).*
+- **Dynamic Custom Sound Support**: Drop any `.ogg` or `.mp3` audio files into `Media/Sounds/` (e.g. `fart.ogg`, `cheer.mp3`), register them via the in-game Audio settings manager or `Media/CustomSounds.lua`, and select them directly from the dropdown as `Custom 1 (fart.ogg)`, `Custom 2 (cheer.mp3)`. `.wav` files are not supported, because the game client does not reliably play them. The sound dropdown only lists sounds that are actually loaded with zero empty slot clutter. *(Note: Completely restart the WoW client after adding new audio files so the game engine indexes them).*
 
 ### 8. Master Mover & Profile Sync
 Seamless integration with `BleakfibersAddonConfig-Forever`:
@@ -197,7 +197,7 @@ BleakfibersQuestTracker-Forever/
 ├── Media/
 │   ├── Media.lua                        # LibSharedMedia font & texture registration
 │   ├── Fonts/                           # Embedded Nata Sans, Orbitron, and Roboto Condensed fonts
-│   ├── Sounds/                          # Custom audio completion cues (.wav)
+│   ├── Sounds/                          # Custom audio completion cues (.ogg / .mp3)
 │   └── Textures/                        # Wayfinder HUD arrows, map pins, borders & mask files
 └── Libs/                                # Embedded LibStub, CallbackHandler, AceDB-3.0 & LibSharedMedia-3.0
 ```

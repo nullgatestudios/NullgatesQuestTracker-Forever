@@ -1,4 +1,4 @@
-<div style="background-color:#242424;border:2px solid #f39c12;border-radius:6px"><h3 style="color:#f39c12">ANNOUNCEMENT: Version 1.2.3 Release</h3><p style="color:#e0e0e0;font-size:14px;line-height:1.5">Now available in 11 languages, with one settings window and quest item buttons that work in combat. To open the settings type <code style="background-color:#181818;color:#f39c12;border-radius:4px;border:1px solid #3a3a3a;font-family:Consolas, 'Courier New', Courier, monospace;font-size:13px">/bfq</code> or run the setup walkthrough with <code style="background-color:#181818;color:#f39c12;border-radius:4px;border:1px solid #3a3a3a;font-family:Consolas, 'Courier New', Courier, monospace;font-size:13px">/bfq onboard</code></p></div>
+<div style="background-color:#242424;border:2px solid #f39c12;border-radius:6px"><h3 style="color:#f39c12">ANNOUNCEMENT: Version 1.2.4 Release</h3><p style="color:#e0e0e0;font-size:14px;line-height:1.5">Now available in 11 languages, with one settings window and quest item buttons that work in combat. To open the settings type <code style="background-color:#181818;color:#f39c12;border-radius:4px;border:1px solid #3a3a3a;font-family:Consolas, 'Courier New', Courier, monospace;font-size:13px">/bfq</code> or run the setup walkthrough with <code style="background-color:#181818;color:#f39c12;border-radius:4px;border:1px solid #3a3a3a;font-family:Consolas, 'Courier New', Courier, monospace;font-size:13px">/bfq onboard</code></p></div>
 
 # Bleakfiber's Quest Tracker - Forever
 
@@ -85,7 +85,7 @@ Every header button can be hidden in the settings.
 *   **Fast Auto Loot**: Speeds up looting whenever the game's own auto loot is active.
 *   **Merchant Helpers**: Sells grey junk and repairs gear, using guild funds if you like.
 *   **Party Announcements**: Optional messages when you finish quests or objectives.
-*   **Sound Alerts**: Separate sounds for quest completion and objective progress, with volume, channel and preview. You can also add your own `.wav` files.
+*   **Sound Alerts**: Separate sounds for quest completion and objective progress, with volume, channel and preview. You can also add your own `.ogg` or `.mp3` files.
 
 ### 7\. Appearance
 

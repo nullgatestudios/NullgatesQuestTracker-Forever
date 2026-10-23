@@ -1071,4 +1071,10 @@ ns.RegisterLanguagePack("koKR", "한국어", {
     ["Hover a quest in the tracker, or type /bfq questid <quest ID>."] = "추적기의 퀘스트에 마우스를 올리거나 /bfq questid <퀘스트 ID>를 입력하세요.",
     ["New in WoW Forever"] = "WoW Forever 신규",
     ["Original Classic quest"] = "원래 클래식 퀘스트",
+    ["Bleakfiber Beep"] = "Bleakfiber 삐 소리",
+    ["Bleakfiber Click"] = "Bleakfiber 클릭",
+    ["Place .ogg or .mp3 files in Media\\Sounds\\ & restart WoW. Enter filename below or list in Media\\CustomSounds.lua:"] = ".ogg 또는 .mp3 파일을 Media\\Sounds\\에 넣고 WoW를 다시 시작하세요. 아래에 파일 이름을 입력하거나 Media\\CustomSounds.lua에 추가하세요:",
+    ["filename.ogg (e.g. fart.ogg)"] = "파일이름.ogg (예: ding.ogg)",
+    ["Bleakfiber's Quest Tracker: custom sounds must now be .ogg or .mp3 files. Please convert these files in Media\\Sounds\\ to .ogg (same name), then restart the game:\n\n%s"] = "Bleakfiber's Quest Tracker: 사용자 소리는 이제 .ogg 또는 .mp3 파일이어야 합니다. Media\\Sounds\\에 있는 다음 파일을 같은 이름의 .ogg로 변환한 뒤 게임을 다시 시작하세요:\n\n%s",
+    ["Only .ogg and .mp3 files are supported. Convert the file to .ogg first."] = ".ogg와 .mp3 파일만 지원합니다. 먼저 파일을 .ogg로 변환하세요.",
 })

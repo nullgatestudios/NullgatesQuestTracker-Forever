@@ -40,23 +40,35 @@ if LSM then
     LSM:Register("statusbar", "Blizzard", "Interface\\TargetingFrame\\UI-StatusBar")
     LSM:Register("statusbar", "Blizzard Raid", "Interface\\RaidFrame\\Raid-Bar-Hp-Fill")
 
-    -- Register Custom Audio Files
+    -- Register Custom Audio Files (LibSharedMedia only accepts .ogg and .mp3)
     local soundPath = mediaPath .. "Sounds\\"
-    LSM:Register("sound", "Bleakfiber Beep", soundPath .. "beep.wav")
-    LSM:Register("sound", "Bleakfiber Click", soundPath .. "click.wav")
+    LSM:Register("sound", "Bleakfiber Beep", soundPath .. "beep.ogg")
+    LSM:Register("sound", "Bleakfiber Click", soundPath .. "click.ogg")
 end
 
 local soundPath = mediaPath .. "Sounds\\"
 local customSoundSlots = {
-    ["beep"] = soundPath .. "beep.wav",
-    ["click"] = soundPath .. "click.wav",
-    ["custom_beep"] = soundPath .. "beep.wav",
-    ["Bleakfiber Beep"] = soundPath .. "beep.wav",
-    ["Bleakfiber Click"] = soundPath .. "click.wav",
+    ["beep"] = soundPath .. "beep.ogg",
+    ["click"] = soundPath .. "click.ogg",
+    ["custom_beep"] = soundPath .. "beep.ogg",
+    ["Bleakfiber Beep"] = soundPath .. "beep.ogg",
+    ["Bleakfiber Click"] = soundPath .. "click.ogg",
 }
 ns.customSoundSlots = customSoundSlots
 
--- Custom Sounds Management (supports arbitrary filenames like "fart.wav", "cheer.wav", etc.)
+-- Only .ogg and .mp3 sounds are supported. A bare name gets .ogg, and an old .wav
+-- name points at the .ogg of the same name (players convert their files once).
+local function NormalizeSoundFile(file)
+    if file:find("%.[wW][aA][vV]$") then
+        return file:sub(1, -5) .. ".ogg"
+    end
+    if not file:find("%.[oO][gG][gG]$") and not file:find("%.[mM][pP]3$") then
+        file = file .. ".ogg"
+    end
+    return file
+end
+
+-- Custom Sounds Management (supports arbitrary filenames like "fart.ogg", "cheer.mp3", etc.)
 -- Reads both Media\CustomSounds.lua (BleakfiberCustomSounds table) and DB profile (db.sound.customSoundsList)
 function ns.GetCustomSoundList(onlyDB)
     local list = {}
@@ -67,10 +79,7 @@ function ns.GetCustomSoundList(onlyDB)
         for _, entry in ipairs(BleakfiberCustomSounds) do
             local file = type(entry) == "table" and entry.file or entry
             if type(file) == "string" and file:match("%S") then
-                file = file:gsub("^.*[\\/]", "") -- strip any path
-                if not file:find("%.[wW][aA][vV]$") and not file:find("%.[oO][gG][gG]$") and not file:find("%.[mM][pP]3$") then
-                    file = file .. ".wav"
-                end
+                file = NormalizeSoundFile((file:gsub("^.*[\\/]", ""))) -- strip any path
                 local lower = file:lower()
                 if not seen[lower] then
                     seen[lower] = true
@@ -93,10 +102,7 @@ function ns.GetCustomSoundList(onlyDB)
         for _, entry in ipairs(sdb.customSoundsList) do
             local file = type(entry) == "table" and entry.file or entry
             if type(file) == "string" and file:match("%S") then
-                file = file:gsub("^.*[\\/]", "") -- strip any path
-                if not file:find("%.[wW][aA][vV]$") and not file:find("%.[oO][gG][gG]$") and not file:find("%.[mM][pP]3$") then
-                    file = file .. ".wav"
-                end
+                file = NormalizeSoundFile((file:gsub("^.*[\\/]", ""))) -- strip any path
                 local lower = file:lower()
                 if not seen[lower] then
                     seen[lower] = true
@@ -121,9 +127,10 @@ function ns.AddCustomSound(filename)
     filename = filename:match("^%s*(.-)%s*$") -- trim
     filename = filename:gsub("^.*[\\/]", "") -- strip any path
     if filename == "" then return false, L["Filename cannot be empty"] end
-    if not filename:find("%.[wW][aA][vV]$") and not filename:find("%.[oO][gG][gG]$") and not filename:find("%.[mM][pP]3$") then
-        filename = filename .. ".wav"
+    if filename:find("%.[wW][aA][vV]$") then
+        return false, L["Only .ogg and .mp3 files are supported. Convert the file to .ogg first."]
     end
+    filename = NormalizeSoundFile(filename)
 
     local sdb = ns.db and ns.db.sound
     if not sdb then return false, L["Settings are not loaded yet"] end
@@ -138,7 +145,7 @@ function ns.AddCustomSound(filename)
     end
 
     table.insert(sdb.customSoundsList, filename)
-    pcall(LSM.Register, LSM, "sound", "Bleakfiber " .. filename, soundPath .. filename)
+    LSM:Register("sound", "Bleakfiber " .. filename, soundPath .. filename)
 
     return true, filename
 end
@@ -169,13 +176,10 @@ end
 function ns.FetchSound(soundKey)
     if not soundKey or soundKey == "" then return nil end
 
-    -- 1. Explicit custom file prefix: custom:fart.wav
+    -- 1. Explicit custom file prefix: custom:fart.ogg
     local customFile = type(soundKey) == "string" and soundKey:match("^custom:(.+)$")
     if customFile then
-        if not customFile:find("%.[wW][aA][vV]$") and not customFile:find("%.[oO][gG][gG]$") and not customFile:find("%.[mM][pP]3$") then
-            customFile = customFile .. ".wav"
-        end
-        return soundPath .. customFile
+        return soundPath .. NormalizeSoundFile(customFile)
     end
 
     -- 2. Legacy custom numeric slot: custom1..custom99
@@ -186,7 +190,7 @@ function ns.FetchSound(soundKey)
         if customList and customList[n] then
             return soundPath .. customList[n].file
         end
-        return soundPath .. "custom" .. num .. ".wav"
+        return soundPath .. "custom" .. num .. ".ogg"
     end
 
     -- 3. Preset slot aliases
@@ -194,12 +198,12 @@ function ns.FetchSound(soundKey)
         return customSoundSlots[soundKey]
     end
 
-    -- 4. Direct sound filename or full path
+    -- 4. Direct sound filename or full path (an old .wav name maps to its .ogg)
     if type(soundKey) == "string" and (soundKey:find("%.[wW][aA][vV]$") or soundKey:find("%.[oO][gG][gG]$") or soundKey:find("%.[mM][pP]3$")) then
         if soundKey:find("\\") or soundKey:find("/") then
             return soundKey
         else
-            return soundPath .. soundKey
+            return soundPath .. NormalizeSoundFile(soundKey)
         end
     end
 

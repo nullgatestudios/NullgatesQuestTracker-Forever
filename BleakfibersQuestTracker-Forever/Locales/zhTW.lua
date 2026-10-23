@@ -1073,4 +1073,10 @@ ns.RegisterLanguagePack("zhTW", "繁體中文", {
     ["New in WoW Forever"] = "WoW Forever 新增",
     ["Original Classic quest"] = "原版經典版任務",
     ["%s (ID %d): %s"] = "%s（ID %d）：%s",
+    ["Bleakfiber Beep"] = "Bleakfiber嗶聲",
+    ["Bleakfiber Click"] = "Bleakfiber點擊",
+    ["Place .ogg or .mp3 files in Media\\Sounds\\ & restart WoW. Enter filename below or list in Media\\CustomSounds.lua:"] = "將 .ogg 或 .mp3 檔案放入 Media\\Sounds\\ 並重新啟動遊戲。在下方輸入檔名，或在 Media\\CustomSounds.lua 中加入：",
+    ["filename.ogg (e.g. fart.ogg)"] = "檔名.ogg（例如 ding.ogg）",
+    ["Bleakfiber's Quest Tracker: custom sounds must now be .ogg or .mp3 files. Please convert these files in Media\\Sounds\\ to .ogg (same name), then restart the game:\n\n%s"] = "Bleakfiber's Quest Tracker：自訂音效現在必須是 .ogg 或 .mp3 檔案。請將 Media\\Sounds\\ 中的下列檔案轉換為同名的 .ogg，然後重新啟動遊戲：\n\n%s",
+    ["Only .ogg and .mp3 files are supported. Convert the file to .ogg first."] = "只支援 .ogg 與 .mp3 檔案。請先將檔案轉換為 .ogg。",
 })

@@ -2158,6 +2158,44 @@ local function UpdateBagQuestItemsCache()
     end
 end
 
+-- Words that describe an item's state rather than what it is ("Empty Cleansing Bowl"
+-- and "Filled Cleansing Bowl" are the same quest item)
+local ITEM_STATE_WORDS = {
+    empty = true, filled = true, full = true, used = true, unused = true, broken = true,
+    fixed = true, repaired = true, charged = true, uncharged = true, inert = true, activated = true,
+    active = true, inactive = true, cleansed = true, tainted = true, corrupted = true, pure = true,
+    sealed = true, unsealed = true, open = true, opened = true, closed = true, the = true, a = true,
+    an = true, of = true,
+}
+
+-- Finds a usable quest item whose name shares every core word of a remembered item name
+local function FindRelatedItemInBags(rememberedName)
+    if not rememberedName or rememberedName == "" then return nil end
+    UpdateBagQuestItemsCache()
+    local core, n = {}, 0
+    for word in rememberedName:gmatch("[%w']+") do
+        if not ITEM_STATE_WORDS[word] and #word > 2 then
+            n = n + 1
+            core[n] = word
+        end
+    end
+    if n == 0 then return nil end
+    for _, data in pairs(bagQuestItemsCache) do
+        local name = data.name and string_lower(data.name)
+        if name then
+            local matched = true
+            for i = 1, n do
+                if not name:find(core[i], 1, true) then
+                    matched = false
+                    break
+                end
+            end
+            if matched then return data end
+        end
+    end
+    return nil
+end
+
 local function FindQuestItemInBags(questTitle, objectives)
     UpdateBagQuestItemsCache()
     local qLower = questTitle and string_lower(questTitle) or ""
@@ -2268,6 +2306,7 @@ function StandaloneTracker:GetTrackedQuests()
     local untracked = db.filtering.untrackedQuests
     local separateClassHeader = db.headers.separateClassHeader ~= false
     local autoDetectItems = db.itemButtons.autoDetect ~= false
+    local questItemNames = ns.dbObject.global.questItemNames
     local activeZoneHeader = ZONE_GENERAL
 
     for i = 1, API.GetNumQuestLogEntries() do
@@ -2299,11 +2338,19 @@ function StandaloneTracker:GetTrackedQuests()
                     local itemLink, itemTexture, numItems = API.GetQuestSpecialItem(questID, i)
                     if not itemTexture and autoDetectItems then
                         local bagItem = FindQuestItemInBags(title, objectives)
+                            -- The quest's item may have changed form (e.g. empty bowl -> filled bowl)
+                            or FindRelatedItemInBags(questItemNames[questID])
                         if bagItem then
                             itemLink, itemTexture, numItems = bagItem.link, bagItem.icon, bagItem.count
                         end
                     end
                     local itemID = type(itemLink) == "string" and tonumber(itemLink:match("item:(%d+)")) or nil
+                    if itemLink then
+                        local itemName = type(itemLink) == "string" and itemLink:match("%[(.-)%]")
+                        if itemName and itemName ~= "" then
+                            questItemNames[questID] = string_lower(itemName)
+                        end
+                    end
 
                     -- Tag / Badge detection
                     local isElite, isDungeon, isRaid = false, false, false
@@ -3051,6 +3098,7 @@ function StandaloneTracker:Initialize()
                 questRewardsCache[arg1] = nil
                 ns.db.collapsedQuests[arg1] = nil
                 ns.db.filtering.untrackedQuests[arg1] = nil
+                ns.dbObject.global.questItemNames[arg1] = nil
             end
         end
         StandaloneTracker:RequestUpdate()

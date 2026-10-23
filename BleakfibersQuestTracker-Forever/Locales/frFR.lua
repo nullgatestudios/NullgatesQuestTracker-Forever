@@ -1066,4 +1066,10 @@ ns.RegisterLanguagePack("frFR", "Français", {
     ["New in WoW Forever"] = "Nouveau dans WoW Forever",
     ["Original Classic quest"] = "Quête de Classic d'origine",
     ["%s (ID %d): %s"] = "%s (ID %d) : %s",
+    ["Bleakfiber Beep"] = "Bip Bleakfiber",
+    ["Bleakfiber Click"] = "Clic Bleakfiber",
+    ["Place .ogg or .mp3 files in Media\\Sounds\\ & restart WoW. Enter filename below or list in Media\\CustomSounds.lua:"] = "Placez des fichiers .ogg ou .mp3 dans Media\\Sounds\\ et redémarrez WoW. Saisissez le nom de fichier ci-dessous ou ajoutez-le dans Media\\CustomSounds.lua :",
+    ["filename.ogg (e.g. fart.ogg)"] = "fichier.ogg (par ex. ding.ogg)",
+    ["Bleakfiber's Quest Tracker: custom sounds must now be .ogg or .mp3 files. Please convert these files in Media\\Sounds\\ to .ogg (same name), then restart the game:\n\n%s"] = "Bleakfiber's Quest Tracker : les sons personnalisés doivent désormais être des fichiers .ogg ou .mp3. Convertissez ces fichiers de Media\\Sounds\\ en .ogg (même nom), puis redémarrez le jeu :\n\n%s",
+    ["Only .ogg and .mp3 files are supported. Convert the file to .ogg first."] = "Seuls les fichiers .ogg et .mp3 sont pris en charge. Convertissez d'abord le fichier en .ogg.",
 })
