@@ -22,4 +22,4 @@ jobs:
       - name: Run luacheck
         uses: lunarmodules/luacheck@v1
         with:
-          args: BleakfibersQuestTracker-Forever
+          args: NullgatesQuestTracker-Forever

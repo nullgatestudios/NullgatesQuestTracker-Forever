@@ -1,5 +1,5 @@
--- Luacheck configuration for Bleakfiber's Quest Tracker - Forever
--- Run locally:  luacheck BleakfibersQuestTracker-Forever
+-- Luacheck configuration for Nullgate's Quest Tracker - Forever
+-- Run locally:  luacheck NullgatesQuestTracker-Forever
 std = "lua51+wow"
 max_line_length = false
 codes = true
@@ -22,13 +22,13 @@ ignore = {
 
 -- Globals this addon intentionally creates
 globals = {
-    "BleakfiberTrackerDB",
-    "BleakfiberCustomSounds",
-    "BleakfibersQuestTrackerForever",
-    "BleakfiberQuestTracker",
-    "Bleakfiber_ToggleTracker",
-    "Bleakfiber_HideTracker",
-    "Bleakfiber_ShowTracker",
+    "NullgatesQuestTrackerDB",
+    "NullgateCustomSounds",
+    "NullgatesQuestTrackerForever",
+    "NullgateQuestTracker",
+    "Nullgate_ToggleTracker",
+    "Nullgate_HideTracker",
+    "Nullgate_ShowTracker",
     "SlashCmdList",
     "StaticPopupDialogs",
     "UISpecialFrames",
@@ -36,11 +36,8 @@ globals = {
     "GameTooltip",
     "DropDownList1",
     "DropDownList2",
-    "SLASH_BLEAKFIBERQUESTTRACKER1",
-    "SLASH_BLEAKFIBERQUESTTRACKER2",
-    "SLASH_BLEAKFIBERQUESTTRACKER3",
-    "SLASH_BLEAKFIBERTRACKERHIDE1",
-    "SLASH_BLEAKFIBERTRACKERHIDE2",
+    "SLASH_NULLGATEQUESTTRACKER1",
+    "SLASH_NULLGATETRACKERHIDE1",
 }
 
 -- WoW API & FrameXML globals the addon reads

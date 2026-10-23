@@ -1,0 +1,5 @@
+<Bindings>
+    <!-- Secure click bindings: they work in combat and use the button's own action -->
+    <Binding name="CLICK NullgateQuestItemButton1:LeftButton" header="NULLGATE_TRACKER"/>
+    <Binding name="CLICK NullgateTrackerToggleButton:LeftButton"/>
+</Bindings>

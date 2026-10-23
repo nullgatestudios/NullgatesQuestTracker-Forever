@@ -1,5 +1,0 @@
-<Bindings>
-    <!-- Secure click bindings: they work in combat and use the button's own action -->
-    <Binding name="CLICK BleakfiberQuestItemButton1:LeftButton" header="BLEAKFIBER_TRACKER"/>
-    <Binding name="CLICK BleakfiberTrackerToggleButton:LeftButton"/>
-</Bindings>

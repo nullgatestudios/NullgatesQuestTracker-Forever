@@ -1,6 +1,6 @@
-# Contributing to Bleakfiber's Quest Tracker
+# Contributing to Nullgate's Quest Tracker
 
-Thank you for your interest in contributing to **Bleakfiber's Quest Tracker**! Community feedback, bug reports, and pull requests help make this addon better for everyone.
+Thank you for your interest in contributing to **Nullgate's Quest Tracker**! Community feedback, bug reports, and pull requests help make this addon better for everyone.
 
 Before contributing, please take a moment to review these guidelines and understand how contributions are managed for this project.
 
@@ -11,8 +11,8 @@ Before contributing, please take a moment to review these guidelines and underst
 This project is licensed under a custom **Source-Available Restricted License** (see [LICENSE.md](LICENSE.md)). 
 
 By submitting a Pull Request, issue, or code snippet to this repository:
-- **Approval Required**: All changes are subject to review and must be explicitly approved and merged by **Bleakfiber**. Submitting a PR does not guarantee it will be merged.
-- **Inbound Contribution Grant**: You agree that your contributed code is provided under the terms set forth in [LICENSE.md](LICENSE.md#3-contributions-and-pull-requests), granting Bleakfiber the right to incorporate, modify, distribute, and license your changes as part of the addon.
+- **Approval Required**: All changes are subject to review and must be explicitly approved and merged by **Nullgate Studios**. Submitting a PR does not guarantee it will be merged.
+- **Inbound Contribution Grant**: You agree that your contributed code is provided under the terms set forth in [LICENSE.md](LICENSE.md#3-contributions-and-pull-requests), granting Nullgate Studios the right to incorporate, modify, distribute, and license your changes as part of the addon.
 - **No Derivatives**: Creating and publicly distributing forks or derivative works (e.g. re-uploading modified versions to CurseForge, Wago, or GitHub) is not permitted under the license. All improvements should be contributed back to the official repository.
 
 ---

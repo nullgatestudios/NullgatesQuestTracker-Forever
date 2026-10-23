@@ -1,6 +1,26 @@
-# Changelog - Bleakfiber's Quest Tracker (Forever)
+# Changelog - Nullgate's Quest Tracker (Forever)
 
-All notable changes to **Bleakfiber's Quest Tracker - Forever** are documented below.
+All notable changes to **Nullgate's Quest Tracker - Forever** (formerly **Bleakfiber's Quest Tracker - Forever**) are documented below.
+
+## [1.3.0] - 2026-10-23: Bleakfiber's Quest Tracker is now Nullgate's Quest Tracker
+
+### Changed
+- **New name**: Bleakfiber's Quest Tracker is now **Nullgate's Quest Tracker**, from **Nullgate Studios**. It is the same addon on the same CurseForge page.
+- **A fresh start for the WoW Forever launch**:
+  - The addon now lives in the `NullgatesQuestTracker-Forever` folder.
+  - Settings from the beta are not carried over. The setup walkthrough opens on your first login so you can set the tracker up again.
+  - Key bindings for **Use Active Quest Item** and **Toggle Tracker Visibility** need to be set again in **Key Bindings** or in the settings.
+- **Remove the old version**:
+  - If you copied your old `Interface` folder over, delete the `BleakfibersQuestTracker-Forever` folder from `Interface\AddOns`.
+  - If the old version is still installed, a message offers to disable it, so you don't get two quest trackers on screen.
+- **Your own sound files**: copy them into `Interface\AddOns\NullgatesQuestTracker-Forever\Media\Sounds\` and add them again in **Settings > Audio** or in `Media\CustomSounds.lua`.
+- **New slash commands**: `/nqt` opens the settings. `/nqthide`, `/nqtway`, `/nqtcway` and `/nqtpaste` replace the old `/bfq` versions. The old `/bfq`, `/bqt` and `/bfhide` commands no longer exist, so please update any macros that use them, including `/run Bleakfiber_ToggleTracker()` (now `/run Nullgate_ToggleTracker()`).
+- **Party announcements** now start with `[NQT]` instead of `[BFQ]`.
+- **Shared media names**: the bundled sounds and bar texture are now listed as **Nullgate Beep**, **Nullgate Click** and **NullgateFlat** in other addons that use LibSharedMedia.
+- **Language packs from other addons** must now call `NullgatesQuestTrackerForever:RegisterLanguagePack`.
+
+### Fixed
+- **Bundled Beep and Click sounds**: the social sound presets still looked for the old .wav files removed in 1.2.4.
 
 ## [1.2.4] - 2026-10-22: Quest Item Buttons for Changing Items and Sound File Fix
 

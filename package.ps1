@@ -1,5 +1,5 @@
 <#
-    Packaging script for Bleakfiber's Quest Tracker - Forever
+    Packaging script for Nullgate's Quest Tracker - Forever
 
     Builds zips/<AddonName> <Version>.zip with a single top-level addon folder.
     The repository-root CHANGELOG.md is the only changelog; it is copied into
@@ -8,7 +8,7 @@
     Usage:
         .\package.ps1
         .\package.ps1 -Version "1.2.1" -Notes "Short summary for a new changelog entry"
-        .\package.ps1 -SourceDir ".\1.2.0_refactor\BleakfibersQuestTracker-Forever"
+        .\package.ps1 -SourceDir ".\1.2.0_refactor\NullgatesQuestTracker-Forever"
 #>
 
 param (
@@ -80,7 +80,7 @@ if (Test-Path $changelogFile) {
 }
 
 # Stage a clean copy so the changelog can be added without touching the source folder
-$stageRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("bfq-package-" + [guid]::NewGuid().ToString("N"))
+$stageRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("nqt-package-" + [guid]::NewGuid().ToString("N"))
 $stageAddon = Join-Path $stageRoot $addonName
 New-Item -ItemType Directory -Path $stageRoot -Force | Out-Null
 try {
