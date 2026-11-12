@@ -683,6 +683,7 @@ ns.defaultDB = {
             activeOnTop = true,
             showGroupTags = true,
             leftClickSetsActive = false,
+            leftClickOpensQuestLog = false, -- left-click a quest opens it in the quest log
             doubleClickSetsActive = true, -- double-click a quest to make it active
             alignQuestTitles = true,
         },

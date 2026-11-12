@@ -1080,4 +1080,7 @@ ns.RegisterLanguagePack("koKR", "한국어", {
     ["Disable and Reload"] = "비활성화 후 다시 불러오기",
     ["Bleakfiber's Quest Tracker is now Nullgate's Quest Tracker, and the old version is still installed. Running both shows two quest trackers. Disable the old one now, then delete the BleakfibersQuestTracker-Forever folder from Interface\\AddOns."] = "Bleakfiber's Quest Tracker가 Nullgate's Quest Tracker로 이름이 바뀌었는데, 이전 버전이 아직 설치되어 있습니다. 둘 다 실행하면 퀘스트 추적기가 두 개 표시됩니다. 지금 이전 버전을 비활성화한 다음 Interface\\AddOns에서 BleakfibersQuestTracker-Forever 폴더를 삭제하세요.",
     ["Your settings were carried over from Bleakfiber's Quest Tracker."] = "Bleakfiber's Quest Tracker의 설정을 가져왔습니다.",
+    ["Left-Click Opens Quest Log"] = "왼쪽 클릭으로 퀘스트 목록 열기",
+    ["When checked, clicking a quest opens it in your quest log (the Open Quests In setting decides where). Alt + Left-Click still collapses or expands it, and so does a click in combat, when the quest log can't open. Turns off Left-Click Sets Active Quest and Double-Click Sets Active Quest: use the right-click menu or the Set Active button to choose your active quest."] = "선택하면 퀘스트를 클릭할 때 퀘스트 목록에서 엽니다 (어디서 열지는 '퀘스트 열기 위치' 설정에 따릅니다). Alt + 왼쪽 클릭은 계속 접거나 펼치며, 퀘스트 목록을 열 수 없는 전투 중 클릭도 마찬가지입니다. '왼쪽 클릭으로 활성 퀘스트 지정'과 '더블 클릭으로 활성 퀘스트 지정'을 끕니다. 활성 퀘스트는 오른쪽 클릭 메뉴나 활성 지정 버튼으로 선택하세요.",
+    ["Left-Click: Open in Quest Log"] = "왼쪽 클릭: 퀘스트 목록에서 열기",
 })

@@ -117,8 +117,11 @@ Seamless integration with `NullgatesAddonConfig-Forever`:
 
 | Action | Description |
 | :--- | :--- |
-| **Left-Click Quest Title** | Opens the quest directly in the standard Blizzard Quest Log (`ToggleQuestLog`). |
-| **Shift + Left-Click Quest** | If chat box is open: pastes formatted quest link. If closed: toggles quest tracking on/off. |
+| **Left-Click Quest Title** | Collapses or expands the quest (default). Can instead set it as your active quest (**Left-Click Sets Active Quest**) or open it in your quest log (**Left-Click Opens Quest Log**). |
+| **Double-Click Quest Title** | Makes it your active quest (on by default; off while either left-click option above is on). |
+| **Ctrl + Left-Click Quest** | Opens the quest in your quest log, using the **Open Quests In** setting. |
+| **Alt + Left-Click Quest** | Collapses or expands the quest, whatever the left-click setting. |
+| **Shift + Left-Click Quest** | Pastes the quest link into chat. |
 | **Right-Click Quest Title** | Opens the rich **Quest Context Menu** (track, share, abandon, waypoints, copy URL). |
 | **Left-Click Zone Header** | Expands or collapses all quests under that zone header. |
 | **Left-Click Quest `[-]`/`[+]`** | Collapses or expands an individual quest block. |

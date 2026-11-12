@@ -1713,7 +1713,13 @@ local function ShowQuestTooltip(anchorFrame, qInfo)
 
     GameTooltip:AddLine(" ")
     local expandLabel = isCollapsed and L["Expand Quest"] or L["Collapse Quest"]
-    if db.sorting.leftClickSetsActive ~= true then
+    if db.sorting.leftClickOpensQuestLog == true then
+        GameTooltip:AddLine("|cff00ff00" .. L["Left-Click: Open in Quest Log"] .. "|r", 0.2, 1, 0.2)
+        GameTooltip:AddLine("|cffaaaaaa" .. string_format(L["Alt + Left-Click: %s"], expandLabel) .. "|r", 0.6, 0.6, 0.6)
+        if isActive then
+            GameTooltip:AddLine("|cff00e5ff* " .. L["Active Quest"] .. "|r", 0.0, 0.9, 1.0)
+        end
+    elseif db.sorting.leftClickSetsActive ~= true then
         GameTooltip:AddLine("|cff00ff00" .. string_format(L["Left-Click: %s"], expandLabel) .. "|r", 0.2, 1, 0.2)
         if db.sorting.doubleClickSetsActive ~= false and not isActive then
             GameTooltip:AddLine("|cff00ff00" .. L["Double-Click: Set as Active Quest"] .. "|r", 0.2, 1, 0.2)
@@ -1830,7 +1836,7 @@ local function AcquireQuestBlock(parent)
     hl:SetColorTexture(qHl.r, qHl.g, qHl.b, qHl.a or 0.08)
     header.highlight = hl
 
-    -- Left = Collapse/Expand, Ctrl+Left = Quest Log, Shift+Left = Chat Link,
+    -- Left = Collapse/Expand (or Quest Log / Set Active, per settings), Ctrl+Left = Quest Log, Shift+Left = Chat Link,
     -- Right = Context Menu, Shift+Right = Wowhead URL, Alt+Right = Settings
     header:SetScript("OnClick", function(self, mouseButton)
         if self.wasDragged or (ns.Tracker and ns.Tracker.frame and ns.Tracker.frame.isMoving) then return end
@@ -1845,6 +1851,13 @@ local function AcquireQuestBlock(parent)
                 OpenQuestInLog(qInfo)
             elseif IsAltKeyDown() then
                 ToggleQuestCollapsed(qInfo)
+            elseif ns.db.sorting.leftClickOpensQuestLog == true and qInfo.questID then
+                -- The quest log can't open in combat, so a click collapses/expands instead
+                if InCombatLockdown() then
+                    ToggleQuestCollapsed(qInfo)
+                else
+                    OpenQuestInLog(qInfo)
+                end
             elseif ns.db.sorting.leftClickSetsActive == true and qInfo.questID and ns.activeQuestID ~= qInfo.questID then
                 StandaloneTracker:SetActiveQuest(qInfo.questID)
             elseif ns.db.sorting.doubleClickSetsActive ~= false and qInfo.questID then

@@ -156,6 +156,24 @@ local function GetOrCreateQuickMenu()
     return menu
 end
 
+-- "Left-Click Sets Active" and "Left-Click Opens Quest Log" are alternatives:
+-- turning one on turns the other off, wherever it is changed
+local OTHER_LEFT_CLICK_MODE = {
+    leftClickSetsActive = "leftClickOpensQuestLog",
+    leftClickOpensQuestLog = "leftClickSetsActive",
+}
+
+local function SetLeftClickMode(key, enabled)
+    local db = ns.db
+    if not db then return end
+    db.sorting = db.sorting or {}
+    db.sorting[key] = enabled and true or false
+    if enabled then db.sorting[OTHER_LEFT_CLICK_MODE[key]] = false end
+    if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then
+        ns.StandaloneTracker:UpdateTracker()
+    end
+end
+
 -- Filter & Quick Options Menu for Tracker Header
 function Config:OpenFilterMenu(anchor)
     local db = ns.db
@@ -230,11 +248,16 @@ function Config:OpenFilterMenu(anchor)
         text = L["Left-Click Sets Active"],
         checked = (db.sorting and db.sorting.leftClickSetsActive == true),
         onClick = function()
-            db.sorting = db.sorting or {}
-            db.sorting.leftClickSetsActive = db.sorting.leftClickSetsActive ~= true
-            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then
-                ns.StandaloneTracker:UpdateTracker()
-            end
+            SetLeftClickMode("leftClickSetsActive", not (db.sorting and db.sorting.leftClickSetsActive == true))
+        end,
+    })
+
+    table.insert(rows, {
+        type = "checkbox",
+        text = L["Left-Click Opens Quest Log"],
+        checked = (db.sorting and db.sorting.leftClickOpensQuestLog == true),
+        onClick = function()
+            SetLeftClickMode("leftClickOpensQuestLog", not (db.sorting and db.sorting.leftClickOpensQuestLog == true))
         end,
     })
 
@@ -2122,7 +2145,7 @@ local TAB_EXTRAS = {
         { type = "header", text = "QUEST CLICKS" },
         { type = "toggle", label = "Double-Click Sets Active Quest",
           desc = "Double-click a quest to make it your active quest. A single click still collapses or expands it, after a short 0.25 second wait. If you use the Set Active action button, you can turn this off so single clicks act instantly. Has no effect while Left-Click Sets Active Quest is on.",
-          disabled = function() return ns.db.sorting.leftClickSetsActive == true end,
+          disabled = function() return ns.db.sorting.leftClickSetsActive == true or ns.db.sorting.leftClickOpensQuestLog == true end,
           get = function() return ns.db.sorting.doubleClickSetsActive ~= false end,
           set = function(v) ns.db.sorting.doubleClickSetsActive = v end },
         { type = "header", text = "HEADER COLOR SHARING & COUNTER" },
@@ -4528,11 +4551,21 @@ local function BuildHeadersTab(content, syncList)
         "When unchecked (default), clicking any quest minimizes or expands it in place without moving it. When checked, clicking an inactive quest sets it active and moves it to top.",
         function() return sortDb.leftClickSetsActive == true end,
         function(v)
-            sortDb.leftClickSetsActive = v
-            if ns.StandaloneTracker and ns.StandaloneTracker.UpdateTracker then ns.StandaloneTracker:UpdateTracker() end
+            SetLeftClickMode("leftClickSetsActive", v)
+            for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
         end
     )
     table.insert(syncList, cbLeftClickActive)
+
+    local cbLeftClickLog = CreateStyledCheckbox(content, "Left-Click Opens Quest Log",
+        "When checked, clicking a quest opens it in your quest log (the Open Quests In setting decides where). Alt + Left-Click still collapses or expands it, and so does a click in combat, when the quest log can't open. Turns off Left-Click Sets Active Quest and Double-Click Sets Active Quest: use the right-click menu or the Set Active button to choose your active quest.",
+        function() return sortDb.leftClickOpensQuestLog == true end,
+        function(v)
+            SetLeftClickMode("leftClickOpensQuestLog", v)
+            for _, w in ipairs(syncList) do if w.Sync then w.Sync() end end
+        end
+    )
+    table.insert(syncList, cbLeftClickLog)
 
     local cbAlignTitles = CreateStyledCheckbox(content, "Align Quest Titles (Uniform Column)",
         "Aligns all quest titles into a uniform column regardless of whether an active tracking arrow or completion icon is present. Prevents jagged offsets.",
@@ -4633,6 +4666,10 @@ local function BuildHeadersTab(content, syncList)
             cbLeftClickActive.Text:SetWidth(math.max(260, w - 48))
             y = y - 34
 
+            cbLeftClickLog:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cbLeftClickLog.Text:SetWidth(math.max(260, w - 48))
+            y = y - 34
+
             cbAlignTitles:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             cbAlignTitles.Text:SetWidth(math.max(260, w - 48))
             y = y - 34
@@ -4716,6 +4753,9 @@ local function BuildHeadersTab(content, syncList)
             y = y - 32
             cbLeftClickActive:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             cbLeftClickActive.Text:SetWidth(colWidth - 32)
+            y = y - 32
+            cbLeftClickLog:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
+            cbLeftClickLog.Text:SetWidth(colWidth - 32)
             y = y - 32
             cbAlignTitles:SetPoint("TOPLEFT", content, "TOPLEFT", col1X, y)
             cbAlignTitles.Text:SetWidth(colWidth - 32)
