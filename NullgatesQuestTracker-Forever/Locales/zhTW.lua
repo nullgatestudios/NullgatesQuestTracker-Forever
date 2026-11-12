@@ -1081,4 +1081,5 @@ ns.RegisterLanguagePack("zhTW", "繁體中文", {
     ["Only .ogg and .mp3 files are supported. Convert the file to .ogg first."] = "只支援 .ogg 與 .mp3 檔案。請先將檔案轉換為 .ogg。",
     ["Disable and Reload"] = "停用並重新載入",
     ["Bleakfiber's Quest Tracker is now Nullgate's Quest Tracker, and the old version is still installed. Running both shows two quest trackers. Disable the old one now, then delete the BleakfibersQuestTracker-Forever folder from Interface\\AddOns."] = "Bleakfiber's Quest Tracker 現已更名為 Nullgate's Quest Tracker，但舊版本仍已安裝。兩者同時執行會顯示兩個任務追蹤器。請立即停用舊版本，然後從 Interface\\AddOns 中刪除 BleakfibersQuestTracker-Forever 資料夾。",
+    ["Your settings were carried over from Bleakfiber's Quest Tracker."] = "已從 Bleakfiber's Quest Tracker 轉移你的設定。",
 })

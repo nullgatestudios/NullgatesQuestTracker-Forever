@@ -1,0 +1,10 @@
+-- Intentionally empty.
+--
+-- This add-on exists for one reason: its .toc declares
+-- "## SavedVariables: BleakfiberTrackerDB", so World of Warcraft keeps loading
+-- the SavedVariables file that Bleakfiber's Quest Tracker wrote. Nullgate's
+-- Quest Tracker (Migration.lua) copies those settings into
+-- "NullgatesQuestTrackerDB" the first time you log in after updating to 1.3.1.
+--
+-- It creates no frames, registers no events and adds no slash commands. Once
+-- your settings have carried over, this whole folder can be deleted.

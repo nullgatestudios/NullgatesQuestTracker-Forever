@@ -519,7 +519,7 @@ ns.GetQuestTimeLeft = ns.GetQuestTimeInfo
 -- ---------------------------------------------------------------------------
 -- Default Settings
 -- ---------------------------------------------------------------------------
-ns.DB_VERSION = 3
+ns.DB_VERSION = 4
 
 ns.defaultDB = {
     global = {
@@ -922,6 +922,7 @@ local function ReportError(context, err)
         handler(string_format("%s: %s", context, tostring(err)))
     end
 end
+ns.ReportError = ReportError
 
 function ns.SetModuleEnabled(moduleKey, enabled)
     if not ns.db then return end
@@ -1147,6 +1148,24 @@ local MIGRATIONS = {
             end
         end
     end,
+
+    -- v4: shared media registered under Bleak* names before the rebrand
+    -- ("BleakFlat", "BleakUI Bold", "Bleakfiber Beep", ...) now use Nullgate* names
+    [4] = function(p)
+        local function Rename(t)
+            for key, value in pairs(t) do
+                if type(value) == "table" then
+                    Rename(value)
+                elseif type(value) == "string" then
+                    local renamed = value:gsub("^BleakFlat$", "NullgateFlat")
+                        :gsub("^BleakUI ", "NullgateUI ")
+                        :gsub("^Bleakfiber ", "Nullgate ")
+                    t[key] = renamed
+                end
+            end
+        end
+        Rename(p)
+    end,
 }
 
 local function MigrateRawProfile(profile)
@@ -1221,7 +1240,11 @@ function ns.ShowWavSoundNotice()
         table.concat(files, "\n")))
 end
 
--- The pre-rebrand add-on still installed (e.g. a copied Interface folder) would run a second tracker
+-- The pre-rebrand add-on folder (BleakfibersQuestTracker-Forever) is now shipped
+-- as a tiny stub that only loads "BleakfiberTrackerDB" so Migration.lua can copy
+-- the player's old settings into "NullgatesQuestTrackerDB" once. The stub's .toc
+-- declares "X-NullgateLegacyStub"; if that folder still holds the full 1.2.4
+-- add-on instead (e.g. only the new folder was extracted), two trackers would run.
 local OLD_ADDON = "BleakfibersQuestTracker-Forever"
 
 StaticPopupDialogs["NQT_OLD_ADDON"] = {
@@ -1240,7 +1263,22 @@ StaticPopupDialogs["NQT_OLD_ADDON"] = {
 
 function ns.ShowOldAddonNotice()
     if not API.IsAddOnLoaded(OLD_ADDON) then return end
+    if API.GetAddOnMetadata(OLD_ADDON, "X-NullgateLegacyStub") then return end
     StaticPopup_Show("NQT_OLD_ADDON", L["Bleakfiber's Quest Tracker is now Nullgate's Quest Tracker, and the old version is still installed. Running both shows two quest trackers. Disable the old one now, then delete the BleakfibersQuestTracker-Forever folder from Interface\\AddOns."])
+end
+
+local migrationNoticeShown = false
+
+function ns.ShowMigrationNotice()
+    if migrationNoticeShown then return end
+    if not ns._migrationResult or ns._migrationResult ~= "migrated" then return end
+    migrationNoticeShown = true
+    -- One-time, important confirmation: printed even when chat output is off,
+    -- because it tells the player their settings were not lost in the rebrand.
+    local frame = GetChatFrame()
+    if frame then
+        frame:AddMessage(PRINT_PREFIX .. " " .. L["Your settings were carried over from Bleakfiber's Quest Tracker."])
+    end
 end
 
 local function InitializeDB()
@@ -1542,6 +1580,9 @@ end
 local LEGACY_BINDINGS = {
     BLEAKFIBER_USE_QUEST_ITEM = ns.BINDING_QUEST_ITEM,
     BLEAKFIBER_TOGGLE_TRACKER_VISIBILITY = ns.BINDING_TOGGLE_TRACKER,
+    -- 1.2.4 secure buttons (renamed Bleakfiber* -> Nullgate* in 1.3.0)
+    ["CLICK BleakfiberQuestItemButton1:LeftButton"] = ns.BINDING_QUEST_ITEM,
+    ["CLICK BleakfiberTrackerToggleButton:LeftButton"] = ns.BINDING_TOGGLE_TRACKER,
 }
 
 local function MigrateKeyBindings()
@@ -1575,6 +1616,10 @@ local bindingsMigrated = false
 eventFrame:SetScript("OnEvent", function(self, event, arg1, ...)
     if event == "ADDON_LOADED" then
         if arg1 == addonName then
+            -- Copy any pre-rebrand (v1.2.4) settings before AceDB reads the store
+            if ns.MigrateFromBleakfiber then
+                ns.MigrateFromBleakfiber()
+            end
             InitializeDB()
         elseif arg1 == "NullgatesAddonConfig-Forever" or arg1 == "NullgatesAddonConfigForever" then
             if ns.dbObject then
@@ -1606,6 +1651,7 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1, ...)
             end)
         end
         C_Timer.After(3, ns.ShowWavSoundNotice)
+        C_Timer.After(3, ns.ShowMigrationNotice)
         C_Timer.After(4, ns.ShowOldAddonNotice)
 
     elseif event == "PLAYER_REGEN_ENABLED" then

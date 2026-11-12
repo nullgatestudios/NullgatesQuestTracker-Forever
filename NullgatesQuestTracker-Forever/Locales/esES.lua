@@ -1075,4 +1075,5 @@ ns.RegisterLanguagePack("esES", "Español (España)", {
     ["Only .ogg and .mp3 files are supported. Convert the file to .ogg first."] = "Solo se admiten archivos .ogg y .mp3. Convierte primero el archivo a .ogg.",
     ["Disable and Reload"] = "Desactivar y recargar",
     ["Bleakfiber's Quest Tracker is now Nullgate's Quest Tracker, and the old version is still installed. Running both shows two quest trackers. Disable the old one now, then delete the BleakfibersQuestTracker-Forever folder from Interface\\AddOns."] = "Bleakfiber's Quest Tracker ahora es Nullgate's Quest Tracker y la versión antigua sigue instalada. Con ambas activas verás dos rastreadores de misiones. Desactiva ahora la antigua y después borra la carpeta BleakfibersQuestTracker-Forever de Interface\\AddOns.",
+    ["Your settings were carried over from Bleakfiber's Quest Tracker."] = "Tu configuración se ha transferido desde Bleakfiber's Quest Tracker.",
 })

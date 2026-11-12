@@ -2,6 +2,27 @@
 
 All notable changes to **Nullgate's Quest Tracker - Forever** (formerly **Bleakfiber's Quest Tracker - Forever**) are documented below.
 
+## [1.3.1] - 2026-11-05: Your Settings Carry Over, and the Tracker Stays Where You Drop It
+
+### Added
+- **Your settings carry over from Bleakfiber's Quest Tracker (1.2.4)**:
+  - Updating no longer starts you from scratch. Your profiles and settings (position, size, scale, colors, fonts, sound choices and so on) are imported automatically the first time you log in.
+  - Each character keeps the profile it already had.
+  - Your key bindings for **Use Active Quest Item** and **Toggle Tracker Visibility** move over too.
+  - A short message in chat confirms the import. It appears only once.
+  - Nothing is overwritten: the import only runs when the new saved data is still empty, so anyone who already started fresh in 1.3.0 keeps their current setup.
+- **The Legacy Data folder**:
+  - A small **Bleakfiber's Quest Tracker (Legacy Data)** folder (`BleakfibersQuestTracker-Forever`) is installed next to the add-on. Its only job is to let the game read your old saved data; it shows no interface and adds no commands.
+  - Keep it until you have logged in once on each of your WoW accounts and seen the confirmation message. After that it can be deleted.
+  - If that folder still holds the full old add-on (for example because only the new folder was extracted), a message offers to disable it so you don't get two quest trackers.
+- **Your own sound files**: these files are not settings, so they don't move by themselves. Copy them from your old `BleakfibersQuestTracker-Forever\Media\Sounds\` folder (or from a backup) into `Interface\AddOns\NullgatesQuestTracker-Forever\Media\Sounds\`, then restart the game. Your saved sound choices already point to them.
+
+### Changed
+- **Shared media names**: settings that used the old **BleakFlat** bar texture, **BleakUI** fonts or **Bleakfiber Beep / Click** sounds now use **NullgateFlat**, **NullgateUI** and **Nullgate Beep / Click**.
+
+### Fixed
+- **Tracker jumping when moved with Tracker Scale other than 1.00**: dragging the tracker and letting go could make it snap to a different spot. It now stays exactly where you drop it, at any scale and anywhere on screen.
+
 ## [1.3.0] - 2026-10-23: Bleakfiber's Quest Tracker is now Nullgate's Quest Tracker
 
 ### Changed
