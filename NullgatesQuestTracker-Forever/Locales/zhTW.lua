@@ -1082,4 +1082,7 @@ ns.RegisterLanguagePack("zhTW", "繁體中文", {
     ["Disable and Reload"] = "停用並重新載入",
     ["Bleakfiber's Quest Tracker is now Nullgate's Quest Tracker, and the old version is still installed. Running both shows two quest trackers. Disable the old one now, then delete the BleakfibersQuestTracker-Forever folder from Interface\\AddOns."] = "Bleakfiber's Quest Tracker 現已更名為 Nullgate's Quest Tracker，但舊版本仍已安裝。兩者同時執行會顯示兩個任務追蹤器。請立即停用舊版本，然後從 Interface\\AddOns 中刪除 BleakfibersQuestTracker-Forever 資料夾。",
     ["Your settings were carried over from Bleakfiber's Quest Tracker."] = "已從 Bleakfiber's Quest Tracker 轉移你的設定。",
+    ["Left-Click Opens Quest Log"] = "左鍵點擊開啟任務日誌",
+    ["When checked, clicking a quest opens it in your quest log (the Open Quests In setting decides where). Alt + Left-Click still collapses or expands it, and so does a click in combat, when the quest log can't open. Turns off Left-Click Sets Active Quest and Double-Click Sets Active Quest: use the right-click menu or the Set Active button to choose your active quest."] = "勾選後，點擊任務會在任務日誌中開啟它（開啟位置由「任務開啟方式」設定決定）。Alt + 左鍵點擊仍會摺疊或展開任務；戰鬥中無法開啟任務日誌時，點擊同樣會摺疊或展開。會關閉「左鍵點擊設為目前任務」和「雙擊設為目前任務」：請使用右鍵選單或「設為目前」按鈕選擇目前任務。",
+    ["Left-Click: Open in Quest Log"] = "左鍵點擊：在任務日誌中開啟",
 })

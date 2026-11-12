@@ -2,6 +2,16 @@
 
 All notable changes to **Nullgate's Quest Tracker - Forever** (formerly **Bleakfiber's Quest Tracker - Forever**) are documented below.
 
+## [1.3.2] - 2026-11-12: Left-Click to Open a Quest in Your Quest Log
+
+### Added
+- **Left-Click Opens Quest Log** (optional, off by default):
+  - Clicking a quest title opens it in your quest log, the same as Ctrl + Left-Click. Where it opens follows your **Open Quests In** setting (world map, classic quest log, or both).
+  - Turn it on in **Settings > Headers & Sort** next to **Left-Click Sets Active Quest**, or from the tracker's quick menu.
+  - **Alt + Left-Click** still collapses or expands a quest. In combat, when the quest log can't open, a click collapses or expands the quest instead.
+  - It replaces the other left-click options: turning it on turns off **Left-Click Sets Active Quest** (and the other way round), and **Double-Click Sets Active Quest** is unavailable while it's on. Use the right-click menu or the Set Active action button to choose your active quest.
+  - The quest tooltip shows the new left-click action.
+
 ## [1.3.1] - 2026-11-05: Your Settings Carry Over, and the Tracker Stays Where You Drop It
 
 ### Added

@@ -1095,4 +1095,7 @@ ns.RegisterLanguagePack("enUS", "English", {
     ["Test quest item button shown."] = true,
     ["Disable and Reload"] = true,
     ["Bleakfiber's Quest Tracker is now Nullgate's Quest Tracker, and the old version is still installed. Running both shows two quest trackers. Disable the old one now, then delete the BleakfibersQuestTracker-Forever folder from Interface\\AddOns."] = true,
+    ["Left-Click Opens Quest Log"] = true,
+    ["When checked, clicking a quest opens it in your quest log (the Open Quests In setting decides where). Alt + Left-Click still collapses or expands it, and so does a click in combat, when the quest log can't open. Turns off Left-Click Sets Active Quest and Double-Click Sets Active Quest: use the right-click menu or the Set Active button to choose your active quest."] = true,
+    ["Left-Click: Open in Quest Log"] = true,
 })
