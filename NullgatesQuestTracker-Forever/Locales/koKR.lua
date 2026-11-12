@@ -1079,4 +1079,5 @@ ns.RegisterLanguagePack("koKR", "한국어", {
     ["Only .ogg and .mp3 files are supported. Convert the file to .ogg first."] = ".ogg와 .mp3 파일만 지원합니다. 먼저 파일을 .ogg로 변환하세요.",
     ["Disable and Reload"] = "비활성화 후 다시 불러오기",
     ["Bleakfiber's Quest Tracker is now Nullgate's Quest Tracker, and the old version is still installed. Running both shows two quest trackers. Disable the old one now, then delete the BleakfibersQuestTracker-Forever folder from Interface\\AddOns."] = "Bleakfiber's Quest Tracker가 Nullgate's Quest Tracker로 이름이 바뀌었는데, 이전 버전이 아직 설치되어 있습니다. 둘 다 실행하면 퀘스트 추적기가 두 개 표시됩니다. 지금 이전 버전을 비활성화한 다음 Interface\\AddOns에서 BleakfibersQuestTracker-Forever 폴더를 삭제하세요.",
+    ["Your settings were carried over from Bleakfiber's Quest Tracker."] = "Bleakfiber's Quest Tracker의 설정을 가져왔습니다.",
 })

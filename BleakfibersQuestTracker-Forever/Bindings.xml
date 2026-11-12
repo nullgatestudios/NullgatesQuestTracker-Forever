@@ -1,0 +1,2 @@
+<!-- Replaces the 1.2.4 Bindings.xml: WoW loads this file from the folder even without a .toc entry -->
+<Bindings/>

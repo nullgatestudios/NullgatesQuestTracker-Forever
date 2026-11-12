@@ -107,6 +107,31 @@ local function GetBackdropConfig()
     }
 end
 
+-- Frame:GetLeft/GetRight/GetTop/GetBottom return values in the frame's *own*
+-- scale, while UIParent:GetLeft/GetRight/... are in UIParent's scale. SetPoint
+-- offsets are in the scale of the frame being anchored (as in Blizzard's Edit
+-- Mode), not of UIParent. So tracker edges are converted into UIParent space to
+-- measure against UIParent's edges, and the resulting offset is converted back
+-- into the tracker's own scale before it is stored or passed to SetPoint.
+-- Mixing the two made the tracker jump on release when Tracker Scale was not 1.00.
+local function ScaleRatio(frame)
+    local fScale = frame and frame.GetEffectiveScale and frame:GetEffectiveScale()
+    local uScale = UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()
+    if not fScale or not uScale or fScale <= 0 or uScale <= 0 then return 1 end
+    return fScale / uScale
+end
+
+local function ToUIParent(value, frame)
+    if not value then return nil end
+    return value * ScaleRatio(frame)
+end
+
+-- UIParent-space offset -> SetPoint offset in the frame's own scale, pixel-snapped
+local function ToFrameOffset(value, frame)
+    value = value / ScaleRatio(frame)
+    return ns.SnapToPixel and ns.SnapToPixel(value, frame) or math.floor(value + 0.5)
+end
+
 function Tracker:Initialize()
     if self.initialized then return end
     self.initialized = true
@@ -176,16 +201,17 @@ function Tracker:Initialize()
         local uipBottom = UIParent:GetBottom() or 0
         local uipLeft = UIParent:GetLeft() or 0
 
-        local top = trackerFrame:GetTop() or uipTop
-        local bottom = trackerFrame:GetBottom() or 0
-        local left = trackerFrame:GetLeft() or 0
-        local right = trackerFrame:GetRight() or uipRight
+        -- Convert the tracker's edges from its own scale into UIParent space
+        local top = ToUIParent(trackerFrame:GetTop(), trackerFrame) or uipTop
+        local bottom = ToUIParent(trackerFrame:GetBottom(), trackerFrame) or uipBottom
+        local left = ToUIParent(trackerFrame:GetLeft(), trackerFrame) or uipLeft
+        local right = ToUIParent(trackerFrame:GetRight(), trackerFrame) or uipRight
 
         local currentDB = (ns.dbObject and ns.dbObject.profile) or ns.db
         local growCorner = (currentDB and currentDB.growCorner) or "AUTO"
 
-        local isRightHalf = (left + (trackerFrame:GetWidth() / 2)) > (uipRight / 2)
-        local isTopHalf = (bottom + (trackerFrame:GetHeight() / 2)) > (uipTop / 2)
+        local isRightHalf = (left + (right - left) / 2) > (uipRight / 2)
+        local isTopHalf = (bottom + (top - bottom) / 2) > (uipTop / 2)
 
         local anchorPoint
         if growCorner == "AUTO" then
@@ -204,22 +230,16 @@ function Tracker:Initialize()
 
         local relX, relY
         if anchorPoint == "BOTTOMRIGHT" then
-            relX = math.floor((right - uipRight) + 0.5)
-            relY = math.floor((bottom - uipBottom) + 0.5)
+            relX, relY = right - uipRight, bottom - uipBottom
         elseif anchorPoint == "BOTTOMLEFT" then
-            relX = math.floor((left - uipLeft) + 0.5)
-            relY = math.floor((bottom - uipBottom) + 0.5)
+            relX, relY = left - uipLeft, bottom - uipBottom
         elseif anchorPoint == "TOPLEFT" then
-            relX = math.floor((left - uipLeft) + 0.5)
-            relY = math.floor((top - uipTop) + 0.5)
+            relX, relY = left - uipLeft, top - uipTop
         else -- "TOPRIGHT" default
-            relX = math.floor((right - uipRight) + 0.5)
-            relY = math.floor((top - uipTop) + 0.5)
+            relX, relY = right - uipRight, top - uipTop
         end
-        if ns.SnapToPixel then
-            relX = ns.SnapToPixel(relX, trackerFrame)
-            relY = ns.SnapToPixel(relY, trackerFrame)
-        end
+        relX = ToFrameOffset(relX, trackerFrame)
+        relY = ToFrameOffset(relY, trackerFrame)
 
         if currentDB then
             currentDB.framePosition = {
@@ -1106,6 +1126,7 @@ function Tracker:RestorePosition()
     if pos and pos.point and pos.x and pos.y and not isLegacyDefault then
         local validPoints = { TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true }
         if validPoints[pos.point] then
+            -- Stored offsets are in the tracker's own scale (see ToFrameOffset)
             local px = ns.SnapToPixel and ns.SnapToPixel(pos.x, trackerFrame) or pos.x
             local py = ns.SnapToPixel and ns.SnapToPixel(pos.y, trackerFrame) or pos.y
             trackerFrame:SetPoint(pos.point, UIParent, pos.relativePoint or pos.point, px, py)
@@ -1143,13 +1164,13 @@ function Tracker:UpdateAnchorCorner(newCorner)
     local uipBottom = UIParent:GetBottom() or 0
     local uipLeft = UIParent:GetLeft() or 0
 
-    local top = trackerFrame:GetTop() or uipTop
-    local bottom = trackerFrame:GetBottom() or 0
-    local left = trackerFrame:GetLeft() or 0
-    local right = trackerFrame:GetRight() or uipRight
+    local top = ToUIParent(trackerFrame:GetTop(), trackerFrame) or uipTop
+    local bottom = ToUIParent(trackerFrame:GetBottom(), trackerFrame) or uipBottom
+    local left = ToUIParent(trackerFrame:GetLeft(), trackerFrame) or uipLeft
+    local right = ToUIParent(trackerFrame:GetRight(), trackerFrame) or uipRight
 
-    local isRightHalf = (left + (trackerFrame:GetWidth() / 2)) > (uipRight / 2)
-    local isTopHalf = (bottom + (trackerFrame:GetHeight() / 2)) > (uipTop / 2)
+    local isRightHalf = (left + (right - left) / 2) > (uipRight / 2)
+    local isTopHalf = (bottom + (top - bottom) / 2) > (uipTop / 2)
 
     local anchorPoint
     if db.growCorner == "AUTO" then
@@ -1168,22 +1189,16 @@ function Tracker:UpdateAnchorCorner(newCorner)
 
     local relX, relY
     if anchorPoint == "BOTTOMRIGHT" then
-        relX = math.floor((right - uipRight) + 0.5)
-        relY = math.floor((bottom - uipBottom) + 0.5)
+        relX, relY = right - uipRight, bottom - uipBottom
     elseif anchorPoint == "BOTTOMLEFT" then
-        relX = math.floor((left - uipLeft) + 0.5)
-        relY = math.floor((bottom - uipBottom) + 0.5)
+        relX, relY = left - uipLeft, bottom - uipBottom
     elseif anchorPoint == "TOPLEFT" then
-        relX = math.floor((left - uipLeft) + 0.5)
-        relY = math.floor((top - uipTop) + 0.5)
+        relX, relY = left - uipLeft, top - uipTop
     else -- "TOPRIGHT"
-        relX = math.floor((right - uipRight) + 0.5)
-        relY = math.floor((top - uipTop) + 0.5)
+        relX, relY = right - uipRight, top - uipTop
     end
-    if ns.SnapToPixel then
-        relX = ns.SnapToPixel(relX, trackerFrame)
-        relY = ns.SnapToPixel(relY, trackerFrame)
-    end
+    relX = ToFrameOffset(relX, trackerFrame)
+    relY = ToFrameOffset(relY, trackerFrame)
 
     db.framePosition = {
         point = anchorPoint,

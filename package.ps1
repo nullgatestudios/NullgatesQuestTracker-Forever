@@ -1,7 +1,9 @@
 <#
     Packaging script for Nullgate's Quest Tracker - Forever
 
-    Builds zips/<AddonName> <Version>.zip with a single top-level addon folder.
+    Builds zips/<AddonName> <Version>.zip with the main add-on folder and, when
+    present, the legacy "BleakfibersQuestTracker-Forever" SavedVariables stub
+    folder so upgraded players keep their old settings.
     The repository-root CHANGELOG.md is the only changelog; it is copied into
     the packaged addon folder so players get it inside the zip.
 
@@ -20,12 +22,13 @@ param (
 $ErrorActionPreference = "Stop"
 $rootDir = $PSScriptRoot
 
-# Locate the addon folder (explicit -SourceDir, or the root subfolder with a matching .toc)
+# Locate the addon folder (explicit -SourceDir, or the root subfolder with a matching .toc).
+# The legacy "Bleakfiber*" stub folder is excluded here; it is added separately below.
 if ($SourceDir) {
     $addonDir = (Resolve-Path $SourceDir).Path
 } else {
     $candidate = Get-ChildItem -Directory -Path $rootDir | Where-Object {
-        Test-Path (Join-Path $_.FullName "$($_.Name).toc")
+        $_.Name -notlike 'Bleakfiber*' -and (Test-Path (Join-Path $_.FullName "$($_.Name).toc"))
     } | Select-Object -First 1
     if (-not $candidate) {
         Write-Error "Could not find an addon subfolder with a matching .toc file."
@@ -37,13 +40,27 @@ $tocFile = Join-Path $addonDir "$addonName.toc"
 if (-not (Test-Path $tocFile)) {
     Write-Error "Missing $addonName.toc in $addonDir"
 }
+
+# Legacy SavedVariables stub shipped alongside so upgraded players keep their data
+$legacyName = "BleakfibersQuestTracker-Forever"
+$legacyDir = Join-Path $rootDir $legacyName
+$legacyToc = Join-Path $legacyDir "$legacyName.toc"
+if (-not (Test-Path $legacyToc)) {
+    $legacyDir = $null
+    $legacyToc = $null
+}
+
 $changelogFile = Join-Path $rootDir "CHANGELOG.md"
 
-# Version: update the .toc when given, otherwise read it
+# Version: update the .toc(s) when given, otherwise read it
 if ($Version) {
     Write-Host "Updating version to $Version..." -ForegroundColor Cyan
     $toc = (Get-Content $tocFile) -replace '^## Version: .*$', "## Version: $Version"
     [System.IO.File]::WriteAllLines($tocFile, $toc)
+    if ($legacyToc) {
+        $legacyTocContent = (Get-Content $legacyToc) -replace '^## Version: .*$', "## Version: $Version"
+        [System.IO.File]::WriteAllLines($legacyToc, $legacyTocContent)
+    }
 } else {
     $tocContent = Get-Content $tocFile -Raw
     if ($tocContent -match '## Version:\s*([^\r\n]+)') {
@@ -89,6 +106,14 @@ try {
         Copy-Item -Path $changelogFile -Destination (Join-Path $stageAddon "CHANGELOG.md") -Force
     }
 
+    # Stage the legacy stub folder too so both ship in the same archive
+    $compressTargets = @($stageAddon)
+    if ($legacyDir) {
+        $stageLegacy = Join-Path $stageRoot $legacyName
+        Copy-Item -Path $legacyDir -Destination $stageLegacy -Recurse
+        $compressTargets += $stageLegacy
+    }
+
     $zipsDir = Join-Path $rootDir "zips"
     if (-not (Test-Path $zipsDir)) {
         New-Item -ItemType Directory -Path $zipsDir -Force | Out-Null
@@ -97,7 +122,7 @@ try {
     $zipPath = Join-Path $zipsDir $zipName
 
     Write-Host "Creating archive zips/$zipName..." -ForegroundColor Cyan
-    Compress-Archive -Path $stageAddon -DestinationPath $zipPath -Force
+    Compress-Archive -Path $compressTargets -DestinationPath $zipPath -Force
 } finally {
     Remove-Item -Path $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
 }

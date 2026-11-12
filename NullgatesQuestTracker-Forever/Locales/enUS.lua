@@ -13,6 +13,7 @@ ns.RegisterLanguagePack("enUS", "English", {
     ["Use Active Quest Item"] = true,
     ["Toggle Tracker Visibility (Hide/Show)"] = true,
     ["Chat output is off. Enable it in Settings > General > Debug & Chat Output."] = true,
+    ["Your settings were carried over from Bleakfiber's Quest Tracker."] = true,
     ["Quest Tracker"] = true,
     ["Nullgate's Quest Tracker: custom sounds must now be .ogg or .mp3 files. Please convert these files in Media\\Sounds\\ to .ogg (same name), then restart the game:\n\n%s"] = true,
     ["Set to Class Color"] = true,
