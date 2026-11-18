@@ -121,7 +121,7 @@ Seamless integration with `NullgatesAddonConfig-Forever`:
 | **Double-Click Quest Title** | Makes it your active quest (on by default; off while either left-click option above is on). |
 | **Ctrl + Left-Click Quest** | Opens the quest in your quest log, using the **Open Quests In** setting. |
 | **Alt + Left-Click Quest** | Collapses or expands the quest, whatever the left-click setting. |
-| **Shift + Left-Click Quest** | Pastes the quest link into chat. |
+| **Shift + Left-Click Quest** | Puts the quest link (or its name, if the game has no link) into chat, opening chat if needed. |
 | **Right-Click Quest Title** | Opens the rich **Quest Context Menu** (track, share, abandon, waypoints, copy URL). |
 | **Left-Click Zone Header** | Expands or collapses all quests under that zone header. |
 | **Left-Click Quest `[-]`/`[+]`** | Collapses or expands an individual quest block. |
@@ -147,7 +147,7 @@ Seamless integration with `NullgatesAddonConfig-Forever`:
 Type `/nqt` in chat to open the options panel:
 
 1. **General**: Master toggle, UI scale slider, lock/unlock frame position, auto-hide in combat, auto-hide when empty, and frame strata selection.
-2. **Quests & Items**: Quest item action buttons, bag scanning fallback, objective text colors, difficulty level coloring, and quest level badges.
+2. **Quests & Items**: Quest item action buttons, bag scanning fallback, hide completed objectives, objective text colors, difficulty level coloring, and quest level badges.
 3. **Colors & Fonts**: Backdrop backgrounds, beveled borders, class-colored border accents, LibSharedMedia typography selectors, font sizes, and line spacing.
 4. **Headers & Sort**: Zone grouping banners, sort mode selection (Level Ascending vs. Grouped by Zone), and header textures (Flat, Gradient, Blizzard, None).
 5. **Automation**: Fast Auto Loot, Auto-Accept quests, Safe Auto-Turn In (with multi-reward protection), and Party Quest Sharing.

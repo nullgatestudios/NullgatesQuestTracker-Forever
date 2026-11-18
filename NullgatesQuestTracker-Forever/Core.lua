@@ -564,6 +564,7 @@ ns.defaultDB = {
             autoDetect = true,  -- Also detect usable quest items in bags
         },
         showTimerInObjectives = true,         -- Show countdown timer in quest objective descriptions
+        hideCompletedObjectives = false,      -- Hide objectives already finished, showing only what's left
         onboardingCompleted = false,          -- First-time account onboarding wizard status
         collapsedQuests = {},     -- [questID or title] = true when user collapsed the quest
         collapsedZones = {},      -- [zoneName] = true when user collapsed a zone header

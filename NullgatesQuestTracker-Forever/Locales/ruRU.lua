@@ -1083,4 +1083,6 @@ ns.RegisterLanguagePack("ruRU", "Русский", {
     ["Left-Click Opens Quest Log"] = "ЛКМ открывает журнал заданий",
     ["When checked, clicking a quest opens it in your quest log (the Open Quests In setting decides where). Alt + Left-Click still collapses or expands it, and so does a click in combat, when the quest log can't open. Turns off Left-Click Sets Active Quest and Double-Click Sets Active Quest: use the right-click menu or the Set Active button to choose your active quest."] = "Если включено, щелчок по заданию открывает его в журнале заданий (где именно, определяет настройка «Открывать задания в»). Alt + ЛКМ по-прежнему сворачивает или разворачивает его, как и щелчок в бою, когда журнал открыть нельзя. Отключает «ЛКМ делает задание активным» и «Двойной щелчок делает задание активным»: выбирайте активное задание через меню ПКМ или кнопку «Сделать активным».",
     ["Left-Click: Open in Quest Log"] = "ЛКМ: открыть в журнале заданий",
+    ["Hide Completed Objectives"] = "Скрывать выполненные цели",
+    ["Hide objectives you have already finished, so each quest only lists what is left to do. When every objective is done, the quest shows Ready for turn-in as usual."] = "Скрывает уже выполненные цели, чтобы у каждого задания оставалось только то, что ещё нужно сделать. Когда все цели выполнены, задание как обычно показывает «Можно сдать».",
 })

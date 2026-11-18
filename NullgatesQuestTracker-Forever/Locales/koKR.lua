@@ -1083,4 +1083,6 @@ ns.RegisterLanguagePack("koKR", "한국어", {
     ["Left-Click Opens Quest Log"] = "왼쪽 클릭으로 퀘스트 목록 열기",
     ["When checked, clicking a quest opens it in your quest log (the Open Quests In setting decides where). Alt + Left-Click still collapses or expands it, and so does a click in combat, when the quest log can't open. Turns off Left-Click Sets Active Quest and Double-Click Sets Active Quest: use the right-click menu or the Set Active button to choose your active quest."] = "선택하면 퀘스트를 클릭할 때 퀘스트 목록에서 엽니다 (어디서 열지는 '퀘스트 열기 위치' 설정에 따릅니다). Alt + 왼쪽 클릭은 계속 접거나 펼치며, 퀘스트 목록을 열 수 없는 전투 중 클릭도 마찬가지입니다. '왼쪽 클릭으로 활성 퀘스트 지정'과 '더블 클릭으로 활성 퀘스트 지정'을 끕니다. 활성 퀘스트는 오른쪽 클릭 메뉴나 활성 지정 버튼으로 선택하세요.",
     ["Left-Click: Open in Quest Log"] = "왼쪽 클릭: 퀘스트 목록에서 열기",
+    ["Hide Completed Objectives"] = "완료한 목표 숨기기",
+    ["Hide objectives you have already finished, so each quest only lists what is left to do. When every objective is done, the quest shows Ready for turn-in as usual."] = "이미 완료한 목표를 숨겨 각 퀘스트에 남은 목표만 표시합니다. 모든 목표를 완료하면 평소처럼 '완료 보고 가능'이 표시됩니다.",
 })

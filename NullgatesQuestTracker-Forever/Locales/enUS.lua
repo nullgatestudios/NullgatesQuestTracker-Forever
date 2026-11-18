@@ -1098,4 +1098,6 @@ ns.RegisterLanguagePack("enUS", "English", {
     ["Left-Click Opens Quest Log"] = true,
     ["When checked, clicking a quest opens it in your quest log (the Open Quests In setting decides where). Alt + Left-Click still collapses or expands it, and so does a click in combat, when the quest log can't open. Turns off Left-Click Sets Active Quest and Double-Click Sets Active Quest: use the right-click menu or the Set Active button to choose your active quest."] = true,
     ["Left-Click: Open in Quest Log"] = true,
+    ["Hide Completed Objectives"] = true,
+    ["Hide objectives you have already finished, so each quest only lists what is left to do. When every objective is done, the quest shows Ready for turn-in as usual."] = true,
 })

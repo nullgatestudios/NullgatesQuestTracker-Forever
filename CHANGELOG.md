@@ -2,6 +2,19 @@
 
 All notable changes to **Nullgate's Quest Tracker - Forever** (formerly **Bleakfiber's Quest Tracker - Forever**) are documented below.
 
+## [1.3.3] - 2026-11-18: Hide Completed Objectives, and Shift + Left-Click Links Quests Again
+
+### Added
+- **Hide Completed Objectives** (optional, off by default):
+  - Objectives you have already finished disappear, so each quest only lists what is left to do. For example, if a quest needs X and Y and X is done, only Y is shown.
+  - When every objective is done, the quest shows **Ready for turn-in** as usual.
+  - Turn it on in **Settings > Quests & Items**, or from the tracker's quick menu.
+
+### Fixed
+- **Shift + Left-Click links quests in chat again**:
+  - It works whether or not the chat box is open. If it isn't, chat opens with the quest already in it.
+  - When the game can't make a clickable quest link, the quest's name goes into chat instead, the same as Blizzard's quest log does.
+
 ## [1.3.2] - 2026-11-12: Left-Click to Open a Quest in Your Quest Log
 
 ### Added

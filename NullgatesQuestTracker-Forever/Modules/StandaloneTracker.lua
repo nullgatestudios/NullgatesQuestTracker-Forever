@@ -1844,9 +1844,10 @@ local function AcquireQuestBlock(parent)
         if not qInfo then return end
 
         if mouseButton == "LeftButton" then
-            if IsModifiedClick("CHATLINK") and qInfo.questID then
-                local link = API.GetQuestLink(qInfo.questID, qInfo.questLogIndex)
-                if link then ChatEdit_InsertLink(link) end
+            if IsModifiedClick("CHATLINK") then
+                -- Like Blizzard's Vanilla quest log, fall back to the plain title when the client has no quest link
+                local link = qInfo.questID and API.GetQuestLink(qInfo.questID, qInfo.questLogIndex)
+                API.InsertChatText(link or qInfo.title)
             elseif IsControlKeyDown() then
                 OpenQuestInLog(qInfo)
             elseif IsAltKeyDown() then
@@ -2642,11 +2643,14 @@ local function RenderQuestBlock(content, qInfo, yOffset, lineSpacing)
                 _, h = AddObjectiveLine(block, prevAnchor, objIndent, objWidth, lineSpacing, compHex .. L["Ready for turn-in"] .. "|r")
                 currentBlockHeight = currentBlockHeight + h
             elseif qInfo.objectives then
+                local hideFinished = db.hideCompletedObjectives == true
                 for _, obj in ipairs(qInfo.objectives) do
-                    local colorCode = obj.finished and compHex or objHex
-                    fs, h = AddObjectiveLine(block, prevAnchor, objIndent, objWidth, lineSpacing, colorCode .. " - " .. (obj.text or "") .. "|r")
-                    currentBlockHeight = currentBlockHeight + h
-                    prevAnchor = fs
+                    if not (hideFinished and obj.finished) then
+                        local colorCode = obj.finished and compHex or objHex
+                        fs, h = AddObjectiveLine(block, prevAnchor, objIndent, objWidth, lineSpacing, colorCode .. " - " .. (obj.text or "") .. "|r")
+                        currentBlockHeight = currentBlockHeight + h
+                        prevAnchor = fs
+                    end
                 end
             end
         end

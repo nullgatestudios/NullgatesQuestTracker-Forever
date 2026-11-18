@@ -274,6 +274,16 @@ function Config:OpenFilterMenu(anchor)
 
     table.insert(rows, {
         type = "checkbox",
+        text = L["Hide Completed Objectives"],
+        checked = db.hideCompletedObjectives == true,
+        onClick = function()
+            db.hideCompletedObjectives = not (db.hideCompletedObjectives == true)
+            ns:FireCallback("QUEST_DATA_CHANGED")
+        end,
+    })
+
+    table.insert(rows, {
+        type = "checkbox",
         text = L["Color by Difficulty"],
         checked = not (db.fonts and db.fonts.colorDifficulty == false),
         onClick = function()
@@ -2019,6 +2029,10 @@ local TAB_EXTRAS = {
           desc = "Show a live countdown next to timed quest objectives (e.g. [04:12]). Only appears on quests with an active timer.",
           get = function() return ns.db.showTimerInObjectives ~= false end,
           set = function(v) ns.db.showTimerInObjectives = v end },
+        { type = "toggle", label = "Hide Completed Objectives",
+          desc = "Hide objectives you have already finished, so each quest only lists what is left to do. When every objective is done, the quest shows Ready for turn-in as usual.",
+          get = function() return ns.db.hideCompletedObjectives == true end,
+          set = function(v) ns.db.hideCompletedObjectives = v; ns:FireCallback("QUEST_DATA_CHANGED") end },
         { type = "toggle", label = "Highlight Most Valuable Choice Reward",
           desc = "For quests with several reward choices, mark the item with the highest vendor price.",
           disabled = function() return ns.db.tooltips.showRewards == false end,
