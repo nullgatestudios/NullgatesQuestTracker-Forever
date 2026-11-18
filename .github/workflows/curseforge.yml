@@ -1,6 +1,7 @@
 # Uploads the addon to CurseForge when a release is published on GitHub, with
 # the release notes as its changelog (or the version's CHANGELOG.md section when
-# the notes are empty). Pushes and tags alone upload nothing. See .github/scripts/curseforge.py.
+# the notes are empty). Pushes and tags alone upload nothing. See .github/scripts/curseforge.py
+# (the same workflow and script are used in every Nullgate addon repository).
 #
 # Needs the repository secret CURSEFORGE_TOKEN (CurseForge > Authors > My API Tokens)
 # and "## X-Curse-Project-ID:" in the .toc. It can also be run by hand from
