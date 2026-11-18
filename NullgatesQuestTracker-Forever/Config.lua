@@ -277,7 +277,7 @@ function Config:OpenFilterMenu(anchor)
         text = L["Hide Completed Objectives"],
         checked = db.hideCompletedObjectives == true,
         onClick = function()
-            db.hideCompletedObjectives = not (db.hideCompletedObjectives == true)
+            db.hideCompletedObjectives = db.hideCompletedObjectives ~= true
             ns:FireCallback("QUEST_DATA_CHANGED")
         end,
     })
