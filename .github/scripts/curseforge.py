@@ -1,16 +1,18 @@
 """Builds the addon zip and uploads it to CurseForge (used by .github/workflows/curseforge.yml).
+The same file is used by every Nullgate addon repository.
 
   python .github/scripts/curseforge.py zip <out_dir>
-      Builds "<Addon> <Version>.zip" the same way package.ps1 does: the addon folder
-      (with the root CHANGELOG.md copied in) plus the BleakfibersQuestTracker-Forever
-      legacy stub folder. Prints the zip path.
+      Builds "<Addon>-<Version>.zip" like package.ps1: the addon folder (the top-level
+      folder whose name matches its .toc), plus any legacy SavedVariables stub folders
+      (a .toc with "## X-NullgateLegacyStub"). The root CHANGELOG.md is copied into
+      the addon folder when the addon doesn't ship its own. Prints the zip path.
 
   python .github/scripts/curseforge.py upload <zip>
       Uploads the zip. Environment:
         CURSEFORGE_TOKEN    API token (CurseForge > Authors > My API Tokens)
         CHANGELOG_FILE      release notes (Markdown); when empty, the version's CHANGELOG.md section is used
         TAG                 the release tag; must match the .toc version (v1.3.3 for 1.3.3)
-        RELEASE_TYPE        release | beta | alpha (default release)
+        RELEASE_TYPE        release | beta | alpha (default release); a non-release of an -alpha version uploads as alpha
         CURSEFORGE_DRY_RUN  "1": check the token, project and game version, upload nothing
 
 The CurseForge project ID comes from "## X-Curse-Project-ID:" in the addon's .toc.
@@ -27,8 +29,6 @@ import uuid
 import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-ADDON = "NullgatesQuestTracker-Forever"
-LEGACY = "BleakfibersQuestTracker-Forever"
 API = "https://wow.curseforge.com/api"
 
 
@@ -37,16 +37,47 @@ def fail(msg):
     sys.exit(1)
 
 
+def read_toc(folder):
+    with open(os.path.join(ROOT, folder, folder + ".toc"), encoding="utf-8-sig") as f:
+        return f.read()
+
+
+def addon_folders():
+    """(addon folder, [legacy stub folders]) from the repository's top-level folders."""
+    folders = sorted(d for d in os.listdir(ROOT)
+                     if os.path.isfile(os.path.join(ROOT, d, d + ".toc")))
+    stubs = [d for d in folders if re.search(r"^## X-NullgateLegacyStub:", read_toc(d), re.M)]
+    main = [d for d in folders if d not in stubs]
+    if len(main) != 1:
+        fail("Expected one addon folder with a matching .toc at the repository root, found %s" % (main or "none"))
+    return main[0], stubs
+
+
 def toc_field(name):
-    with open(os.path.join(ROOT, ADDON, ADDON + ".toc"), encoding="utf-8-sig") as f:
-        m = re.search(r"^## %s:\s*(.+?)\s*$" % re.escape(name), f.read(), re.M)
+    m = re.search(r"^## %s:\s*(.+?)\s*$" % re.escape(name), read_toc(addon_folders()[0]), re.M)
     return m.group(1) if m else None
 
 
+def display_title():
+    """The .toc Title without color codes, e.g. Nullgate's Quest Tracker - Forever."""
+    title = re.sub(r"\|c[0-9a-fA-F]{8}|\|r", "", toc_field("Title") or addon_folders()[0])
+    return re.sub(r"\s+", " ", title).strip()
+
+
+def root_changelog():
+    for name in os.listdir(ROOT):
+        if name.lower() == "changelog.md":
+            return os.path.join(ROOT, name)
+    return None
+
+
 def changelog_section(version):
-    with open(os.path.join(ROOT, "CHANGELOG.md"), encoding="utf-8") as f:
+    path = root_changelog()
+    if not path:
+        return ""
+    with open(path, encoding="utf-8") as f:
         text = f.read()
-    m = re.search(r"^## \[%s\].*?(?=^## \[|\Z)" % re.escape(version), text, re.M | re.S)
+    m = re.search(r"^## \[?v?%s\]?.*?(?=^## |\Z)" % re.escape(version), text, re.M | re.S)
     return m.group(0).strip() if m else ""
 
 
@@ -59,14 +90,17 @@ def add_folder(zf, folder):
 
 
 def build_zip(out_dir):
+    addon, stubs = addon_folders()
     version = toc_field("Version") or fail("No '## Version:' in the .toc")
     os.makedirs(out_dir, exist_ok=True)
-    zip_path = os.path.join(out_dir, "%s %s.zip" % (ADDON, version))
+    zip_path = os.path.join(out_dir, "%s-%s.zip" % (addon, version))
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        add_folder(zf, ADDON)
-        zf.write(os.path.join(ROOT, "CHANGELOG.md"), ADDON + "/CHANGELOG.md")
-        if os.path.isfile(os.path.join(ROOT, LEGACY, LEGACY + ".toc")):
-            add_folder(zf, LEGACY)
+        add_folder(zf, addon)
+        changelog = root_changelog()
+        if changelog and not any(n.lower() == "changelog.md" for n in os.listdir(os.path.join(ROOT, addon))):
+            zf.write(changelog, addon + "/CHANGELOG.md")
+        for stub in stubs:
+            add_folder(zf, stub)
     print(zip_path)
 
 
@@ -134,17 +168,22 @@ def upload(zip_path):
     if os.environ.get("CHANGELOG_FILE") and os.path.isfile(os.environ["CHANGELOG_FILE"]):
         with open(os.environ["CHANGELOG_FILE"], encoding="utf-8") as f:
             notes = f.read().strip()
-    notes = notes or changelog_section(version) or dry_run and "(dry run)" or fail("No release notes and no [%s] section in CHANGELOG.md" % version)
+    notes = notes or changelog_section(version) or dry_run and "(dry run)" or fail(
+        "No release notes and no %s section in a root CHANGELOG.md" % version)
 
+    release_type = os.environ.get("RELEASE_TYPE") or "release"
+    if release_type != "release" and "alpha" in version.lower():
+        release_type = "alpha"
     game_version = pick_game_version(token)
     metadata = {
         "changelog": notes,
         "changelogType": "markdown",
-        "displayName": "%s %s" % (ADDON, version),
+        "displayName": "%s %s" % (display_title(), version),
         "gameVersions": [game_version["id"]],
-        "releaseType": os.environ.get("RELEASE_TYPE") or "release",
+        "releaseType": release_type,
     }
-    print("Project %s, game version %s (id %s), %s" % (project, game_version["name"], game_version["id"], metadata["releaseType"]))
+    print("Project %s, %s, game version %s (id %s, type %s), %s" % (project, metadata["displayName"], game_version["name"],
+          game_version["id"], game_version.get("gameVersionTypeID"), metadata["releaseType"]))
     if dry_run:
         print("Dry run: token, project and game version are fine; nothing uploaded.")
         return
