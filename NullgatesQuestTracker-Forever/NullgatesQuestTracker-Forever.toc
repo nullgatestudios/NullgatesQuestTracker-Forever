@@ -2,11 +2,12 @@
 ## Title: |cff00c0ffNullgate's Quest Tracker|r - |cffffd100Forever|r
 ## Notes: A lightweight, standalone, modular quest tracker designed for World of Warcraft: Forever.
 ## Author: Nullgate Studios
-## Version: 1.3.2
+## Version: 1.3.3
 ## SavedVariables: NullgatesQuestTrackerDB
 ## IconTexture: Interface\Icons\INV_Misc_Book_07
 ## X-License: Restricted - Source Available (All Rights Reserved, No Derivatives)
 ## X-Website: https://github.com/nullgatestudios/NullgatesQuestTracker-Forever
+## X-Curse-Project-ID: 1699101
 
 ## OptionalDeps: BleakfibersQuestTracker-Forever, NullgatesAddonConfig-Forever, LibSharedMedia-3.0
 

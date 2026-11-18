@@ -177,15 +177,39 @@ API.GetTitleForQuestID = C_QuestLog.GetTitleForQuestID or function(questID)
     return info and info.title
 end
 
+-- Current clients take a quest ID; older ones took a log index. Only accept a link for this quest.
+local function LinkForQuest(link, questID)
+    if type(link) ~= "string" then return nil end
+    if questID and tonumber(string_match(link, "quest:(%d+)")) ~= questID then return nil end
+    return link
+end
+
 function API.GetQuestLink(questID, questLogIndex)
     if C_QuestLog.GetQuestLink and questID then
-        local link = C_QuestLog.GetQuestLink(questID)
+        local link = LinkForQuest(C_QuestLog.GetQuestLink(questID), questID)
         if link then return link end
     end
     if GetQuestLink then
-        return GetQuestLink(questLogIndex or questID)
+        local link = questID and LinkForQuest(GetQuestLink(questID), questID)
+        if not link and questLogIndex then link = LinkForQuest(GetQuestLink(questLogIndex), questID) end
+        return link
     end
     return nil
+end
+
+-- Puts text (a link or plain text) into chat: the open edit box if there is one, otherwise opens chat with it.
+-- ChatFrameUtil is the current API; ChatEdit_* only exist while Blizzard's deprecated fallbacks are loaded.
+function API.InsertChatText(text)
+    if not text or text == "" then return false end
+    local util = _G.ChatFrameUtil
+    local insert = (util and util.InsertLink) or _G.ChatEdit_InsertLink
+    if insert and insert(text) then return true end
+    local open = (util and util.OpenChat) or _G.ChatFrame_OpenChat
+    if open then
+        open(text)
+        return true
+    end
+    return false
 end
 
 -- ---------------------------------------------------------------------------

@@ -1085,4 +1085,6 @@ ns.RegisterLanguagePack("zhCN", "简体中文", {
     ["Left-Click Opens Quest Log"] = "左键点击打开任务日志",
     ["When checked, clicking a quest opens it in your quest log (the Open Quests In setting decides where). Alt + Left-Click still collapses or expands it, and so does a click in combat, when the quest log can't open. Turns off Left-Click Sets Active Quest and Double-Click Sets Active Quest: use the right-click menu or the Set Active button to choose your active quest."] = "勾选后，点击任务会在任务日志中打开它（打开位置由“任务打开方式”设置决定）。Alt + 左键点击仍会折叠或展开任务；战斗中无法打开任务日志时，点击同样会折叠或展开。会关闭“左键点击设为当前任务”和“双击设为当前任务”：请使用右键菜单或“设为当前”按钮选择当前任务。",
     ["Left-Click: Open in Quest Log"] = "左键点击：在任务日志中打开",
+    ["Hide Completed Objectives"] = "隐藏已完成的目标",
+    ["Hide objectives you have already finished, so each quest only lists what is left to do. When every objective is done, the quest shows Ready for turn-in as usual."] = "隐藏已经完成的目标，让每个任务只显示剩下要做的内容。所有目标完成后，任务会照常显示“可以交任务”。",
 })
