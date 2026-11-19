@@ -1081,4 +1081,6 @@ ns.RegisterLanguagePack("esMX", "Español (Latinoamérica)", {
     ["Left-Click: Open in Quest Log"] = "Clic izquierdo: abrir en el diario de misiones",
     ["Hide Completed Objectives"] = "Ocultar objetivos completados",
     ["Hide objectives you have already finished, so each quest only lists what is left to do. When every objective is done, the quest shows Ready for turn-in as usual."] = "Oculta los objetivos que ya has completado, para que cada misión muestre solo lo que falta. Cuando todos los objetivos están completos, la misión muestra «Lista para entregar» como siempre.",
+    ["Show Mouse Shortcuts in Tooltips"] = "Mostrar atajos del ratón en las descripciones",
+    ["List the mouse and key shortcuts (Left-Click, Shift + Left-Click and so on) at the bottom of quest and quest item tooltips. Turn off for shorter tooltips."] = "Muestra los atajos del ratón y del teclado (clic izquierdo, Mayús + clic izquierdo, etc.) al final de las descripciones de misiones y objetos de misión. Desactívalo para descripciones más cortas.",
 })

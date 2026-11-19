@@ -2,6 +2,17 @@
 
 All notable changes to **Nullgate's Quest Tracker - Forever** (formerly **Bleakfiber's Quest Tracker - Forever**) are documented below.
 
+## [1.3.4] - 2026-11-19: Shorter Tooltips, and the Whole Quest Lights Up on Hover
+
+### Added
+- **Show Mouse Shortcuts in Tooltips** (on by default):
+  - Turn it off to drop the list of mouse and key shortcuts (Left-Click, Shift + Left-Click, Right-Click and so on) from the bottom of quest and quest item tooltips, so they take far less space.
+  - The **Active Quest** and **Navigating to Waypoint** lines still show, because they describe the quest rather than a shortcut.
+  - Find it in **Settings > Quests & Items**, or in the tracker's quick menu next to **Show Quest Rewards**.
+
+### Changed
+- **Hovering a quest's objectives now highlights the quest**, the same as hovering its name. The highlight covers the whole quest, title and objectives, and uses your **Quest Hover Color**.
+
 ## [1.3.3] - 2026-11-18: Hide Completed Objectives, and Shift + Left-Click Links Quests Again
 
 ### Added

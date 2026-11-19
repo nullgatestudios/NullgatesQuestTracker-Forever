@@ -498,9 +498,11 @@ function StandaloneTracker:GetOrCreateItemButton(index)
         if s.isPreview then
             GameTooltip:AddLine(L["Test Quest Item Button"], 1, 0.82, 0)
             GameTooltip:AddLine(L["Click it or press your Quest Item Key to check that it works. It does not use any item."], 1, 1, 1, true)
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("|cffaaaaaa" .. L["Shift + Right-Drag: Move button"] .. "|r", 0.6, 0.6, 0.6)
-            GameTooltip:AddLine("|cffaaaaaa" .. L["Alt + Right-Click: Re-dock to tracker"] .. "|r", 0.6, 0.6, 0.6)
+            if ns.db.tooltips.showClickHints ~= false then
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("|cffaaaaaa" .. L["Shift + Right-Drag: Move button"] .. "|r", 0.6, 0.6, 0.6)
+                GameTooltip:AddLine("|cffaaaaaa" .. L["Alt + Right-Click: Re-dock to tracker"] .. "|r", 0.6, 0.6, 0.6)
+            end
             GameTooltip:Show()
             return
         end
@@ -512,10 +514,12 @@ function StandaloneTracker:GetOrCreateItemButton(index)
                 GameTooltip:AddLine(s.questTitle, 1, 1, 1)
             end
         end
-        GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("|cff00ff00" .. L["Left-Click: Use quest item"] .. "|r", 0.8, 0.8, 0.8)
-        GameTooltip:AddLine("|cffaaaaaa" .. L["Shift + Right-Drag: Move button"] .. "|r", 0.6, 0.6, 0.6)
-        GameTooltip:AddLine("|cffaaaaaa" .. L["Alt + Right-Click: Re-dock to tracker"] .. "|r", 0.6, 0.6, 0.6)
+        if ns.db.tooltips.showClickHints ~= false then
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine("|cff00ff00" .. L["Left-Click: Use quest item"] .. "|r", 0.8, 0.8, 0.8)
+            GameTooltip:AddLine("|cffaaaaaa" .. L["Shift + Right-Drag: Move button"] .. "|r", 0.6, 0.6, 0.6)
+            GameTooltip:AddLine("|cffaaaaaa" .. L["Alt + Right-Click: Re-dock to tracker"] .. "|r", 0.6, 0.6, 0.6)
+        end
         GameTooltip:Show()
     end)
     btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1711,9 +1715,15 @@ local function ShowQuestTooltip(anchorFrame, qInfo)
         end
     end
 
-    GameTooltip:AddLine(" ")
+    local hints = tips.showClickHints ~= false
+    if hints or isActive then GameTooltip:AddLine(" ") end
     local expandLabel = isCollapsed and L["Expand Quest"] or L["Collapse Quest"]
-    if db.sorting.leftClickOpensQuestLog == true then
+    if not hints then
+        -- Shortcut hints switched off: keep only what describes the quest
+        if isActive then
+            GameTooltip:AddLine("|cff00e5ff* " .. L["Active Quest"] .. "|r", 0.0, 0.9, 1.0)
+        end
+    elseif db.sorting.leftClickOpensQuestLog == true then
         GameTooltip:AddLine("|cff00ff00" .. L["Left-Click: Open in Quest Log"] .. "|r", 0.2, 1, 0.2)
         GameTooltip:AddLine("|cffaaaaaa" .. string_format(L["Alt + Left-Click: %s"], expandLabel) .. "|r", 0.6, 0.6, 0.6)
         if isActive then
@@ -1744,11 +1754,13 @@ local function ShowQuestTooltip(anchorFrame, qInfo)
             GameTooltip:AddDoubleLine("|cff00c0ff" .. L["Navigating to Waypoint:"] .. "|r", "|cffffd100" .. cur.title .. "|r" .. (distStr ~= "" and (" |cffffffff(" .. distStr .. ")|r") or ""))
         end
     end
-    GameTooltip:AddLine("|cffaaaaaa" .. L["Ctrl + Left-Click: Open in Quest Log"] .. "|r", 0.6, 0.6, 0.6)
-    GameTooltip:AddLine("|cffaaaaaa" .. L["Shift + Left-Click: Link in Chat"] .. "|r", 0.6, 0.6, 0.6)
-    GameTooltip:AddLine("|cffaaaaaa" .. L["Right-Click: Quest Actions Menu"] .. "|r", 0.8, 0.8, 0.8)
-    GameTooltip:AddLine("|cff00c0ff" .. L["Shift + Right-Click: Copy Wowhead URL"] .. "|r", 0.2, 0.8, 1)
-    GameTooltip:AddLine("|cff00ff00" .. L["Alt + Right-Click: Open Settings"] .. "|r", 0.2, 1, 0.2)
+    if hints then
+        GameTooltip:AddLine("|cffaaaaaa" .. L["Ctrl + Left-Click: Open in Quest Log"] .. "|r", 0.6, 0.6, 0.6)
+        GameTooltip:AddLine("|cffaaaaaa" .. L["Shift + Left-Click: Link in Chat"] .. "|r", 0.6, 0.6, 0.6)
+        GameTooltip:AddLine("|cffaaaaaa" .. L["Right-Click: Quest Actions Menu"] .. "|r", 0.8, 0.8, 0.8)
+        GameTooltip:AddLine("|cff00c0ff" .. L["Shift + Right-Click: Copy Wowhead URL"] .. "|r", 0.2, 0.8, 1)
+        GameTooltip:AddLine("|cff00ff00" .. L["Alt + Right-Click: Open Settings"] .. "|r", 0.2, 1, 0.2)
+    end
     GameTooltip:Show()
 end
 
@@ -1770,6 +1782,7 @@ local function AcquireQuestBlock(parent)
     local block = AcquireFromPool(questBlocks, parent)
     if block then
         block.header:Show()
+        block.highlight:Hide()
         return block
     end
 
@@ -1830,11 +1843,14 @@ local function AcquireQuestBlock(parent)
     header.wayfinderArrow = wayfinderArrow
     wayfinderArrow:Hide()
 
-    local hl = header:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetAllPoints(header)
+    -- Hover highlight over the whole quest (title and objectives), shown while the
+    -- pointer is anywhere over the block; drawn above the completed background
+    local hl = block:CreateTexture(nil, "BACKGROUND", nil, 1)
+    hl:SetAllPoints(block)
     local qHl = ns.db.fonts.questHoverColor or WHITE
     hl:SetColorTexture(qHl.r, qHl.g, qHl.b, qHl.a or 0.08)
-    header.highlight = hl
+    hl:Hide()
+    block.highlight = hl
 
     -- Left = Collapse/Expand (or Quest Log / Set Active, per settings), Ctrl+Left = Quest Log, Shift+Left = Chat Link,
     -- Right = Context Menu, Shift+Right = Wowhead URL, Alt+Right = Settings
@@ -1905,6 +1921,20 @@ local function AcquireQuestBlock(parent)
     block:HookScript("OnLeave", CheckHover)
     header:HookScript("OnLeave", CheckHover)
 
+    -- Moving between the title and the objectives passes focus between header and
+    -- block, so the highlight only hides once the pointer has left the whole quest
+    local function ShowHoverHighlight(self) (self.block or self).highlight:Show() end
+    local function HideHoverHighlight(self)
+        local owner = self.block or self
+        C_Timer.After(0.05, function()
+            if not owner:IsMouseOver() then owner.highlight:Hide() end
+        end)
+    end
+    block:HookScript("OnEnter", ShowHoverHighlight)
+    header:HookScript("OnEnter", ShowHoverHighlight)
+    block:HookScript("OnLeave", HideHoverHighlight)
+    header:HookScript("OnLeave", HideHoverHighlight)
+
     table_insert(questBlocks, block)
     return block
 end
@@ -1951,7 +1981,7 @@ end
 function StandaloneTracker:ApplyHighlightColors()
     local qHl = ns.db.fonts.questHoverColor or WHITE
     for _, block in ipairs(questBlocks) do
-        block.header.highlight:SetColorTexture(qHl.r, qHl.g, qHl.b, qHl.a or 0.08)
+        block.highlight:SetColorTexture(qHl.r, qHl.g, qHl.b, qHl.a or 0.08)
     end
     local zHl = ns.db.fonts.zoneHoverColor or DEFAULT_TITLE_COLOR
     for _, zh in ipairs(zoneHeaders) do

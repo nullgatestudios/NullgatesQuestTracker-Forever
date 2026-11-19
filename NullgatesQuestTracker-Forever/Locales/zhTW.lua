@@ -1087,4 +1087,6 @@ ns.RegisterLanguagePack("zhTW", "繁體中文", {
     ["Left-Click: Open in Quest Log"] = "左鍵點擊：在任務日誌中開啟",
     ["Hide Completed Objectives"] = "隱藏已完成的目標",
     ["Hide objectives you have already finished, so each quest only lists what is left to do. When every objective is done, the quest shows Ready for turn-in as usual."] = "隱藏已經完成的目標，讓每個任務只顯示剩下要做的內容。所有目標完成後，任務會照常顯示「可以回報任務」。",
+    ["Show Mouse Shortcuts in Tooltips"] = "在滑鼠提示中顯示滑鼠快捷操作",
+    ["List the mouse and key shortcuts (Left-Click, Shift + Left-Click and so on) at the bottom of quest and quest item tooltips. Turn off for shorter tooltips."] = "在任務和任務物品的滑鼠提示底部列出滑鼠和按鍵快捷操作（左鍵點擊、Shift + 左鍵點擊等）。關閉可讓提示更短。",
 })

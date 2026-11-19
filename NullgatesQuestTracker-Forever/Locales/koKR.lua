@@ -1085,4 +1085,6 @@ ns.RegisterLanguagePack("koKR", "한국어", {
     ["Left-Click: Open in Quest Log"] = "왼쪽 클릭: 퀘스트 목록에서 열기",
     ["Hide Completed Objectives"] = "완료한 목표 숨기기",
     ["Hide objectives you have already finished, so each quest only lists what is left to do. When every objective is done, the quest shows Ready for turn-in as usual."] = "이미 완료한 목표를 숨겨 각 퀘스트에 남은 목표만 표시합니다. 모든 목표를 완료하면 평소처럼 '완료 보고 가능'이 표시됩니다.",
+    ["Show Mouse Shortcuts in Tooltips"] = "툴팁에 마우스 단축키 표시",
+    ["List the mouse and key shortcuts (Left-Click, Shift + Left-Click and so on) at the bottom of quest and quest item tooltips. Turn off for shorter tooltips."] = "퀘스트와 퀘스트 아이템 툴팁 아래쪽에 마우스 및 키 단축키(왼쪽 클릭, Shift + 왼쪽 클릭 등)를 표시합니다. 툴팁을 짧게 하려면 끄세요.",
 })

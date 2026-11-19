@@ -147,7 +147,7 @@ Seamless integration with `NullgatesAddonConfig-Forever`:
 Type `/nqt` in chat to open the options panel:
 
 1. **General**: Master toggle, UI scale slider, lock/unlock frame position, auto-hide in combat, auto-hide when empty, and frame strata selection.
-2. **Quests & Items**: Quest item action buttons, bag scanning fallback, hide completed objectives, objective text colors, difficulty level coloring, and quest level badges.
+2. **Quests & Items**: Quest item action buttons, bag scanning fallback, hide completed objectives, mouse shortcuts in tooltips, objective text colors, difficulty level coloring, and quest level badges.
 3. **Colors & Fonts**: Backdrop backgrounds, beveled borders, class-colored border accents, LibSharedMedia typography selectors, font sizes, and line spacing.
 4. **Headers & Sort**: Zone grouping banners, sort mode selection (Level Ascending vs. Grouped by Zone), and header textures (Flat, Gradient, Blizzard, None).
 5. **Automation**: Fast Auto Loot, Auto-Accept quests, Safe Auto-Turn In (with multi-reward protection), and Party Quest Sharing.

@@ -324,6 +324,16 @@ function Config:OpenFilterMenu(anchor)
         end,
     })
 
+    table.insert(rows, {
+        type = "checkbox",
+        text = L["Show Mouse Shortcuts in Tooltips"],
+        checked = not (db.tooltips and db.tooltips.showClickHints == false),
+        onClick = function()
+            db.tooltips = db.tooltips or {}
+            db.tooltips.showClickHints = db.tooltips.showClickHints == false
+        end,
+    })
+
     table.insert(rows, { type = "sep" })
     table.insert(rows, { type = "header", text = L["Wayfinder Navigation"] })
     table.insert(rows, {
@@ -2038,6 +2048,10 @@ local TAB_EXTRAS = {
           disabled = function() return ns.db.tooltips.showRewards == false end,
           get = function() return ns.db.tooltips.showBestSell ~= false end,
           set = function(v) ns.db.tooltips.showBestSell = v end },
+        { type = "toggle", label = "Show Mouse Shortcuts in Tooltips",
+          desc = "List the mouse and key shortcuts (Left-Click, Shift + Left-Click and so on) at the bottom of quest and quest item tooltips. Turn off for shorter tooltips.",
+          get = function() return ns.db.tooltips.showClickHints ~= false end,
+          set = function(v) ns.db.tooltips.showClickHints = v end },
         { type = "select", label = "Active Quest Marker",
           values = {
               { key = "star", label = "Gold Star (Blizzard)" }, { key = "arrow", label = "Gold Arrow" },
