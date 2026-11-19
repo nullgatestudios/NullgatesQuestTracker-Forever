@@ -1080,4 +1080,6 @@ ns.RegisterLanguagePack("frFR", "Français", {
     ["Left-Click: Open in Quest Log"] = "Clic gauche : ouvrir dans le journal de quêtes",
     ["Hide Completed Objectives"] = "Masquer les objectifs terminés",
     ["Hide objectives you have already finished, so each quest only lists what is left to do. When every objective is done, the quest shows Ready for turn-in as usual."] = "Masque les objectifs déjà terminés, pour que chaque quête n'affiche que ce qu'il reste à faire. Quand tous les objectifs sont terminés, la quête affiche « Prête à être rendue » comme d'habitude.",
+    ["Show Mouse Shortcuts in Tooltips"] = "Afficher les raccourcis souris dans les infobulles",
+    ["List the mouse and key shortcuts (Left-Click, Shift + Left-Click and so on) at the bottom of quest and quest item tooltips. Turn off for shorter tooltips."] = "Affiche les raccourcis souris et clavier (clic gauche, Maj + clic gauche, etc.) en bas des infobulles des quêtes et des objets de quête. Désactivez pour des infobulles plus courtes.",
 })

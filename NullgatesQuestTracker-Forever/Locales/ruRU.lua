@@ -1085,4 +1085,6 @@ ns.RegisterLanguagePack("ruRU", "Русский", {
     ["Left-Click: Open in Quest Log"] = "ЛКМ: открыть в журнале заданий",
     ["Hide Completed Objectives"] = "Скрывать выполненные цели",
     ["Hide objectives you have already finished, so each quest only lists what is left to do. When every objective is done, the quest shows Ready for turn-in as usual."] = "Скрывает уже выполненные цели, чтобы у каждого задания оставалось только то, что ещё нужно сделать. Когда все цели выполнены, задание как обычно показывает «Можно сдать».",
+    ["Show Mouse Shortcuts in Tooltips"] = "Показывать сочетания мыши в подсказках",
+    ["List the mouse and key shortcuts (Left-Click, Shift + Left-Click and so on) at the bottom of quest and quest item tooltips. Turn off for shorter tooltips."] = "Показывает сочетания мыши и клавиш (ЛКМ, Shift + ЛКМ и т. д.) внизу подсказок заданий и предметов заданий. Выключите, чтобы подсказки были короче.",
 })

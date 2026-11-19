@@ -1063,4 +1063,6 @@ ns.RegisterLanguagePack("deDE", "Deutsch", {
     ["Left-Click: Open in Quest Log"] = "Linksklick: Im Questlog öffnen",
     ["Hide Completed Objectives"] = "Erledigte Ziele ausblenden",
     ["Hide objectives you have already finished, so each quest only lists what is left to do. When every objective is done, the quest shows Ready for turn-in as usual."] = "Blendet bereits erledigte Ziele aus, sodass jede Quest nur noch zeigt, was noch zu tun ist. Sind alle Ziele erledigt, zeigt die Quest wie gewohnt „Bereit zur Abgabe“.",
+    ["Show Mouse Shortcuts in Tooltips"] = "Maus-Kürzel in Tooltips anzeigen",
+    ["List the mouse and key shortcuts (Left-Click, Shift + Left-Click and so on) at the bottom of quest and quest item tooltips. Turn off for shorter tooltips."] = "Listet die Maus- und Tastenkürzel (Linksklick, Umschalt + Linksklick usw.) unten in den Tooltips von Quests und Questgegenständen auf. Ausschalten für kürzere Tooltips.",
 })
