@@ -200,37 +200,8 @@ function Config:OpenFilterMenu(anchor)
     local rows = {
         { type = "title", text = "|cff00c0ff" .. L["Tracker Options"] .. "|r" },
         { type = "sep" },
-        { type = "header", text = L["Sort Quests"] },
-        {
-            type = "radio",
-            text = L["Level"],
-            checked = (db.sorting.mode == "level"),
-            onClick = function()
-                db.sorting.mode = "level"
-                ns:FireCallback("QUEST_DATA_CHANGED")
-            end,
-        },
-        {
-            type = "radio",
-            text = L["Zone"],
-            checked = (db.sorting.mode == "zone"),
-            onClick = function()
-                db.sorting.mode = "zone"
-                ns:FireCallback("QUEST_DATA_CHANGED")
-            end,
-        },
     }
 
-    table.insert(rows, { type = "header", text = L["Show Quests"] })
-    local currentFilter = (db.filtering and db.filtering.filterMode) or "all"
-    for _, mode in ipairs({ { "all", L["All Quests"] }, { "zone", L["Current Zone Only"] }, { "watched", L["Watched Only"] } }) do
-        table.insert(rows, {
-            type = "radio",
-            text = mode[2],
-            checked = (currentFilter == mode[1]),
-            onClick = function() Config:SetFilterMode(mode[1]) end,
-        })
-    end
     table.insert(rows, { type = "header", text = L["Sorting & Display"] })
     table.insert(rows, {
         type = "checkbox",

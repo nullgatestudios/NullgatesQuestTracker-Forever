@@ -12,6 +12,7 @@ All notable changes to **Nullgate's Quest Tracker - Forever** (formerly **Bleakf
 
 ### Changed
 - **Hovering a quest's objectives now highlights the quest**, the same as hovering its name. The highlight covers the whole quest, title and objectives, and uses your **Quest Hover Color**.
+- **A shorter quick menu:** the **Sort Quests** and **Show Quests** sections are gone from the tracker's quick menu. Both settings are still in Settings: sorting under **Headers & Sort**, and which quests to show under **General > Quest Filter Mode** (or the tracker's Zone button).
 
 ## [1.3.3] - 2026-11-18: Hide Completed Objectives, and Shift + Left-Click Links Quests Again
 
