@@ -2,6 +2,16 @@
 
 All notable changes to **Nullgate's Quest Tracker - Forever** (formerly **Bleakfiber's Quest Tracker - Forever**) are documented below.
 
+## [1.3.6] - 2026-11-20: A Much Shorter Quick Menu
+
+### Changed
+- **The tracker's quick menu (the [...] button) now holds only what you use while playing:** Lock Position, Show Zone Headers, Show Floating Arrow, Collapse/Expand All Quests and Zones, and the way into Settings.
+- **One button per level:** "Collapse All Quests" turns into "Expand All Quests" once everything is collapsed (the same for zones), so there are no longer two buttons for each.
+- **Closing:** press **Escape** or click anywhere outside the menu. The Close button is gone.
+
+### Good to know
+- Every option that left the menu is still in **Settings**: sorting and left-click options under **Headers & Sort**; hide completed objectives, difficulty colors and the tooltip options under **Quests & Items**; the inline mini-arrow under **Wayfinder/Audio**.
+
 ## [1.3.5] - 2026-11-20: Hide the "Active Quest" Tooltip Line
 
 ### Added

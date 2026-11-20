@@ -1,6 +1,6 @@
 
 [![Interface](https://img.shields.io/badge/Interface-16001%20(WoW%20Forever)-0078D7.svg?style=flat-square)](https://github.com/nullgatestudios/NullgatesQuestTracker-Forever)
-[![Release](https://img.shields.io/badge/Release-v1.3.5-ffd100.svg?style=flat-square)](https://github.com/nullgatestudios/NullgatesQuestTracker-Forever/releases)
+[![Release](https://img.shields.io/badge/Release-v1.3.6-ffd100.svg?style=flat-square)](https://github.com/nullgatestudios/NullgatesQuestTracker-Forever/releases)
 [![License](https://img.shields.io/badge/License-Source--Available-crimson.svg?style=flat-square)](LICENSE.md)
 [![Dependencies](https://img.shields.io/badge/Dependencies-Zero%20External-2ea44f.svg?style=flat-square)](https://github.com/nullgatestudios/NullgatesQuestTracker-Forever)
 [![Suite](https://img.shields.io/badge/Suite-Nullgate's%20Addon%20Suite-8a2be2.svg?style=flat-square)](https://github.com/nullgatestudios)
@@ -137,7 +137,7 @@ Seamless integration with `NullgatesAddonConfig-Forever`:
 | **`[Log]`** | Opens or closes the standard Blizzard Quest Log (`ToggleQuestLog`). |
 | **`[Zone]`** | Toggles filtering to only display quests for the player's current zone. |
 | **`[All]`** | Displays all tracked quests across all zones. |
-| **`[...]`** | Opens the Quick Filter & Settings Menu (lock/unlock, sorting, visual sizing guide). |
+| **`[...]`** | Opens the quick menu: lock, zone headers, the floating arrow, collapse or expand everything, and the way into Settings. Escape or a click outside closes it. |
 | **`[-]` / `[+]`** | Minimizes or expands the tracker frame contents. |
 
 ---

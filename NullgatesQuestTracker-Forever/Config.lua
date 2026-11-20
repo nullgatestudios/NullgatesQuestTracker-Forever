@@ -118,6 +118,7 @@ local function GetOrCreateQuickMenu()
     quickMenuCatcher:SetFrameStrata("FULLSCREEN_DIALOG")
     quickMenuCatcher:SetFrameLevel(90)
     quickMenuCatcher:EnableMouse(true)
+    quickMenuCatcher:RegisterForClicks("AnyUp")
     quickMenuCatcher:Hide()
     quickMenuCatcher:SetScript("OnClick", function()
         if quickMenuPopup then quickMenuPopup:Hide() end
@@ -128,6 +129,8 @@ local function GetOrCreateQuickMenu()
         Mixin(menu, BackdropTemplateMixin)
     end
     quickMenuPopup = menu
+    -- Escape closes the menu, like the game's own panels
+    if UISpecialFrames then tinsert(UISpecialFrames, "NullgateQuickMenuPopup") end
     menu:SetFrameStrata("FULLSCREEN_DIALOG")
     menu:SetFrameLevel(100)
     menu:SetWidth(225)
@@ -202,145 +205,14 @@ function Config:OpenFilterMenu(anchor)
         { type = "sep" },
     }
 
-    table.insert(rows, { type = "header", text = L["Sorting & Display"] })
     table.insert(rows, {
         type = "checkbox",
-        text = L["Active Quest on Top"],
-        checked = not (db.sorting and db.sorting.activeOnTop == false),
+        text = L["Lock Position"],
+        checked = db.isLocked,
         onClick = function()
-            db.sorting = db.sorting or {}
-            db.sorting.activeOnTop = db.sorting.activeOnTop == false
-            ns:FireCallback("QUEST_DATA_CHANGED")
+            ns.Tracker:SetLocked(not db.isLocked)
         end,
     })
-
-    table.insert(rows, {
-        type = "checkbox",
-        text = L["Left-Click Sets Active"],
-        checked = (db.sorting and db.sorting.leftClickSetsActive == true),
-        onClick = function()
-            SetLeftClickMode("leftClickSetsActive", not (db.sorting and db.sorting.leftClickSetsActive == true))
-        end,
-    })
-
-    table.insert(rows, {
-        type = "checkbox",
-        text = L["Left-Click Opens Quest Log"],
-        checked = (db.sorting and db.sorting.leftClickOpensQuestLog == true),
-        onClick = function()
-            SetLeftClickMode("leftClickOpensQuestLog", not (db.sorting and db.sorting.leftClickOpensQuestLog == true))
-        end,
-    })
-
-    table.insert(rows, {
-        type = "checkbox",
-        text = L["Completed to Bottom"],
-        checked = db.sorting and db.sorting.moveCompletedToBottom,
-        onClick = function()
-            db.sorting = db.sorting or {}
-            db.sorting.moveCompletedToBottom = not db.sorting.moveCompletedToBottom
-            ns:FireCallback("QUEST_DATA_CHANGED")
-        end,
-    })
-
-    table.insert(rows, {
-        type = "checkbox",
-        text = L["Hide Completed Objectives"],
-        checked = db.hideCompletedObjectives == true,
-        onClick = function()
-            db.hideCompletedObjectives = db.hideCompletedObjectives ~= true
-            ns:FireCallback("QUEST_DATA_CHANGED")
-        end,
-    })
-
-    table.insert(rows, {
-        type = "checkbox",
-        text = L["Color by Difficulty"],
-        checked = not (db.fonts and db.fonts.colorDifficulty == false),
-        onClick = function()
-            db.fonts = db.fonts or {}
-            db.fonts.colorDifficulty = db.fonts.colorDifficulty == false
-            ns:FireCallback("QUEST_DATA_CHANGED")
-        end,
-    })
-
-    table.insert(rows, {
-        type = "checkbox",
-        text = L["Show Complete Icon (?)"],
-        checked = not (db.headers and db.headers.showCompleteIcon == false),
-        onClick = function()
-            db.headers = db.headers or {}
-            db.headers.showCompleteIcon = db.headers.showCompleteIcon == false
-            ns:FireCallback("QUEST_DATA_CHANGED")
-        end,
-    })
-
-    table.insert(rows, {
-        type = "checkbox",
-        text = L["Show Quest Rewards"],
-        checked = not (db.tooltips and db.tooltips.showRewards == false),
-        onClick = function()
-            db.tooltips = db.tooltips or {}
-            db.tooltips.showRewards = db.tooltips.showRewards == false
-        end,
-    })
-
-    table.insert(rows, {
-        type = "checkbox",
-        text = L["Show Party Members"],
-        checked = not (db.tooltips and db.tooltips.showPartyStatus == false),
-        onClick = function()
-            db.tooltips = db.tooltips or {}
-            db.tooltips.showPartyStatus = db.tooltips.showPartyStatus == false
-        end,
-    })
-
-    table.insert(rows, {
-        type = "checkbox",
-        text = L["Show Mouse Shortcuts in Tooltips"],
-        checked = not (db.tooltips and db.tooltips.showClickHints == false),
-        onClick = function()
-            db.tooltips = db.tooltips or {}
-            db.tooltips.showClickHints = db.tooltips.showClickHints == false
-        end,
-    })
-
-    table.insert(rows, {
-        type = "checkbox",
-        text = L["Show \"Active Quest\" in Tooltips"],
-        checked = not (db.tooltips and db.tooltips.showActiveQuestLine == false),
-        onClick = function()
-            db.tooltips = db.tooltips or {}
-            db.tooltips.showActiveQuestLine = db.tooltips.showActiveQuestLine == false
-        end,
-    })
-
-    table.insert(rows, { type = "sep" })
-    table.insert(rows, { type = "header", text = L["Wayfinder Navigation"] })
-    table.insert(rows, {
-        type = "checkbox",
-        text = L["Show Floating Arrow"],
-        checked = db.wayfinder and db.wayfinder.enableHUDArrow,
-        onClick = function()
-            db.wayfinder = db.wayfinder or {}
-            db.wayfinder.enableHUDArrow = not db.wayfinder.enableHUDArrow
-            if ns.WayfinderModule then ns.WayfinderModule:RefreshState() end
-        end,
-    })
-    table.insert(rows, {
-        type = "checkbox",
-        text = L["Show Inline Mini-Arrow"],
-        checked = db.wayfinder and db.wayfinder.enableInlineArrow,
-        onClick = function()
-            db.wayfinder = db.wayfinder or {}
-            db.wayfinder.enableInlineArrow = not db.wayfinder.enableInlineArrow
-            if ns.WayfinderModule then ns.WayfinderModule:RefreshState() end
-            ns:FireCallback("QUEST_DATA_CHANGED")
-        end,
-    })
-
-    table.insert(rows, { type = "sep" })
-    table.insert(rows, { type = "header", text = L["Tracker Actions"] })
     table.insert(rows, {
         type = "checkbox",
         text = L["Show Zone Headers"],
@@ -353,66 +225,53 @@ function Config:OpenFilterMenu(anchor)
     })
     table.insert(rows, {
         type = "checkbox",
-        text = L["Lock Position"],
-        checked = db.isLocked,
+        text = L["Show Floating Arrow"],
+        checked = db.wayfinder and db.wayfinder.enableHUDArrow,
         onClick = function()
-            ns.Tracker:SetLocked(not db.isLocked)
+            db.wayfinder = db.wayfinder or {}
+            db.wayfinder.enableHUDArrow = not db.wayfinder.enableHUDArrow
+            if ns.WayfinderModule then ns.WayfinderModule:RefreshState() end
         end,
     })
+
+    -- One button per level that collapses everything, or expands it again when all is collapsed
+    local quests = (ns.StandaloneTracker and ns.StandaloneTracker.GetTrackedQuests and ns.StandaloneTracker:GetTrackedQuests()) or {}
+    db.collapsedQuests = db.collapsedQuests or {}
+    db.collapsedZones = db.collapsedZones or {}
+    local anyQuestOpen, anyZoneOpen = false, false
+    for _, q in ipairs(quests) do
+        local key = q.questID or q.title
+        if key and not db.collapsedQuests[key] then anyQuestOpen = true end
+        if not db.collapsedZones[q.zone or L["Other Quests"]] then anyZoneOpen = true end
+    end
+    table.insert(rows, { type = "sep" })
     table.insert(rows, {
         type = "button",
-        text = L["Expand All Quests"],
+        text = anyQuestOpen and L["Collapse All Quests"] or L["Expand All Quests"],
         onClick = function()
-            if db then
-                db.collapsedQuests = {}
-                ns:FireCallback("QUEST_DATA_CHANGED")
-            end
-            menu:Hide()
-        end,
-    })
-    table.insert(rows, {
-        type = "button",
-        text = L["Collapse All Quests"],
-        onClick = function()
-            if db and ns.StandaloneTracker and ns.StandaloneTracker.GetTrackedQuests then
-                db.collapsedQuests = db.collapsedQuests or {}
-                local quests = ns.StandaloneTracker:GetTrackedQuests()
+            if anyQuestOpen then
                 for _, q in ipairs(quests) do
                     local key = q.questID or q.title
-                    if key then
-                        db.collapsedQuests[key] = true
-                    end
+                    if key then db.collapsedQuests[key] = true end
                 end
-                ns:FireCallback("QUEST_DATA_CHANGED")
+            else
+                db.collapsedQuests = {}
             end
+            ns:FireCallback("QUEST_DATA_CHANGED")
             menu:Hide()
         end,
     })
     if db.headers and db.headers.showZoneHeaders ~= false then
         table.insert(rows, {
             type = "button",
-            text = L["Expand All Zones"],
+            text = anyZoneOpen and L["Collapse All Zones"] or L["Expand All Zones"],
             onClick = function()
-                if db then
+                if anyZoneOpen then
+                    for _, q in ipairs(quests) do db.collapsedZones[q.zone or L["Other Quests"]] = true end
+                else
                     db.collapsedZones = {}
-                    ns:FireCallback("QUEST_DATA_CHANGED")
                 end
-                menu:Hide()
-            end,
-        })
-        table.insert(rows, {
-            type = "button",
-            text = L["Collapse All Zones"],
-            onClick = function()
-                if db and ns.StandaloneTracker and ns.StandaloneTracker.GetTrackedQuests then
-                    db.collapsedZones = db.collapsedZones or {}
-                    local quests = ns.StandaloneTracker:GetTrackedQuests()
-                    for _, q in ipairs(quests) do
-                        local z = q.zone or L["Other Quests"]
-                        db.collapsedZones[z] = true
-                    end
-                    ns:FireCallback("QUEST_DATA_CHANGED")
-                end
+                ns:FireCallback("QUEST_DATA_CHANGED")
                 menu:Hide()
             end,
         })
@@ -427,13 +286,6 @@ function Config:OpenFilterMenu(anchor)
         onClick = function()
             menu:Hide()
             Config:ToggleConfigFrame()
-        end,
-    })
-    table.insert(rows, {
-        type = "button",
-        text = L["Close"],
-        onClick = function()
-            menu:Hide()
         end,
     })
 
