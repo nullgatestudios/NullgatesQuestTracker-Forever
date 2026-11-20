@@ -708,6 +708,7 @@ ns.defaultDB = {
             classColorParty = true,
             showPartyBadge = false,
             showClickHints = true,  -- mouse/key shortcut lines at the bottom of quest and quest item tooltips
+            showActiveQuestLine = true, -- "* Active Quest" line in the active quest's tooltip
         },
 
         -- Audio & Sounds

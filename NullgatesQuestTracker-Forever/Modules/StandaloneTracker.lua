@@ -1716,17 +1716,19 @@ local function ShowQuestTooltip(anchorFrame, qInfo)
     end
 
     local hints = tips.showClickHints ~= false
-    if hints or isActive then GameTooltip:AddLine(" ") end
+    -- "* Active Quest" can be switched off (the Wayfinder arrow and Active Quest button already show it)
+    local activeLine = isActive and tips.showActiveQuestLine ~= false
+    if hints or activeLine then GameTooltip:AddLine(" ") end
     local expandLabel = isCollapsed and L["Expand Quest"] or L["Collapse Quest"]
     if not hints then
         -- Shortcut hints switched off: keep only what describes the quest
-        if isActive then
+        if activeLine then
             GameTooltip:AddLine("|cff00e5ff* " .. L["Active Quest"] .. "|r", 0.0, 0.9, 1.0)
         end
     elseif db.sorting.leftClickOpensQuestLog == true then
         GameTooltip:AddLine("|cff00ff00" .. L["Left-Click: Open in Quest Log"] .. "|r", 0.2, 1, 0.2)
         GameTooltip:AddLine("|cffaaaaaa" .. string_format(L["Alt + Left-Click: %s"], expandLabel) .. "|r", 0.6, 0.6, 0.6)
-        if isActive then
+        if activeLine then
             GameTooltip:AddLine("|cff00e5ff* " .. L["Active Quest"] .. "|r", 0.0, 0.9, 1.0)
         end
     elseif db.sorting.leftClickSetsActive ~= true then
@@ -1734,12 +1736,14 @@ local function ShowQuestTooltip(anchorFrame, qInfo)
         if db.sorting.doubleClickSetsActive ~= false and not isActive then
             GameTooltip:AddLine("|cff00ff00" .. L["Double-Click: Set as Active Quest"] .. "|r", 0.2, 1, 0.2)
         end
-        if isActive then
+        if activeLine then
             GameTooltip:AddLine("|cff00e5ff* " .. L["Active Quest"] .. "|r", 0.0, 0.9, 1.0)
         end
     else
-        if isActive then
+        if activeLine then
             GameTooltip:AddLine("|cff00e5ff* " .. L["Active Quest"] .. "|r |cffaaaaaa(" .. string_format(L["Left-Click: %s"], expandLabel) .. ")|r", 0.0, 0.9, 1.0)
+        elseif isActive then
+            GameTooltip:AddLine("|cff00ff00" .. string_format(L["Left-Click: %s"], expandLabel) .. "|r", 0.2, 1, 0.2)
         else
             GameTooltip:AddLine("|cff00ff00" .. L["Left-Click: Set as Active (Move to Top)"] .. "|r", 0.2, 1, 0.2)
         end

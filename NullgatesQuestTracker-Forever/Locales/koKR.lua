@@ -1085,4 +1085,6 @@ ns.RegisterLanguagePack("koKR", "한국어", {
     ["Hide objectives you have already finished, so each quest only lists what is left to do. When every objective is done, the quest shows Ready for turn-in as usual."] = "이미 완료한 목표를 숨겨 각 퀘스트에 남은 목표만 표시합니다. 모든 목표를 완료하면 평소처럼 '완료 보고 가능'이 표시됩니다.",
     ["Show Mouse Shortcuts in Tooltips"] = "툴팁에 마우스 단축키 표시",
     ["List the mouse and key shortcuts (Left-Click, Shift + Left-Click and so on) at the bottom of quest and quest item tooltips. Turn off for shorter tooltips."] = "퀘스트와 퀘스트 아이템 툴팁 아래쪽에 마우스 및 키 단축키(왼쪽 클릭, Shift + 왼쪽 클릭 등)를 표시합니다. 툴팁을 짧게 하려면 끄세요.",
+    ["Show \"Active Quest\" in Tooltips"] = "툴팁에 '활성 퀘스트' 표시",
+    ["Add an \"Active Quest\" line to the active quest's tooltip. Turn off if the Wayfinder arrow and the Active Quest button already make it clear."] = "활성 퀘스트의 툴팁에 '활성 퀘스트' 줄을 추가합니다. 길잡이 화살표와 활성 퀘스트 버튼으로 이미 알 수 있다면 끄세요.",
 })
