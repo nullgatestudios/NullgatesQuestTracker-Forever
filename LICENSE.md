@@ -49,3 +49,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 IN NO EVENT SHALL THE AUTHOR OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, LOSS OF DATA, ACCOUNT ACTION, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+---
+
+### 6. Third-Party Libraries
+
+The `Libs` folder contains libraries made by others: AceDB-3.0 and CallbackHandler-1.0 (Ace3 License), LibStub (public domain) and LibSharedMedia-3.0 (GNU LGPL v2.1). They are not part of the Software, are not covered by this License, and remain under their own licenses. Their license texts and credits are in `Libs/README.txt`, `Libs/LICENSE.txt` and `Libs/LibSharedMedia-3.0/LICENSE.txt`.

@@ -1,6 +1,6 @@
 
 [![Interface](https://img.shields.io/badge/Interface-16001%20(WoW%20Forever)-0078D7.svg?style=flat-square)](https://github.com/nullgatestudios/NullgatesQuestTracker-Forever)
-[![Release](https://img.shields.io/badge/Release-v1.1.0-ffd100.svg?style=flat-square)](https://github.com/nullgatestudios/NullgatesQuestTracker-Forever/releases)
+[![Release](https://img.shields.io/badge/Release-v1.3.4-ffd100.svg?style=flat-square)](https://github.com/nullgatestudios/NullgatesQuestTracker-Forever/releases)
 [![License](https://img.shields.io/badge/License-Source--Available-crimson.svg?style=flat-square)](LICENSE.md)
 [![Dependencies](https://img.shields.io/badge/Dependencies-Zero%20External-2ea44f.svg?style=flat-square)](https://github.com/nullgatestudios/NullgatesQuestTracker-Forever)
 [![Suite](https://img.shields.io/badge/Suite-Nullgate's%20Addon%20Suite-8a2be2.svg?style=flat-square)](https://github.com/nullgatestudios)
@@ -165,6 +165,8 @@ Type `/nqt` in chat to open the options panel:
 | `/nqt lock` | Locks tracker position to prevent accidental dragging. |
 | `/nqt unlock` | Unlocks the tracker frame for dragging and repositioning. |
 | `/nqt toggle` | Minimizes or expands the tracker frame. |
+| `/nqt standalone` | Opens the settings in their own window, even when Nullgate's Addon Config is installed. |
+| `/nqthide` | Hides or shows the tracker. |
 | `/nqt reset` | Resets tracker position back to default (`TOPRIGHT`). |
 | `/nqt profile <name>` | Switches to a named profile or displays current active profile. |
 | `/nqt debug` | Turns Debug & Chat Output on or off (the addon writes nothing to chat while it is off). |
@@ -233,5 +235,6 @@ Nullgate's Quest Tracker is designed to integrate seamlessly with the entire **N
 ## 📜 License & Support
 
 * **License**: Restricted - Source-Available (All Rights Reserved, No Derivatives). See [LICENSE.md](LICENSE.md) for full terms.
+* **Third-party libraries**: the embedded AceDB-3.0 and CallbackHandler-1.0 (Ace3 License), LibStub (public domain) and LibSharedMedia-3.0 (LGPL v2.1) keep their own licenses; see [Libs/README.txt](NullgatesQuestTracker-Forever/Libs/README.txt).
 * **Issues & Feedback**: Encounter a bug or have a feature request? Open an issue on our [GitHub Issue Tracker](https://github.com/nullgatestudios/NullgatesQuestTracker-Forever/issues).
 * **Author**: Nullgate Studios
