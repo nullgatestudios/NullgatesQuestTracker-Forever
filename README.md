@@ -1,6 +1,6 @@
 
 [![Interface](https://img.shields.io/badge/Interface-16001%20(WoW%20Forever)-0078D7.svg?style=flat-square)](https://github.com/nullgatestudios/NullgatesQuestTracker-Forever)
-[![Release](https://img.shields.io/badge/Release-v1.3.4-ffd100.svg?style=flat-square)](https://github.com/nullgatestudios/NullgatesQuestTracker-Forever/releases)
+[![Release](https://img.shields.io/badge/Release-v1.3.5-ffd100.svg?style=flat-square)](https://github.com/nullgatestudios/NullgatesQuestTracker-Forever/releases)
 [![License](https://img.shields.io/badge/License-Source--Available-crimson.svg?style=flat-square)](LICENSE.md)
 [![Dependencies](https://img.shields.io/badge/Dependencies-Zero%20External-2ea44f.svg?style=flat-square)](https://github.com/nullgatestudios/NullgatesQuestTracker-Forever)
 [![Suite](https://img.shields.io/badge/Suite-Nullgate's%20Addon%20Suite-8a2be2.svg?style=flat-square)](https://github.com/nullgatestudios)
@@ -147,7 +147,7 @@ Seamless integration with `NullgatesAddonConfig-Forever`:
 Type `/nqt` in chat to open the options panel:
 
 1. **General**: Master toggle, UI scale slider, lock/unlock frame position, auto-hide in combat, auto-hide when empty, and frame strata selection.
-2. **Quests & Items**: Quest item action buttons, bag scanning fallback, hide completed objectives, mouse shortcuts in tooltips, objective text colors, difficulty level coloring, and quest level badges.
+2. **Quests & Items**: Quest item action buttons, bag scanning fallback, hide completed objectives, mouse shortcuts and the "Active Quest" line in tooltips, objective text colors, difficulty level coloring, and quest level badges.
 3. **Colors & Fonts**: Backdrop backgrounds, beveled borders, class-colored border accents, LibSharedMedia typography selectors, font sizes, and line spacing.
 4. **Headers & Sort**: Zone grouping banners, sort mode selection (Level Ascending vs. Grouped by Zone), and header textures (Flat, Gradient, Blizzard, None).
 5. **Automation**: Fast Auto Loot, Auto-Accept quests, Safe Auto-Turn In (with multi-reward protection), and Party Quest Sharing.

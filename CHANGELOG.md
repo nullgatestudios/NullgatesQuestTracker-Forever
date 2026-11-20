@@ -2,6 +2,15 @@
 
 All notable changes to **Nullgate's Quest Tracker - Forever** (formerly **Bleakfiber's Quest Tracker - Forever**) are documented below.
 
+## [1.3.5] - 2026-11-20: Hide the "Active Quest" Tooltip Line
+
+### Added
+- **Show "Active Quest" in Tooltips** (on by default): turn it off to drop the "* Active Quest" line from the active quest's tooltip, for when the Wayfinder arrow and the Active Quest button already make it clear.
+  - Find it in **Settings > Quests & Items**, or in the tracker's quick menu next to **Show Mouse Shortcuts in Tooltips**.
+
+### Changed
+- The addon now includes the license texts of the libraries it bundles: the full GNU LGPL v2.1 for LibSharedMedia-3.0 and a notice listing each library and its license (`Libs/README.txt`).
+
 ## [1.3.4] - 2026-11-19: Shorter Tooltips, and the Whole Quest Lights Up on Hover
 
 ### Added

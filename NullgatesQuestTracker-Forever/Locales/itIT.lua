@@ -1081,4 +1081,6 @@ ns.RegisterLanguagePack("itIT", "Italiano", {
     ["Hide objectives you have already finished, so each quest only lists what is left to do. When every objective is done, the quest shows Ready for turn-in as usual."] = "Nasconde gli obiettivi già completati, così ogni missione mostra solo ciò che resta da fare. Quando tutti gli obiettivi sono completati, la missione mostra \"Pronta per la consegna\" come al solito.",
     ["Show Mouse Shortcuts in Tooltips"] = "Mostra le scorciatoie del mouse nei tooltip",
     ["List the mouse and key shortcuts (Left-Click, Shift + Left-Click and so on) at the bottom of quest and quest item tooltips. Turn off for shorter tooltips."] = "Elenca le scorciatoie di mouse e tastiera (clic sinistro, Maiusc + clic sinistro e così via) in fondo ai tooltip delle missioni e degli oggetti di missione. Disattiva per tooltip più corti.",
+    ["Show \"Active Quest\" in Tooltips"] = "Mostra \"Missione attiva\" nei tooltip",
+    ["Add an \"Active Quest\" line to the active quest's tooltip. Turn off if the Wayfinder arrow and the Active Quest button already make it clear."] = "Aggiunge la riga \"Missione attiva\" al tooltip della missione attiva. Disattiva se la freccia di Wayfinder e il pulsante della missione attiva lo mostrano già.",
 })

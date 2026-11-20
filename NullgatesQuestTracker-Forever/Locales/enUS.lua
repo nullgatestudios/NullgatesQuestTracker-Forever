@@ -1100,4 +1100,6 @@ ns.RegisterLanguagePack("enUS", "English", {
     ["Hide objectives you have already finished, so each quest only lists what is left to do. When every objective is done, the quest shows Ready for turn-in as usual."] = true,
     ["Show Mouse Shortcuts in Tooltips"] = true,
     ["List the mouse and key shortcuts (Left-Click, Shift + Left-Click and so on) at the bottom of quest and quest item tooltips. Turn off for shorter tooltips."] = true,
+    ["Show \"Active Quest\" in Tooltips"] = true,
+    ["Add an \"Active Quest\" line to the active quest's tooltip. Turn off if the Wayfinder arrow and the Active Quest button already make it clear."] = true,
 })

@@ -1087,4 +1087,6 @@ ns.RegisterLanguagePack("zhCN", "简体中文", {
     ["Hide objectives you have already finished, so each quest only lists what is left to do. When every objective is done, the quest shows Ready for turn-in as usual."] = "隐藏已经完成的目标，让每个任务只显示剩下要做的内容。所有目标完成后，任务会照常显示“可以交任务”。",
     ["Show Mouse Shortcuts in Tooltips"] = "在鼠标提示中显示鼠标快捷操作",
     ["List the mouse and key shortcuts (Left-Click, Shift + Left-Click and so on) at the bottom of quest and quest item tooltips. Turn off for shorter tooltips."] = "在任务和任务物品的鼠标提示底部列出鼠标和按键快捷操作（左键点击、Shift + 左键点击等）。关闭可让提示更短。",
+    ["Show \"Active Quest\" in Tooltips"] = "在鼠标提示中显示“当前任务”",
+    ["Add an \"Active Quest\" line to the active quest's tooltip. Turn off if the Wayfinder arrow and the Active Quest button already make it clear."] = "在当前任务的鼠标提示中添加“当前任务”一行。如果 Wayfinder 箭头和当前任务按钮已经足够明显，可以关闭。",
 })
