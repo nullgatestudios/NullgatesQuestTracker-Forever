@@ -563,6 +563,8 @@ ns.RegisterLanguagePack("enUS", "English", {
     ["Mark custom waypoints on the World Map."] = true,
     ["Show Player & Cursor Coordinates"] = true,
     ["Show player and cursor coordinates at the bottom of the World Map."] = true,
+    ["Show \"+ Waypoint\" Button on the World Map"] = true,
+    ["Show the + Waypoint button at the bottom of the World Map. You can still add waypoints with Alt-Click on the map."] = true,
     ["SHARED BAR APPEARANCE"] = true,
     ["Inherit Tracker Frame Appearance"] = true,
     ["DataBars use the tracker's background, border style, and colors. Turn off to style each bar separately below."] = true,

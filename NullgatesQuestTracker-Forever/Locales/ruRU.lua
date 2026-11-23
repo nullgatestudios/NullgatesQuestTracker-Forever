@@ -565,6 +565,8 @@ ns.RegisterLanguagePack("ruRU", "Русский", {
     ["Mark custom waypoints on the World Map."] = "Отмечает свои точки маршрута на карте мира.",
     ["Show Player & Cursor Coordinates"] = "Координаты игрока и курсора",
     ["Show player and cursor coordinates at the bottom of the World Map."] = "Показывает координаты игрока и курсора внизу карты мира.",
+    ["Show \"+ Waypoint\" Button on the World Map"] = "Кнопка «+ Путевая точка» на карте мира",
+    ["Show the + Waypoint button at the bottom of the World Map. You can still add waypoints with Alt-Click on the map."] = "Показывает кнопку + Путевая точка внизу карты мира. Путевые точки по-прежнему можно добавлять Alt-щелчком по карте.",
     ["Inherit Tracker Frame Appearance"] = "Наследовать вид трекера",
     ["DataBars use the tracker's background, border style, and colors. Turn off to style each bar separately below."] = "DataBars используют фон, рамку и цвета трекера. Выключите, чтобы настроить каждую полосу ниже.",
     ["Hide Blizzard XP Bar"] = "Скрыть полосу опыта Blizzard",

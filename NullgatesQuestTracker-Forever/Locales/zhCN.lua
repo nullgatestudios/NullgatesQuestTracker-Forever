@@ -566,6 +566,8 @@ ns.RegisterLanguagePack("zhCN", "简体中文", {
     ["Mark custom waypoints on the World Map."] = "在世界地图上标记自定义路点。",
     ["Show Player & Cursor Coordinates"] = "显示玩家和鼠标坐标",
     ["Show player and cursor coordinates at the bottom of the World Map."] = "在世界地图底部显示玩家和鼠标坐标。",
+    ["Show \"+ Waypoint\" Button on the World Map"] = "在世界地图上显示“+ 路径点”按钮",
+    ["Show the + Waypoint button at the bottom of the World Map. You can still add waypoints with Alt-Click on the map."] = "在世界地图底部显示 + 路径点按钮。你仍然可以在地图上按住 Alt 点击来添加路径点。",
     ["Inherit Tracker Frame Appearance"] = "沿用追踪器外观",
     ["DataBars use the tracker's background, border style, and colors. Turn off to style each bar separately below."] = "数据条使用追踪器的背景、边框样式和颜色。关闭后可在下方分别设置每个数据条。",
     ["Hide Blizzard XP Bar"] = "隐藏暴雪经验条",

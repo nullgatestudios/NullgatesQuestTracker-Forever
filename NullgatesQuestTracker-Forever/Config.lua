@@ -2100,6 +2100,10 @@ local TAB_EXTRAS = {
           desc = "Show player and cursor coordinates at the bottom of the World Map.",
           get = function() return WF().showCoordinates == true end,
           set = function(v) WF().showCoordinates = v; Wayfinder("UpdateCoordinatesDisplay") end },
+        { type = "toggle", label = "Show \"+ Waypoint\" Button on the World Map",
+          desc = "Show the + Waypoint button at the bottom of the World Map. You can still add waypoints with Alt-Click on the map.",
+          get = function() return WF().showMapWaypointButton ~= false end,
+          set = function(v) WF().showMapWaypointButton = v; Wayfinder("UpdateMapWaypointButton") end },
     },
     databars = Concat({
         { type = "header", text = "SHARED BAR APPEARANCE" },

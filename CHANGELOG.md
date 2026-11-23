@@ -2,6 +2,15 @@
 
 All notable changes to **Nullgate's Quest Tracker - Forever** (formerly **Bleakfiber's Quest Tracker - Forever**) are documented below.
 
+## [1.3.7] - 2026-11-23: Hide the World Map's + Waypoint Button
+
+### Added
+- **Show "+ Waypoint" Button on the World Map** (on by default): turn it off to remove the **+ Waypoint** button from the bottom-left of the World Map.
+  - Find it in **Settings > Wayfinder/Audio**, next to **Show Player & Cursor Coordinates**.
+
+### Good to know
+- With the button hidden, you can still add waypoints with **Alt-Click** on the World Map, or paste a list with `/way paste`.
+
 ## [1.3.6] - 2026-11-20: A Much Shorter Quick Menu
 
 ### Changed

@@ -565,6 +565,8 @@ ns.RegisterLanguagePack("koKR", "한국어", {
     ["Mark custom waypoints on the World Map."] = "사용자 경유지를 세계 지도에 표시합니다.",
     ["Show Player & Cursor Coordinates"] = "플레이어 및 커서 좌표 표시",
     ["Show player and cursor coordinates at the bottom of the World Map."] = "세계 지도 아래에 플레이어와 커서 좌표를 표시합니다.",
+    ["Show \"+ Waypoint\" Button on the World Map"] = "세계 지도에 \"+ 경유지\" 버튼 표시",
+    ["Show the + Waypoint button at the bottom of the World Map. You can still add waypoints with Alt-Click on the map."] = "세계 지도 아래에 + 경유지 버튼을 표시합니다. 지도에서 Alt-클릭으로 경유지를 계속 추가할 수 있습니다.",
     ["Inherit Tracker Frame Appearance"] = "추적기 외형 따르기",
     ["DataBars use the tracker's background, border style, and colors. Turn off to style each bar separately below."] = "DataBars가 추적기의 배경, 테두리 스타일, 색상을 사용합니다. 끄면 아래에서 바마다 따로 꾸밀 수 있습니다.",
     ["Hide Blizzard XP Bar"] = "블리자드 경험치 바 숨기기",

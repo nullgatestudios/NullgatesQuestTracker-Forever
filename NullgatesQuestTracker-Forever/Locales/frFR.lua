@@ -559,6 +559,8 @@ ns.RegisterLanguagePack("frFR", "Français", {
     ["Mark custom waypoints on the World Map."] = "Marque les points de passage personnalisés sur la carte du monde.",
     ["Show Player & Cursor Coordinates"] = "Coordonnées du joueur et du curseur",
     ["Show player and cursor coordinates at the bottom of the World Map."] = "Affiche les coordonnées du joueur et du curseur en bas de la carte du monde.",
+    ["Show \"+ Waypoint\" Button on the World Map"] = "Bouton « + Point de passage » sur la carte du monde",
+    ["Show the + Waypoint button at the bottom of the World Map. You can still add waypoints with Alt-Click on the map."] = "Affiche le bouton + Point de passage en bas de la carte du monde. Vous pouvez toujours ajouter des points de passage avec Alt-Clic sur la carte.",
     ["Inherit Tracker Frame Appearance"] = "Reprendre l'apparence du suivi",
     ["DataBars use the tracker's background, border style, and colors. Turn off to style each bar separately below."] = "Les DataBars utilisent le fond, la bordure et les couleurs du suivi. Désactivez pour styliser chaque barre ci-dessous.",
     ["Hide Blizzard XP Bar"] = "Masquer la barre d'expérience Blizzard",

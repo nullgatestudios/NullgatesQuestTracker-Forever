@@ -543,6 +543,8 @@ ns.RegisterLanguagePack("deDE", "Deutsch", {
     ["Mark custom waypoints on the World Map."] = "Markiert eigene Wegpunkte auf der Weltkarte.",
     ["Show Player & Cursor Coordinates"] = "Spieler- & Cursorkoordinaten anzeigen",
     ["Show player and cursor coordinates at the bottom of the World Map."] = "Zeigt Spieler- und Cursorkoordinaten unten auf der Weltkarte.",
+    ["Show \"+ Waypoint\" Button on the World Map"] = "„+ Wegpunkt“-Taste auf der Weltkarte anzeigen",
+    ["Show the + Waypoint button at the bottom of the World Map. You can still add waypoints with Alt-Click on the map."] = "Zeigt die Taste „+ Wegpunkt“ unten auf der Weltkarte. Wegpunkte kannst du weiterhin mit Alt-Klick auf die Karte setzen.",
     ["Inherit Tracker Frame Appearance"] = "Trackeraussehen übernehmen",
     ["DataBars use the tracker's background, border style, and colors. Turn off to style each bar separately below."] = "DataBars nutzen Hintergrund, Rahmenstil und Farben des Trackers. Ausschalten, um jede Leiste unten einzeln zu gestalten.",
     ["Hide Blizzard XP Bar"] = "Blizzard-EP-Leiste ausblenden",

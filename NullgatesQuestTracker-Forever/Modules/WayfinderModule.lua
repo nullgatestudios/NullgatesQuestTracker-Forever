@@ -2823,6 +2823,11 @@ end
 local mapWaypointBtn = nil
 function WayfinderModule:UpdateMapWaypointButton()
     if InCombatLockdown and InCombatLockdown() then return end
+    local enabled = not (ns.db and ns.db.wayfinder and ns.db.wayfinder.showMapWaypointButton == false)
+    if not enabled then
+        if mapWaypointBtn then mapWaypointBtn:Hide() end
+        return
+    end
     if not mapWaypointBtn and WorldMapFrame then
         local btn = CreateFrame("Button", "NullgateWayfinderMapWaypointBtn", WorldMapFrame, (BackdropTemplateMixin and "BackdropTemplate"))
         btn:SetFrameStrata("HIGH")

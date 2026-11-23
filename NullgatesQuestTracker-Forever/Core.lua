@@ -746,6 +746,7 @@ ns.defaultDB = {
             showETA = false,
             showMapPins = true,
             showCoordinates = false,
+            showMapWaypointButton = true, -- the "+ Waypoint" button at the bottom of the World Map
             savedWaypoints = {},
             hudFontSize = 11,
             hudFontOutline = "OUTLINE",
