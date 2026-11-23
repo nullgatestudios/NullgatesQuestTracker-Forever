@@ -1,5 +1,6 @@
 # Uploads the addon to CurseForge when a release is published on GitHub, with
-# the release notes as its changelog (or the version's CHANGELOG.md section when
+# the release notes as its changelog, and attaches the same zip to the GitHub
+# release so it can be downloaded there too (or the version's CHANGELOG.md section when
 # the notes are empty). Pushes and tags alone upload nothing. See .github/scripts/curseforge.py
 # (the same workflow and script are used in every Nullgate addon repository).
 #
@@ -22,7 +23,7 @@ on:
         default: false
 
 permissions:
-  contents: read
+  contents: write # attach the zip to the release
 
 jobs:
   upload:
@@ -47,6 +48,12 @@ jobs:
         with:
           name: curseforge-zip
           path: dist/*.zip
+
+      - name: Attach the zip to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        if: ${{ !inputs.dry_run }}
+        run: gh release upload "$TAG" dist/*.zip --clobber --repo "$GITHUB_REPOSITORY"
 
       - name: Upload to CurseForge
         env:
