@@ -3,7 +3,7 @@
 -- Corrections are welcome - see Locales/enUS.lua for the full list of strings.
 local _, ns = ...
 
-ns.RegisterLanguagePack("esES", "Español (España)", {
+ns.RegisterLanguagePack("esES", "Español", {
     ["Use Active Quest Item"] = "Usar objeto de misión activo",
     ["Toggle Tracker Visibility (Hide/Show)"] = "Mostrar/ocultar el seguidor",
     ["Chat output is off. Enable it in Settings > General > Debug & Chat Output."] = "La salida al chat está desactivada. Actívala en Ajustes > General > Depuración y salida al chat.",

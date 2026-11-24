@@ -38,8 +38,7 @@ ns.LANGUAGE_NAMES = {
     enUS = "English",
     deDE = "Deutsch",
     frFR = "Français",
-    esES = "Español (España)",
-    esMX = "Español (Latinoamérica)",
+    esES = "Español",
     ptBR = "Português (Brasil)",
     itIT = "Italiano",
     ruRU = "Русский",
@@ -60,6 +59,7 @@ ns.LANGUAGE_FONTS = {
 
 local function NormalizeCode(code)
     if code == "enGB" then return "enUS" end
+    if code == "esMX" then return "esES" end -- Mexican Spanish clients use the Spanish pack
     return code
 end
 

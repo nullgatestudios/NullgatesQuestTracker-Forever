@@ -10,6 +10,10 @@ All notable changes to **Nullgate's Quest Tracker - Forever** (formerly **Bleakf
 - Press Ctrl+C to copy the report, then paste it into the report form at nullgatestudios.com/report?addon=quest-tracker, which opens with this addon already picked. You can report without an account.
 - Every Nullgate addon now uses the same report window.
 
+### Changed
+
+- **Languages:** the addon now has the same 10 languages as every Nullgate addon, the ones the game client runs in. Mexican Spanish clients use the Spanish translation, and the separate Latin American Spanish pack was removed. If you had picked it, the addon now uses Spanish.
+
 ### Good to know
 
 - The game doesn't let addons open a web browser, so type or copy the link into your browser yourself. The **Select link** button selects it for copying.

@@ -16,7 +16,6 @@ Libs\Libs.xml
 Locales\Locale.lua
 Locales\deDE.lua
 Locales\esES.lua
-Locales\esMX.lua
 Locales\frFR.lua
 Locales\itIT.lua
 Locales\koKR.lua

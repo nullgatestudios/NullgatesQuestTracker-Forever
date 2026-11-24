@@ -13,7 +13,7 @@ It needs **no other addons** to run. Everything it uses is included.
 ## Key Highlights
 
 *   **Works in Combat**: Objectives, completions and new quests update instantly while you fight. Quest item buttons and their keybind keep working in combat too.
-*   **11 Languages**: English, Deutsch, Français, Español (España), Español (Latinoamérica), Italiano, Português (Brasil), Русский, 한국어, 简体中文 and 繁體中文. The language follows your game client, or you can pick one in the settings.
+*   **10 Languages**: every language the game client runs in (see Supported Languages below). The language follows your game client, or you can pick one in the settings.
 *   **One Settings Window**: The same settings open from `/nqt`, from **Esc > Options > AddOns**, and inside Nullgate's Addon Config.
 *   **Quest Item Buttons**: Usable quest items (flares, totems, seeds, containment devices) appear next to their quest with cooldowns and stack counts. Bind a key to use the top quest's item.
 *   **Wayfinder Navigation**: A floating 3D or 2D arrow points to your active objective or a custom `/way` waypoint. It shows the distance, an arrival estimate and pins on the world map.
@@ -125,6 +125,19 @@ If another addon such as TomTom already uses `/way` or `/cway`, use `/nqtway` an
 
 ***
 
-## A Note on Translations
+## Supported Languages
 
-The translations were made with machine assistance, so some wording may not be quite right. If you'd like to help improve the localization for your language, please send me a message here on CurseForge. Thank you!
+All 10 languages the game client runs in:
+
+- English
+- Deutsch (German)
+- Español (Spanish)
+- Français (French)
+- Italiano (Italian)
+- Português do Brasil (Brazilian Portuguese)
+- Русский (Russian)
+- 한국어 (Korean)
+- 简体中文 (Simplified Chinese)
+- 繁體中文 (Traditional Chinese)
+
+The addon uses your game's language automatically; Mexican Spanish clients get Spanish. You can pick another one in the settings or with `/nqt lang`. The translations were made with machine assistance, so some wording may not be quite right. Corrections are welcome: send a message here on CurseForge.
