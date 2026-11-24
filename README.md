@@ -170,6 +170,7 @@ Type `/nqt` in chat to open the options panel:
 | `/nqt reset` | Resets tracker position back to default (`TOPRIGHT`). |
 | `/nqt profile <name>` | Switches to a named profile or displays current active profile. |
 | `/nqt debug` | Turns Debug & Chat Output on or off (the addon writes nothing to chat while it is off). |
+| `/nqt check` | Tests the addon in this client and opens a bug report window to copy into the report form at nullgatestudios.com/report. |
 | `/nqt lang [code]` | Shows or sets the language (e.g. `deDE`, `auto`). |
 | `/nqtway`, `/nqtcway`, `/nqtpaste` | Always-available names for the `/way` commands below. `/way`, `/cway` and `/waypaste` are only added when another addon (such as TomTom) does not already use them. |
 | `/way <x> <y> [title]` | Sets a custom Wayfinder navigation waypoint in your current zone. |

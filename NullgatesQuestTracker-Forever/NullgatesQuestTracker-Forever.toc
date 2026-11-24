@@ -2,7 +2,7 @@
 ## Title: |cff00c0ffNullgate's Quest Tracker|r - |cffffd100Forever|r
 ## Notes: A lightweight, standalone, modular quest tracker designed for World of Warcraft: Forever.
 ## Author: Nullgate Studios
-## Version: 1.3.7
+## Version: 1.3.8
 ## SavedVariables: NullgatesQuestTrackerDB
 ## IconTexture: Interface\Icons\INV_Misc_Book_07
 ## X-License: Restricted - Source Available (All Rights Reserved, No Derivatives)
@@ -33,6 +33,8 @@ Core.lua
 Migration.lua
 Onboarding.lua
 Config.lua
+NullgateReport.lua
+Check.lua
 TrackerFrame.lua
 Modules\CrossZoneModule.lua
 Modules\StandaloneTracker.lua

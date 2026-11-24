@@ -112,6 +112,7 @@ Every header button can be hidden in the settings.
 | `/nqt testitem` | Shows or hides a test quest item button. |
 | `/nqt questid [id]` | Shows a quest's ID and whether it is new in WoW Forever. |
 | `/nqt debug` | Turns Debug & Chat Output on or off. |
+| `/nqt check` | Tests the addon in this client and opens a bug report window to copy into the report form at nullgatestudios.com/report. |
 | `/way <x> <y> [title]` | Sets a waypoint in your current zone. |
 | `/way <zone> <x> <y> [title]` | Sets a waypoint in another zone. |
 | `/way paste` | Opens the waypoint paste window. |

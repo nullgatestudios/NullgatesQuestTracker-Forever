@@ -6364,6 +6364,7 @@ local function PrintHelp()
         { "/nqt questid [id]", L["Check whether a quest is new in WoW Forever"] },
         { "/nqt debug", L["Toggle debug & chat output"] },
         { "/nqt pos | sharetest | poi", L["Print position, quest sharing, or zone diagnostics"] },
+        { "/nqt check", L["Test the addon in this client and open a bug report to copy"] },
         { "/nqt way x y [name]", L["Set a custom waypoint (also /nqtway)"] },
     }
     for _, line in ipairs(lines) do
@@ -6451,6 +6452,8 @@ local function HandleSlashCommands(msg)
         end
     elseif command == "onboard" or command == "onboarding" then
         ns.Onboarding:ShowWizard()
+    elseif command == "check" then
+        ns.Check.Run()
     elseif command == "standalone" then
         Config:ToggleConfigFrame()
     elseif command == "config" or command == "options" or command == "" then

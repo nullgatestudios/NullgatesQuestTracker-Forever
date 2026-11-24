@@ -2,6 +2,18 @@
 
 All notable changes to **Nullgate's Quest Tracker - Forever** (formerly **Bleakfiber's Quest Tracker - Forever**) are documented below.
 
+## [1.3.8] - 2026-11-24
+
+### New
+
+- **New `/nqt check` command.** It runs a short self test of the addon in this client and opens a bug report window with the results.
+- Press Ctrl+C to copy the report, then paste it into the report form at nullgatestudios.com/report?addon=quest-tracker, which opens with this addon already picked. You can report without an account.
+- Every Nullgate addon now uses the same report window.
+
+### Good to know
+
+- The game doesn't let addons open a web browser, so type or copy the link into your browser yourself. The **Select link** button selects it for copying.
+
 ## [1.3.7] - 2026-11-23: Hide the World Map's + Waypoint Button
 
 ### Added
