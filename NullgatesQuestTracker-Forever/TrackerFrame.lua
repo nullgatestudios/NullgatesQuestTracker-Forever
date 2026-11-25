@@ -566,14 +566,19 @@ function Tracker:Initialize()
     self:ApplyHeaderSettings()
     self:UpdateTypography()
     self.isCollapsed = false
-    self.isHidden = false
+    self.isHidden = ns.db and ns.db.trackerHidden == true
 
     -- Register Callbacks
     ns:RegisterCallback("SETTINGS_UPDATED", function()
         Tracker:UpdateSettings()
     end)
 
+    ns:RegisterCallback("PROFILE_CHANGED", function()
+        Tracker:ApplySavedVisibility()
+    end)
+
     ns:RegisterCallback("PLAYER_ENTERING_WORLD", function()
+        Tracker:ApplySavedVisibility()
         Tracker:RestorePosition()
         Tracker:CheckInstanceAutoCollapse()
         Tracker:UpdateTypography()
@@ -1326,6 +1331,7 @@ end
 -- fromSecureToggle: the secure key binding already updated the item buttons
 function Tracker:HideTracker(fromSecureToggle)
     self.isHidden = true
+    if ns.db then ns.db.trackerHidden = true end
     if trackerFrame then
         trackerFrame:Hide()
     end
@@ -1346,6 +1352,7 @@ end
 
 function Tracker:ShowTracker(fromSecureToggle)
     self.isHidden = false
+    if ns.db then ns.db.trackerHidden = false end
     self:UpdateVisibility()
     if not fromSecureToggle and ns.StandaloneTracker and ns.StandaloneTracker.SyncSecureVisibility then
         ns.StandaloneTracker:SyncSecureVisibility(true)
@@ -1359,6 +1366,17 @@ function Tracker:ShowTracker(fromSecureToggle)
     if ns.FireCallback then
         ns:FireCallback("TRACKER_VISIBILITY_CHANGED", true)
         ns:FireCallback("TRACKER_DOCKING_CHANGED")
+    end
+end
+
+-- Re-applies the hidden or shown state the player chose (saved in the profile) after a login,
+-- reload, loading screen or profile change, including the secure toggle and the item buttons.
+function Tracker:ApplySavedVisibility()
+    if not ns.db then return end
+    if ns.db.trackerHidden == true then
+        self:HideTracker()
+    elseif self.isHidden then
+        self:ShowTracker()
     end
 end
 

@@ -2,6 +2,12 @@
 
 All notable changes to **Nullgate's Quest Tracker - Forever** (formerly **Bleakfiber's Quest Tracker - Forever**) are documented below.
 
+## [1.3.9] - 2026-11-25
+
+### Fixed
+
+- **A hidden tracker now stays hidden.** If you hide the tracker (key binding, the header button, `/nqt hide` or a macro), it no longer comes back after a `/reload`, logging in or a loading screen. It stays hidden until you show it again, and each profile remembers its own choice.
+
 ## [1.3.8] - 2026-11-24
 
 ### New
